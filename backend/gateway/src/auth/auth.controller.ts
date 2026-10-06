@@ -1,16 +1,16 @@
 import { Controller, Inject } from '@nestjs/common';
 import { Post } from '@nestjs/common';
-import { AUTH_SERVICE } from '../config';
+import { NATS_SERVICE } from '../config';
 import { ClientProxy } from '@nestjs/microservices';
 
 @Controller('auth')
 export class AuthController {
-  @Inject(AUTH_SERVICE) private readonly authClient: ClientProxy;
+  @Inject(NATS_SERVICE) private readonly client: ClientProxy;
   constructor() {} 
 
   @Post('login')
   login() {
-    return this.authClient.send({ cmd: 'login' }, {});
+    return this.client.send({ cmd: 'login' }, {});
   }
 
   @Post('logout')
