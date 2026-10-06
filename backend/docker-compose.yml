@@ -1,0 +1,40 @@
+#  docker compose up --build 
+
+services:
+  nats-server:
+    image: nats:latest
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+
+  auth-microservice:
+    build:
+      context: ./auth
+      dockerfile: dockerfile
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./auth/src:/usr/src/app/src
+    environment:
+      - PORT=3001
+      - NATS_SERVER=nats://nats-server:4222
+      # Bind mounts on Windows do not emit file events; polling makes --watch reload work
+      - CHOKIDAR_USEPOLLING=true
+    depends_on:
+      - nats-server
+
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./gateway/src:/usr/src/app/src
+    environment:
+      - PORT=3000
+      - NATS_SERVER=nats://nats-server:4222
+      - CHOKIDAR_USEPOLLING=true
+    depends_on:
+      - nats-server
+
