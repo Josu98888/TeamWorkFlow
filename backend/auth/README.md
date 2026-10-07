@@ -1,124 +1,290 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# auth — Servicio de identidad
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+`auth` decide **quién es quién** en TeamWorkFlow: registra organizaciones (tenants), inicia sesiones, emite y valida tokens, gestiona invitaciones y roles, y controla si un tenant puede usar la plataforma según su estado de pago. Todos los demás servicios confían en lo que `auth` responde, así que un error acá afecta a todos los tenants.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+> **Estado:** el código todavía es el scaffold de Nest CLI. Este documento describe el diseño objetivo. Ver [Estado actual](#estado-actual).
+>
+> Documentos relacionados: [AGENTS.md](AGENTS.md) (reglas detalladas para agentes, fuente de verdad) · [README general](../../README.md) · [Modelo de datos](../../docs/database.md#auth).
 
-## Description
+## En una mirada
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+| Tema | Decisión |
+|------|----------|
+| Multitenancy | Cada tenant es una organización. Cada usuario pertenece a **un solo** tenant. |
+| Login | Email + contraseña para todos los roles, empleados incluidos. |
+| Roles | `owner`, `admin`, `supervisor`, `employee` (fijos, no configurables) y `platform_admin`, un rol de la plataforma que no pertenece a ningún tenant. |
+| Sesión | Access token JWT de 15 min + refresh token de 7 días, rotativo y revocable. |
+| Validación | El gateway le pregunta a `auth` en cada request (`auth.token.verify`). |
+| Alta de usuarios | Quien se registra crea el tenant y queda como `owner`. El resto entra por invitación (link de un solo uso, 7 días). |
+| Contraseña olvidada | Un admin genera un link de reseteo (1 hora). No hay emails todavía. |
+| Fuerza bruta | 5 intentos fallidos bloquean la cuenta 15 min. Errores siempre genéricos. |
+| Bajas | Los usuarios se desactivan, nunca se borran; la única excepción es el borrado de todos los datos de un tenant cancelado a los 90 días. |
+| Suspensión | Si el tenant no paga: 7 días de gracia con avisos y después suspensión (la dispara `billing`). |
+| Cancelación | Al cancelarse la suscripción a fin de mes, el tenant pasa a `cancelled` con las mismas restricciones que `suspended`. Puede volver a suscribirse; a los 90 días se borran sus datos. |
+| Plan | `auth` guarda el plan y las funcionalidades del tenant (según los eventos de `billing`) y `auth.token.verify` los devuelve para que el gateway bloquee lo que el plan no incluye. |
+| Comunicación | Solo por NATS. No expone HTTP: el frontend habla con el gateway. |
 
-## Project setup
+## Qué hace y qué no
 
-```bash
-$ pnpm install
+**Hace**
+
+- Registro de un tenant nuevo con su `owner`.
+- Login, refresh y logout.
+- Verificación de tokens para el gateway (HTTP y WebSocket de la Torre de Control).
+- Invitaciones de admins, supervisores y empleados.
+- Cambios de rol, asignación de sedes a supervisores y desactivación de usuarios.
+- Links de reseteo de contraseña generados por un admin.
+- Estado del tenant (`active`, `past_due`, `suspended`, `cancelled`, `deleted`) a partir de los eventos de `billing` (ver [Mora y suspensión](#mora-y-suspensión-del-tenant)).
+- Borrado de los usuarios, tokens e invitaciones de un tenant cancelado al recibir `billing.data_retention_expired`, conservando un registro mínimo del tenant.
+- Plan y funcionalidades del tenant, actualizados con `billing.subscription_created` y `billing.plan_changed` (ver [Plan y funcionalidades](#plan-y-funcionalidades)).
+- El usuario `platform_admin` (ver [Roles y permisos](#roles-y-permisos)).
+
+**No hace**
+
+| Qué | Dónde vive |
+|-----|-----------|
+| Perfil (nombre, teléfono, avatar) y legajo | `organization` (módulo de empleados) |
+| Pagos, planes, precios y facturas | `billing` |
+| Envío de emails, push o SMS | `notifications` (todavía no se usa para auth) |
+| Conexiones WebSocket de la Torre de Control | `gateway` (`auth` solo verifica el token y devuelve las sedes) |
+| MFA, login social / SSO, "olvidé mi contraseña" por email | Trabajo futuro |
+
+## Roles y permisos
+
+| Rol | Quién es | Qué puede hacer |
+|-----|----------|-----------------|
+| `platform_admin` | Operador de la plataforma. No pertenece a ningún tenant. | Solo las rutas de plataforma (`billing.admin.*`: planes y precios, pagos manuales, anulaciones). No administra usuarios de ningún tenant. |
+| `owner` | Quien registró la organización. Uno solo por tenant. | Todo. Es el único que gestiona admins. |
+| `admin` | Administración de la empresa. | Gestiona supervisores y empleados. |
+| `supervisor` | Responsable de una o varias sedes. | Ve la Torre de Control de **sus** sedes, atiende alertas y corrige fichadas. |
+| `employee` | Personal operativo (app móvil). | Ficha, ve sus turnos y tareas, completa formularios, acepta emergencias. |
+
+Gestión de usuarios:
+
+| Acción | owner | admin | supervisor | employee |
+|--------|:-----:|:-----:|:----------:|:--------:|
+| Invitar supervisor o empleado | ✅ | ✅ | ❌ | ❌ |
+| Invitar admin | ✅ | ❌ | ❌ | ❌ |
+| Ver invitaciones pendientes / regenerar su link | ✅ | ✅ ¹ | ❌ | ❌ |
+| Cambiar rol entre supervisor y empleado | ✅ | ✅ | ❌ | ❌ |
+| Promover o degradar un admin | ✅ | ❌ | ❌ | ❌ |
+| Asignar sedes a un supervisor | ✅ | ✅ | ❌ | ❌ |
+| Desactivar supervisor o empleado | ✅ | ✅ | ❌ | ❌ |
+| Desactivar admin | ✅ | ❌ | ❌ | ❌ |
+| Generar link de reseteo de contraseña | ✅ | ✅ ¹ | ❌ | ❌ |
+
+¹ Solo para supervisores y empleados.
+
+Reglas que valen siempre:
+
+- El `platform_admin` **solo se crea por seed o CLI**: nunca por registro ni por invitación, y ningún request puede crearlo, promoverlo ni degradarlo. Inicia sesión con email y contraseña, su `tenantId` es nulo y el estado de un tenant no lo afecta.
+- Nadie puede desactivar ni degradar al `owner`. Transferir la propiedad queda para más adelante.
+- Nadie puede aplicarse estas acciones a sí mismo.
+- Ningún usuario puede ver ni modificar usuarios de **otro tenant**, cualquiera sea su rol.
+
+### Sedes de los supervisores
+
+Cada supervisor tiene asignadas las sedes que puede ver (tabla `user_sites`). `owner` y `admin` ven todas las sedes del tenant. Las sedes **no** van dentro del JWT: las devuelve `auth.token.verify`, así un cambio de asignación se aplica sin volver a iniciar sesión.
+
+## Flujos
+
+### Registro de una organización
+
+```mermaid
+sequenceDiagram
+  actor U as Usuario
+  participant G as gateway
+  participant A as auth
+  participant E as organization
+  U->>G: POST /api/auth/register (empresa, nombre, email, contraseña)
+  G->>A: auth.register
+  A->>A: crea Tenant (active) + User (owner) en una transacción
+  A-->>G: accessToken + refreshToken
+  G-->>U: 201 + tokens
+  A--)E: t.{tenant}.auth.tenant_created / user_created
+  E->>E: crea el perfil del owner
 ```
 
-## Compile and run the project
+### Login y requests autenticados
 
-```bash
-# development
-$ pnpm run start
-
-# watch mode
-$ pnpm run start:dev
-
-# production mode
-$ pnpm run start:prod
+```mermaid
+sequenceDiagram
+  actor U as Usuario
+  participant G as gateway
+  participant A as auth
+  participant S as otro servicio
+  U->>G: POST /api/auth/login (email, contraseña)
+  G->>A: auth.login
+  A-->>G: accessToken (15 min) + refreshToken (7 días)
+  G-->>U: tokens
+  U->>G: GET /api/... con Bearer accessToken
+  G->>A: auth.token.verify
+  A-->>G: userId, tenantId, role, siteIds, tenantStatus, plan, features
+  G->>S: servicio.recurso.accion con el actor verificado
+  S-->>G: respuesta
+  G-->>U: respuesta
 ```
 
-## Run tests
+- El gateway toma `tenantId`, `role`, `siteIds`, `plan` y `features` **solo** del resultado de `verify`, nunca del body, la query ni los headers. Si el plan no incluye la funcionalidad de una ruta, responde 403 `feature_not_in_plan`.
+- Para un `platform_admin`, `tenantId`, `tenantStatus`, `plan` y `features` son nulos.
+- `verify` revisa en cada llamada que el usuario siga activo y que el tenant no esté suspendido ni cancelado, así que una baja, una suspensión o una cancelación cortan el acceso en el momento.
+- Cuando vence el access token, el frontend llama a `auth.token.refresh`: el refresh token usado se revoca y se emite un par nuevo.
+- `auth.logout` revoca el refresh token. El access token sigue vigente hasta que vence (máximo 15 min); es un riesgo aceptado.
 
-```bash
-# unit tests
-$ pnpm run test
+### Invitar a un admin o supervisor
 
-# e2e tests
-$ pnpm run test:e2e
+1. El owner (o un admin, para supervisores) crea la invitación con email y rol: `auth.invitation.create`.
+2. `auth` devuelve un token de un solo uso y el frontend muestra el link para copiar.
+3. El invitado abre el link, carga su nombre y contraseña: `auth.invitation.accept`.
+4. `auth` crea el usuario con el rol invitado y emite `t.<tenant>.auth.user_created`; `organization` crea su perfil.
 
-# test coverage
-$ pnpm run test:cov
+### Alta de un empleado operativo
+
+```mermaid
+sequenceDiagram
+  actor Ad as Admin
+  participant E as organization
+  participant A as auth
+  actor Em as Empleado
+  Ad->>E: crea el empleado operativo (con email)
+  E--)A: t.{tenant}.organization.employee_created
+  A->>A: crea invitación con rol employee (idempotente)
+  Ad->>A: auth.invitation.regenerate (vía gateway)
+  A-->>Ad: link nuevo, se muestra una sola vez
+  Ad-->>Em: le comparte el link
+  Em->>A: auth.invitation.accept (nombre, contraseña)
+  A--)E: t.{tenant}.auth.user_created
+  E->>E: vincula userId al empleado existente
 ```
 
-## Deployment
+Los tokens de invitación se guardan **hasheados**, por eso la lista de invitaciones no puede mostrar el link: el admin genera uno nuevo con `auth.invitation.regenerate`, que revoca el anterior.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+### Contraseña olvidada
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+1. Un admin (o el owner, si el afectado es admin) genera un link: `auth.password-reset.create`. Vence en 1 hora.
+2. El usuario abre el link y define la nueva contraseña: `auth.password-reset.confirm`.
+3. `auth` revoca todas las sesiones de ese usuario.
 
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
+### Mora, suspensión y cancelación del tenant
+
+```mermaid
+stateDiagram-v2
+  [*] --> active: auth.register
+  active --> past_due: billing.payment_overdue
+  past_due --> suspended: billing.subscription_expired (día 7)
+  past_due --> active: billing.payment_received
+  suspended --> active: billing.payment_received
+  active --> cancelled: billing.subscription_cancelled
+  past_due --> cancelled: billing.subscription_cancelled
+  suspended --> cancelled: billing.subscription_cancelled
+  cancelled --> active: billing.subscription_reactivated
+  cancelled --> deleted: billing.data_retention_expired (90 días)
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+| Estado | Qué pasa |
+|--------|----------|
+| `active` | Todo funciona normalmente. |
+| `past_due` | Todo sigue funcionando. Owner y admins ven un banner y `billing` les manda avisos los días 1, 4 y 6. |
+| `suspended` | Supervisores y empleados no pueden entrar y se revocan sus sesiones. Owner y admins entran, pero solo pueden pagar y exportar datos. Los demás servicios frenan sus procesos automáticos. Los datos se conservan. |
+| `cancelled` | Mismas reglas de acceso que `suspended`: supervisores y empleados no pueden entrar (`tenant_cancelled`) y se revocan sus sesiones; owner y admins entran, pero solo pueden usar las rutas de billing (ver el plan y las facturas, y volver a suscribirse) y exportar datos. Los demás servicios frenan sus procesos automáticos. Los datos se conservan 90 días. |
+| `deleted` | Pasaron 90 días sin volver a suscribirse: se borraron los usuarios, tokens e invitaciones. Solo queda un registro mínimo del tenant (id, nombre y estado) para que las facturas de `billing` sigan siendo consistentes. |
 
-## Observability
+Al recibir el pago, el tenant `past_due` o `suspended` vuelve a `active`, se emite `tenant_reactivated` y los usuarios inician sesión de nuevo. Un pago recibido con el tenant `cancelled` no lo reactiva: solo lo hace `billing.subscription_reactivated`, que `billing` emite cuando el owner o un admin vuelve a suscribirse eligiendo un plan. Si el borrado de datos llega a ejecutarse, el email de los usuarios borrados queda libre para un registro nuevo.
 
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
+`billing` es quien decide cuándo vence un pago y cuándo se cumplen los 7 días de gracia; `auth` solo cambia el estado al recibir sus eventos.
 
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
+### Plan y funcionalidades
 
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
+`auth` guarda en el tenant su `plan` (`basic` o `pro`) y sus `features` (por ejemplo `{ tasks, alerts, tower }`). Los actualiza con `billing.subscription_created` y `billing.plan_changed` (que `billing` también emite al volver a suscribirse un tenant cancelado) (de forma idempotente y sin pisar eventos más nuevos) y los devuelve en `auth.token.verify`. `auth` no decide qué incluye cada plan: lo hace `billing` y lo aplica el gateway.
 
-To add it to this project:
+## Seguridad
+
+- **Contraseñas** con Argon2id. **Tokens** de refresh, invitación y reseteo guardados solo como hash SHA-256 y comparados en tiempo constante.
+- **Errores de login genéricos** (`invalid_credentials`): no revelan si el email existe, si la cuenta está bloqueada o desactivada. La única excepción son `tenant_suspended` y `tenant_cancelled`, que se devuelven solo después de una contraseña correcta.
+- **Bloqueo** de 15 minutos tras 5 intentos fallidos seguidos.
+- **Nunca se loguean** contraseñas, tokens, hashes ni payloads completos de login o registro.
+- **Aislamiento entre tenants**: toda consulta filtra por `tenantId` y hay tests que lo prueban.
+
+## Contrato NATS
+
+Los pedidos con respuesta usan `auth.<recurso>.<accion>` y no llevan tenant en el subject: el tenant sale del actor verificado. Los eventos usan `t.<tenant>.auth.<evento>` (JetStream). El detalle de payloads está en [AGENTS.md](AGENTS.md#nats-contract).
+
+**Request-reply**
+
+| Subject | Quién lo llama | Para qué |
+|---------|----------------|----------|
+| `auth.register` | público | Crear tenant + owner |
+| `auth.login` | público | Iniciar sesión |
+| `auth.token.refresh` | público | Rotar tokens |
+| `auth.logout` | usuario | Cerrar sesión |
+| `auth.token.verify` | gateway | Validar el token en cada request y conexión WebSocket; devuelve `userId`, `tenantId`, `role`, `siteIds`, `tenantStatus`, `plan` y `features` |
+| `auth.invitation.create` | owner / admin | Invitar |
+| `auth.invitation.list` | owner / admin | Ver invitaciones pendientes |
+| `auth.invitation.regenerate` | owner / admin | Generar un link nuevo |
+| `auth.invitation.accept` | público | Aceptar invitación |
+| `auth.user.change-role` | owner / admin | Cambiar rol |
+| `auth.user.assign-sites` | owner / admin | Asignar sedes a un supervisor |
+| `auth.user.deactivate` | owner / admin | Desactivar usuario |
+| `auth.user.list-recipients` | solo servicios internos (ej. `notifications`) | Obtener los usuarios activos de un tenant por rol (y sede) para enviarles avisos |
+| `auth.password-reset.create` | owner / admin | Generar link de reseteo |
+| `auth.password-reset.confirm` | público | Definir nueva contraseña |
+
+**Eventos que publica:** `user_created`, `user_role_changed`, `user_deactivated`, `tenant_created`, `tenant_past_due`, `tenant_suspended`, `tenant_cancelled`, `tenant_reactivated`.
+
+**Eventos que consume:** `organization.employee_created`, `billing.subscription_created`, `billing.plan_changed`, `billing.payment_overdue`, `billing.subscription_expired`, `billing.payment_received`, `billing.subscription_cancelled`, `billing.subscription_reactivated`, `billing.data_retention_expired`. `billing` consume a su vez `auth.tenant_created`. Todos los handlers son idempotentes: el mismo evento dos veces no genera efectos duplicados.
+
+**Errores** (el gateway los traduce a HTTP `{ detail, code }`):
+
+| code | HTTP | Cuándo |
+|------|------|--------|
+| `invalid_credentials` | 401 | Cualquier fallo de login |
+| `invalid_token` | 401 | Token inválido, vencido o revocado |
+| `forbidden` | 403 | El rol o el tenant no permiten la acción |
+| `tenant_suspended` | 403 | Tenant suspendido |
+| `tenant_cancelled` | 403 | Tenant cancelado |
+| `email_taken` | 409 | El email ya tiene usuario |
+| `validation_error` | 422 | Datos de entrada inválidos |
+
+## Modelo de datos
+
+Tablas: `tenants` (con `plan`, `features` y el estado, incluidos `cancelled` y `deleted`), `users`, `user_sites`, `refresh_tokens`, `invitations`, `password_reset_tokens`. `users.tenant_id` es nulo **solo** para el `platform_admin`; una restricción de la base lo garantiza. El diagrama y el SQL están en [docs/database.md](../../docs/database.md#auth). El servicio tiene su propio `prisma/schema.prisma`; si comparte base con otros servicios se decide más adelante.
+
+## Configuración
+
+| Variable | Descripción |
+|----------|-------------|
+| `NATS_SERVER` | URLs de NATS separadas por coma |
+| `DATABASE_URL` | Conexión a PostgreSQL |
+| `JWT_SECRET` | Secreto para firmar access tokens (mínimo 32 bytes aleatorios) |
+| `ACCESS_TOKEN_TTL` | Por defecto `15m` |
+| `REFRESH_TOKEN_TTL` | Por defecto `7d` |
+
+El archivo `.env` nunca se commitea; las variables se documentan en `.env.example` (todavía no existe).
+
+## Desarrollo
 
 ```bash
-$ pnpm install @nestjs/observe
+# Todo el backend con Docker (NATS + auth + gateway)
+cd backend
+docker compose up --build
+
+# Solo este servicio
+cd backend/auth
+pnpm install
+pnpm start:dev
+
+# Calidad
+pnpm lint
+pnpm test
+pnpm build
 ```
 
-Then follow the [setup guide](https://docs.nestjs.com/observability/overview) - it takes a single import and an app key.
+## Estado actual
 
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
+Hoy el código es el scaffold generado por Nest CLI. Falta, entre otras cosas:
 
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- [ ] Convertir `src/main.ts` en microservicio NATS (`NestFactory.createMicroservice`).
+- [ ] Reemplazar los patterns de ejemplo (`createAuth`, `findAllAuth`, ...) por los del contrato y alinear el gateway, que hoy envía `{ cmd: 'login' }`.
+- [ ] Agregar `src/config/envs.ts` y `.env.example`.
+- [ ] Instalar y configurar Prisma, Argon2, `@nestjs/jwt` y `class-validator`.
+- [ ] Crear los tests unitarios y la carpeta `test/` para e2e.
