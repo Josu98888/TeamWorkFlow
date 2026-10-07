@@ -1,0 +1,238 @@
+# AGENTS.md — `organization` microservice
+
+Guide for coding agents working on this service. Read it fully before making changes. It overrides the root `AGENTS.md` when they conflict. Code patterns live in `skills/teamworkflow-nest`; migrations in `skills/teamworkflow-prisma-migrations`.
+
+## What this service is
+
+`organization` knows WHERE and WHEN people work: the sites of a tenant, the people who work there, and the shifts that connect both. Every other operational service (attendance, tasks, notifications) asks it or listens to it.
+
+It is one NestJS 12 app with three internal modules: `sites`, `employees` and `shifts`. In the 16-service target architecture of the root README these may be split later, so keep modules separable: a module never reads another module's tables directly, it calls the other module's exported service.
+
+Responsibilities:
+
+- **sites:** site data (name, address, location point, geofence radius, timezone), the fixed QR code of each site (rotatable by an admin) and the posts (puestos) inside a site.
+- **employees:** the profile of EVERY user of the tenant (name, last name, email, phone, avatar media id), created or linked from `auth` events. Operational employees also carry legajo (employee number), national id (DNI), skills, enabled sites and a weekly hours limit.
+- **shifts:** weekly templates, a daily generator for the next 14 days, manual create/edit/cancel/reassign, validation (overlap blocks, everything else warns), and the lifecycle events `shift_starting`, `shift_started`, `shift_ended`.
+
+Out of scope (do NOT implement here):
+
+- Login, passwords, roles, invitations, site scope of supervisors (`user_sites`): owned by `auth`. `organization` receives the actor from the gateway and trusts it.
+- Clock-ins, workdays, alerts and the Torre de Control summaries: owned by `attendance`.
+- Tasks, forms and photos: owned by `tasks`. Avatars are stored by `tasks` media; here only the media id is kept.
+- Sending notifications: owned by `notifications`.
+- Payroll, holidays, night hours, automatic emergency replacement, polygon geofences, PostGIS. Future work; ask before adding.
+
+## Business Rules
+
+### Sites and posts
+
+1. A site has: `name`, `address`, `latitude`, `longitude`, `geofenceRadiusMeters`, `timezone` (IANA, for example `America/Argentina/Buenos_Aires`), `qrCode` and `isActive`. The geofence is a point plus a radius in meters: no polygons.
+2. Each site has ONE fixed QR code. It is a random opaque value, unique across the system, generated at creation. An admin can rotate it (`organization.site.rotate-qr`): the old value stops being valid immediately. The QR is printed and placed at the site, so rotation is a deliberate action.
+3. A post (puesto) belongs to a site and has: `name`, `requiredSkills` (list of skill names) and `minPeople` (minimum people needed at the same time).
+4. Sites are deactivated, never deleted: shifts and attendance reference them.
+5. All times are stored in UTC (`timestamptz`). Anything defined as "wall clock" (template start time, "day" filters) is interpreted in the site timezone.
+
+### Employees
+
+1. Every user of the tenant has an employee record (profile), whatever the role. Fields: `firstName`, `lastName`, `email`, `phone`, `avatarMediaId`, `userId` (nullable until linked), `isActive`.
+2. Operational employees additionally have `employeeNumber` (legajo, unique per tenant), `nationalId` (DNI), `skills`, `weeklyHoursLimit`, and a list of enabled sites.
+3. On `t.<tenant>.auth.user_created`: look for an employee of the tenant with the same email. If it exists, link it (`userId`). Otherwise create a profile with no legajo. Idempotent (see Events consumed).
+4. On `t.<tenant>.auth.user_deactivated`: mark the employee inactive and leave ALL their future shifts (`scheduled`, start in the future) unassigned. Emit `shift_updated` for each one. History is kept.
+5. An admin creates an operational employee with email through `organization.employee.create`. It emits `t.<tenant>.organization.employee_created`; `auth` consumes it to create an `employee` invitation. The email is unique per tenant.
+6. Employees are never hard-deleted.
+
+### Roles in this service
+
+| Action | owner / admin | supervisor | employee |
+|--------|:-------------:|:----------:|:--------:|
+| Create/edit sites, posts, QR rotation | ✅ | ❌ | ❌ |
+| Create/edit employees, enable sites | ✅ | ❌ | ❌ |
+| Manage shift templates | ✅ | ❌ | ❌ |
+| Create/edit/cancel/reassign single shifts | ✅ all sites | ✅ only `siteIds` | ❌ |
+| Read sites, employees, shifts | ✅ all | ✅ only `siteIds` | own profile and own shifts only |
+
+- `owner` and `admin` see every site of the tenant. A supervisor acts only on sites listed in the actor's `siteIds`; anything outside them answers 404 (never 403) to prevent enumeration.
+- The actor (`userId`, `tenantId`, `role`, `siteIds`) comes from the gateway, which got it from `auth.token.verify`. Never read tenant or role from the payload body.
+
+### Shift templates and generation
+
+1. A weekly template has: `siteId`, `postId`, `weekdays` (list, 1 = Monday ... 7 = Sunday), `startTime` (`HH:mm`, site timezone), `durationMinutes`, optional `employeeId` and `isActive`.
+2. A daily job generates shifts for the next 14 days from every active template. It is idempotent per `(templateId, startsAt)`: running it twice creates nothing new. Each created shift emits `shift_created`.
+3. Generated shifts copy the template employee (if any). Editing a template changes only shifts generated afterwards; existing shifts are edited individually.
+4. A template whose employee is inactive generates unassigned shifts.
+
+### Shifts
+
+States: `scheduled`, `in_progress`, `finished`, `cancelled`.
+
+1. Admins and supervisors (within their sites) can create, edit, cancel and reassign single shifts manually, in addition to the generated ones.
+2. Edits use optimistic locking: the payload carries the `version` the caller read; a mismatch answers `version_conflict` (409). Every successful write increments `version`.
+3. Validation when assigning an employee:
+   - **Blocks:** the employee already has another non-cancelled shift that overlaps in time (`shift_overlap`, 409). This is the ONLY blocking rule.
+   - **Warnings (never block):** rest under 12 hours since the previous shift or before the next one (`rest_under_12h`), weekly hours over `weeklyHoursLimit` (`weekly_hours_exceeded`), employee lacks a required skill of the post (`missing_skill`), site not in the employee's enabled sites (`site_not_enabled`).
+4. Write endpoints return `{ shift, warnings: [{ code, message }] }`. The caller decides what to do with the warnings.
+5. A cancelled or finished shift cannot be edited or reassigned (`shift_not_editable`, 409).
+6. Deactivating an employee leaves their future shifts unassigned (see Employees).
+
+### Shift lifecycle job
+
+A job runs every minute (all tenants, skipping suspended ones) and:
+
+- emits `shift_starting` for `scheduled` shifts that start within 15 minutes;
+- moves shifts whose start time arrived to `in_progress` and emits `shift_started`;
+- moves shifts whose end time arrived to `finished` and emits `shift_ended`.
+
+Each transition is applied once (compare-and-set on the status or on a marker column) and the job tolerates being late: if it was down, it catches up on the next run. Emitting is at-least-once; consumers are idempotent.
+
+### Tenant suspension and cancellation
+
+Consume `t.<tenant>.auth.tenant_suspended`, `tenant_cancelled` and `tenant_reactivated`. While a tenant is suspended or cancelled: the generator and the lifecycle job skip it (no `shift_*` events). Interactive requests are not blocked here (the gateway does that). Data is kept. After reactivation the jobs resume and the lifecycle job catches up.
+
+### Tenant data purge
+
+Consume `t.<tenant>.billing.data_retention_expired` (emitted 90 days after the tenant was cancelled). It permanently deletes ALL the tenant's data in this service: sites, posts, employees and their enabled sites, shift templates, shifts, tenant state and processed events. It is idempotent (a second delivery finds nothing and is a no-op), runs in one transaction, and emits no `shift_*` or `site_updated` events (the other services purge their own copies from the same event).
+
+## Stack
+
+- NestJS 12 microservice over NATS (`@nestjs/microservices`).
+- PostgreSQL + Prisma 7 with its own `prisma/schema.prisma` (whether it shares a database with other services is decided later). Not installed yet.
+- `class-validator` + `class-transformer` with a global `ValidationPipe` throwing `RpcException`. Not installed yet.
+- Scheduling for the jobs (for example `@nestjs/schedule`). Not installed yet.
+- Env validation with joi in `src/config/envs.ts`, same pattern as the gateway.
+- Jest for tests.
+
+Ask before installing any dependency.
+
+## Current Status (READ FIRST)
+
+The folder contains only this `AGENTS.md` and the `README.md`. There is no Nest app yet: no `package.json`, no `src/`, no Prisma, no Dockerfile, no entry in `backend/docker-compose.yml`.
+
+First tasks, in order (ask before each install):
+
+- [ ] Scaffold the Nest app (microservice bootstrap with `Transport.NATS`, `src/config/envs.ts`, `.env.example`).
+- [ ] Prisma schema and first migration for `sites`.
+- [ ] Modules `sites`, `employees`, `shifts`, with their patterns constants.
+- [ ] Consumers of `auth` events and the jobs.
+- [ ] Add the service to `backend/docker-compose.yml` and the gateway routes.
+
+## NATS Contract
+
+Request-reply patterns follow `organization.<resource>.<action>` and carry NO tenant in the subject: the tenant comes from the actor. Domain events follow `t.<tenant>.organization.<event>` (JetStream, snake_case names). Keep the pattern names in constants files (to create: `src/<module>/<module>.patterns.ts`) and keep the gateway side in sync.
+
+### Request-reply (`@MessagePattern`)
+
+"actor" = `{ userId, tenantId, role, siteIds }` from `auth.token.verify`. Lists return `{ items, total }`.
+
+| Pattern | Caller | Payload | Returns |
+|---------|--------|---------|---------|
+| `organization.site.create` / `update` | gateway (owner/admin) | actor, site fields (and `siteId` on update) | site |
+| `organization.site.get` | gateway, `attendance` | actor, `siteId` | site with geofence and `qrCode` |
+| `organization.site.list` | gateway | actor, `page`, `pageSize` | sites visible to the actor |
+| `organization.site.rotate-qr` | gateway (owner/admin) | actor, `siteId` | site with the new `qrCode` |
+| `organization.post.create` / `update` / `list` | gateway | actor, `siteId`, post fields | post / posts |
+| `organization.employee.create` | gateway (owner/admin) | actor, profile + operational fields, `email` | employee |
+| `organization.employee.update` | gateway (owner/admin) | actor, `employeeId`, fields (skills, enabled sites, weekly limit, ...) | employee |
+| `organization.employee.get` | gateway, other services | actor, `employeeId` OR `userId` | employee |
+| `organization.employee.list` | gateway | actor, filters, `page`, `pageSize` | employees |
+| `organization.employee.list-available` | gateway (owner/admin/supervisor) | actor, `shiftId` | employees able to replace, sorted by fewest weekly hours first |
+| `organization.shift-template.create` / `update` / `deactivate` / `list` | gateway (owner/admin) | actor, template fields | template / templates |
+| `organization.shift.create` | gateway (owner/admin/supervisor) | actor, site, post, `startsAt`, `endsAt`, optional `employeeId` | `{ shift, warnings }` |
+| `organization.shift.update` | same | actor, `shiftId`, `version`, fields | `{ shift, warnings }` |
+| `organization.shift.reassign` | same | actor, `shiftId`, `version`, `employeeId` or `null` | `{ shift, warnings }` |
+| `organization.shift.cancel` | same | actor, `shiftId`, `version` | shift |
+| `organization.shift.get` | gateway, `attendance`, `tasks` | actor, `shiftId` | shift |
+| `organization.shift.list` | gateway | actor, filter by `siteId`, `employeeId` or `day` (site timezone), `page`, `pageSize` | shifts |
+
+Calls between services (for example `attendance` asking `organization.shift.get`) carry the same actor the gateway got, or, for background work without a user, an explicit `tenantId` in the payload. Never accept a tenant from a client.
+
+### Events emitted (JetStream)
+
+| Event subject | Payload |
+|---------------|---------|
+| `t.<tenant>.organization.employee_created` | `eventId`, `employeeId`, `tenantId`, `email`, `firstName`, `lastName`, `occurredAt` |
+| `t.<tenant>.organization.site_updated` | `eventId`, `siteId`, `tenantId`, `latitude`, `longitude`, `geofenceRadiusMeters`, `qrRotated`, `occurredAt` |
+| `t.<tenant>.organization.shift_created` | shift snapshot |
+| `t.<tenant>.organization.shift_updated` | shift snapshot (edit, reassign, unassign) |
+| `t.<tenant>.organization.shift_cancelled` | shift snapshot |
+| `t.<tenant>.organization.shift_starting` | shift snapshot (15 min before start) |
+| `t.<tenant>.organization.shift_started` | shift snapshot |
+| `t.<tenant>.organization.shift_ended` | shift snapshot |
+
+- Shift snapshot = `eventId`, `tenantId`, `shiftId`, `siteId`, `postId`, `employeeId` (nullable), `startsAt`, `endsAt`, `status`, `version`, `occurredAt`. A full snapshot lets consumers keep a local copy without calling back.
+- `occurredAt` is ISO-8601 UTC. Every event carries a unique `eventId` so consumers deduplicate.
+- Emit events only after the database transaction commits. Failing to emit must not roll back the data; the next job run or a retry re-emits (consumers are idempotent). An outbox table is possible future hardening, not a requirement.
+
+### Events consumed (JetStream, durable consumer, explicit ack)
+
+| Event subject | Producer | Handling |
+|---------------|----------|----------|
+| `t.<tenant>.auth.user_created` | `auth` | Link by email or create the profile (no legajo). |
+| `t.<tenant>.auth.user_deactivated` | `auth` | Mark employee inactive; unassign future shifts. |
+| `t.<tenant>.auth.tenant_suspended` / `tenant_cancelled` | `auth` | Pause jobs for the tenant. |
+| `t.<tenant>.auth.tenant_reactivated` | `auth` | Resume jobs for the tenant. |
+| `t.<tenant>.billing.data_retention_expired` | `billing` | Permanently delete every row of the tenant (idempotent). |
+
+The tenant of a consumed event comes from the subject and is checked against the payload. Handlers are idempotent: deduplicate by `eventId` in a `ProcessedEvent` table or by a natural unique key. Errors in an `@EventPattern` handler never reach the producer: catch and log them, and let the message be redelivered when it must be retried.
+
+### Errors
+
+Throw `RpcException` with `{ status, code, message }` (see `teamworkflow-nest`). The gateway maps it to HTTP `{ detail, code }`.
+
+| code | status | When |
+|------|--------|------|
+| `forbidden` | 403 | Role not allowed for the action |
+| `site_not_found` / `employee_not_found` / `shift_not_found` / `post_not_found` | 404 | Missing, or outside the actor's tenant or sites |
+| `shift_overlap` | 409 | The employee already has an overlapping shift |
+| `version_conflict` | 409 | Optimistic lock mismatch |
+| `shift_not_editable` | 409 | Shift is cancelled or finished |
+| `email_taken` | 409 | Employee email or legajo already exists in the tenant |
+| `validation_error` | 422 | DTO validation failed |
+
+## Data Model (Prisma, to create)
+
+Models are PascalCase, fields camelCase, tables plural snake_case through `@@map` / `@map`. Every model has `tenantId`.
+
+- `Site`: `id`, `tenantId`, `name`, `address`, `latitude`, `longitude`, `geofenceRadiusMeters`, `timezone`, `qrCode` (unique), `qrRotatedAt`, `isActive`, timestamps.
+- `Post`: `id`, `tenantId`, `siteId`, `name`, `requiredSkills` (string list), `minPeople`, `isActive`.
+- `Employee`: `id`, `tenantId`, `userId` (nullable, unique per tenant), `email` (unique per tenant), `firstName`, `lastName`, `phone`, `avatarMediaId`, `employeeNumber` (nullable, unique per tenant), `nationalId` (nullable), `skills` (string list), `weeklyHoursLimit` (nullable), `isActive`, timestamps.
+- `EmployeeSite`: `tenantId`, `employeeId`, `siteId`, primary key (`employeeId`, `siteId`).
+- `ShiftTemplate`: `id`, `tenantId`, `siteId`, `postId`, `weekdays` (int list), `startTime`, `durationMinutes`, `employeeId` (nullable), `isActive`.
+- `Shift`: `id`, `tenantId`, `templateId` (nullable), `siteId`, `postId`, `employeeId` (nullable), `startsAt`, `endsAt`, `status` (`SCHEDULED` | `IN_PROGRESS` | `FINISHED` | `CANCELLED`), `version`, `startingEmittedAt`, timestamps. Unique `(tenantId, templateId, startsAt)` for generated shifts.
+- `TenantState`: `tenantId`, `isSuspended` (true while suspended or cancelled), `updatedAt`. No row means active.
+- `ProcessedEvent`: `eventId` (unique), `processedAt`.
+
+Every query filters by `tenantId`. Add indexes for the real lookups: shifts by `(tenantId, employeeId, startsAt)`, by `(tenantId, siteId, startsAt)` and by `(status, startsAt)` for the job (`teamworkflow-postgres`). The overlap check must run inside the same transaction as the write, and a database constraint or a serializable check must back it so two concurrent writes cannot both pass.
+
+The jobs are the only code that reads across tenants. They still process one tenant at a time and skip suspended ones.
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `NATS_SERVER` | Comma-separated NATS URLs |
+| `DATABASE_URL` | PostgreSQL connection string for this service |
+| `SHIFT_HORIZON_DAYS` | Days ahead the generator fills. Default `14` |
+
+Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Never commit `.env`.
+
+## Security Rules (non-negotiable)
+
+1. `tenantId` always comes from the verified actor or the database, never from client input.
+2. Every query filters by `tenantId`; a test proves tenant isolation.
+3. Supervisors never touch a site outside `siteIds`; out-of-scope resources answer 404.
+4. Never log personal data (national id, phone, email) in full.
+5. Never return the site `qrCode` to an `employee` actor through listing endpoints; only the internal call from `attendance` and admin/supervisor reads include it.
+6. Never read another service's tables; ask over NATS.
+
+## Tests
+
+- Unit tests for every use case with Prisma and `ClientProxy` mocked (`pnpm test`).
+- Always covered: tenant isolation on every module; supervisor limited to `siteIds` (404 outside); overlap blocks while the four warnings do not; optimistic locking; generator idempotency (run twice, no duplicates) and the 14-day horizon in the site timezone; lifecycle job transitions and catch-up; `user_created` linking by email vs creating a profile; `user_deactivated` unassigning future shifts only; QR rotation invalidating the old value; suspended and cancelled tenants skipped by the jobs and resumed after `tenant_reactivated`; tenant data purge (`data_retention_expired` deletes every row of the tenant, leaves other tenants untouched and is idempotent); idempotent handling of every consumed event.
+- E2E tests (to create in `test/`) once the transport and the database are set up, against a dedicated test database.
+
+## Before Finishing a Task
+
+- [ ] `pnpm lint`, `pnpm test` and `pnpm build` pass.
+- [ ] Schema changes come with a reviewed Prisma migration.
+- [ ] If you changed a pattern, event or payload, you updated this file, the gateway and the consuming services' docs, and called it out in the PR description.
+- [ ] No secrets or personal data in logs, tests or fixtures.

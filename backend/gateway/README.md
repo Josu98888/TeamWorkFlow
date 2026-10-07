@@ -1,124 +1,208 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# gateway — Punto de entrada HTTP y WebSocket
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+`gateway` es la única puerta de entrada a TeamWorkFlow. La aplicación web y la aplicación móvil le hablan por HTTP (y por Socket.IO para la Torre de Control); el gateway verifica quién llama, aplica controles gruesos y traduce cada request a un mensaje NATS para el servicio que corresponda. NATS nunca se expone a internet.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+> **Estado:** hoy existen solo el esqueleto de NestJS, el cliente NATS y la validación de variables de entorno. Este documento describe el diseño objetivo. Ver [Estado actual](#estado-actual).
+>
+> Documentos relacionados: [AGENTS.md](AGENTS.md) (reglas detalladas para agentes, fuente de verdad) · [README general](../../README.md#1-gateway) · [auth](../auth/README.md).
 
-## Description
+## En una mirada
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+| Tema | Decisión |
+|------|----------|
+| Rol | Único punto de entrada HTTP y WebSocket. Sin base de datos, sin NATS KV y sin lógica de negocio. |
+| API | Una sola API REST bajo `/api/v1/...` para web y móvil (versionado por URI de Nest). Sin BFF en el MVP. |
+| Transporte hacia los servicios | NATS request-reply (`servicio.recurso.accion`) con `ClientProxy`, siempre con timeout. |
+| Autenticación | `auth.token.verify` en cada request autenticado y en cada conexión WebSocket. |
+| Actor | `userId`, `tenantId`, `role`, `siteIds`, `tenantStatus`, `plan`, `features`, tomados solo del resultado de verify. |
+| Tokens web | Cookies `httpOnly`, `Secure`, `SameSite` que emite el gateway, con protección CSRF. |
+| Tokens móvil | Header `Authorization: Bearer`; el refresh token va en el body de `/auth/refresh` y la app lo guarda en almacenamiento seguro. |
+| Plan | Cada ruta declara su funcionalidad (`tasks`, `alerts`, `tower`); si el plan no la incluye, responde 403 `feature_not_in_plan`. |
+| Estado del tenant | `suspended` o `cancelled`: solo owner y admin, solo rutas de billing y exportación de datos. |
+| Rate limiting | `@nestjs/throttler` en memoria: rutas públicas por IP, rutas autenticadas por usuario. |
+| Errores | Las `RpcException` se traducen a HTTP `{ detail, code }`. |
 
-## Project setup
+## Qué hace y qué no
 
-```bash
-$ pnpm install
+**Hace**
+
+- Verifica el access token y arma el actor.
+- Aplica controles gruesos: rol, funcionalidad del plan, estado del tenant, rate limit, CSRF y CORS.
+- Traduce requests HTTP a pedidos NATS con timeout y devuelve los errores traducidos.
+- Emite y borra las cookies de sesión de la web.
+- Atiende el WebSocket de la Torre de Control y reenvía los resúmenes de sede a las salas correctas.
+- Recibe el webhook de Mercado Pago y lo reenvía sin tocar a `billing`.
+
+**No hace**
+
+| Qué | Dónde vive |
+|-----|-----------|
+| Reglas de negocio y controles finos de rol o sede | Cada servicio de dominio, que recibe el actor |
+| Usuarios, tokens, invitaciones y estado del tenant | `auth` |
+| Planes, facturas, pagos y validación del webhook | `billing` |
+| Almacenamiento de datos de cualquier tipo | No existe en el gateway (sin base de datos, sin NATS KV) |
+| APIs separadas para web y móvil | No en el MVP; solo si una API compartida deja de alcanzar |
+
+## Ciclo de un request
+
+```mermaid
+sequenceDiagram
+  actor C as Cliente (web o móvil)
+  participant G as gateway
+  participant A as auth
+  participant S as servicio de dominio
+  C->>G: request HTTP con cookie o Bearer
+  G->>G: rate limit, CORS, CSRF (solo requests con cookie)
+  G->>A: auth.token.verify
+  A-->>G: userId, tenantId, role, siteIds, tenantStatus, plan, features
+  G->>G: controles de rol, funcionalidad y estado del tenant
+  G->>S: servicio.recurso.accion con el actor verificado y el DTO validado
+  S-->>G: resultado o RpcException
+  G-->>C: 2xx con el resultado, o estado HTTP con detail y code
 ```
 
-## Compile and run the project
+El gateway nunca toma `tenantId`, `role`, `siteIds`, `plan` ni `features` del body, la query ni los headers. Las rutas públicas no pasan por verify: registro, login, refresh, aceptar invitación, confirmar reseteo de contraseña y el webhook de Mercado Pago.
 
-```bash
-# development
-$ pnpm run start
+## Tokens: web y móvil
 
-# watch mode
-$ pnpm run start:dev
+| | Web | Móvil |
+|---|---|---|
+| Access token | Cookie `httpOnly`, `Secure`, `SameSite` | Header `Authorization: Bearer` |
+| Refresh token | Cookie `httpOnly`, `Secure`, `SameSite` | En el body de `/auth/refresh`; la app lo guarda en almacenamiento seguro |
+| Par de tokens en el body de la respuesta | No | Sí |
+| CSRF | Obligatorio en `POST`, `PUT`, `PATCH` y `DELETE` (token double-submit en `X-CSRF-Token`) | No hace falta |
+| CORS | Solo `WEB_ORIGIN`, con credenciales | No aplica |
+| Logout | El gateway borra las cookies y llama a `auth.logout` | La app descarta sus tokens y llama a `auth.logout` |
 
-# production mode
-$ pnpm run start:prod
+Cómo distingue el gateway entre ambos (regla inicial): un request con la cookie de acceso es web; un request con header `Authorization` y sin cookie es móvil; si llegan los dos, gana el header. En las rutas públicas de auth, donde todavía no hay cookie, el cliente indica su tipo con un header como `X-Client`, y por defecto se aplica el comportamiento web para que los tokens no terminen en un body por error.
+
+## Torre de Control
+
+```mermaid
+sequenceDiagram
+  actor B as Navegador
+  participant G as gateway
+  participant A as auth
+  participant O as organization
+  participant T as attendance
+  B->>G: conexión Socket.IO con la cookie de acceso
+  G->>A: auth.token.verify
+  A-->>G: actor con features y siteIds
+  G->>G: exige feature tower y rol owner, admin o supervisor
+  opt owner o admin
+    G->>O: organization.site.list
+    O-->>G: todas las sedes del tenant
+  end
+  G->>G: une el socket a una sala por sede permitida
+  G->>T: attendance.tower.snapshot
+  T-->>G: resúmenes actuales y alertas abiertas
+  G-->>B: estado inicial
+  T--)G: t.tenant.attendance.site_summary_updated (suscripción del lado del servidor)
+  G-->>B: actualización emitida a la sala de esa sede
 ```
 
-## Run tests
+- Las salas se llaman `{tenantId}:{siteId}`. Un supervisor entra a las sedes de `siteIds`; owner y admin entran a todas las sedes del tenant. El cliente nunca elige salas.
+- El navegador nunca habla con NATS.
+- Regla de reverificación: el gateway desconecta el socket cuando vence el access token; el cliente se reconecta con el token renovado.
+- Limitación conocida: si cambian las sedes de un supervisor, el cambio se aplica al reconectarse.
+- Si las conexiones abiertas se vuelven un problema de carga, esto puede pasar a un servicio `tower` propio sin cambiar el frontend.
+
+## Rutas por servicio
+
+Las rutas son la forma propuesta bajo `/api/v1`. La tabla completa (método, ruta, pattern NATS, rol, funcionalidad) está en [AGENTS.md](AGENTS.md#route-map).
+
+| Servicio | Qué expone | Acceso |
+|----------|------------|--------|
+| `auth` | Registro, login, refresh, logout, invitaciones, cambio de rol, asignación de sedes, desactivación y reseteo de contraseña | Público para registro, login, refresh, aceptar invitación y confirmar reseteo; owner y admin para la gestión |
+| `organization` | Sedes, puestos, empleados, plantillas de turnos y turnos | Owner y admin gestionan; los supervisores gestionan turnos; el servicio afina el resto |
+| `attendance` | Fichadas, jornadas, alertas y snapshot de la Torre de Control | Los empleados fichan; supervisores y admins corrigen y atienden alertas. Las alertas requieren `alerts`; la torre requiere `tower` |
+| `tasks` | Formularios, plantillas de tareas, tareas y fotos | Todas las rutas requieren `tasks` |
+| `notifications` | Tokens push y notificaciones in-app | Cualquier usuario autenticado |
+| `billing` | Planes, suscripción, facturas y links de pago | Owner y admin |
+| `billing` (plataforma) | Planes y precios, pruebas, facturas y pagos manuales | Solo `platform_admin` |
+| `billing` (webhook) | `POST /webhooks/mercadopago` | Público, con rate limit, body crudo reenviado |
+
+`auth.token.verify` se usa internamente y `auth.user.list-recipients` es solo para servicios internos; ninguno es una ruta pública.
+
+## Estado del tenant y plan
+
+| Estado del tenant | Comportamiento |
+|-------------------|----------------|
+| `active` | Acceso normal |
+| `past_due` | Acceso normal; el frontend muestra un banner |
+| `suspended` | `auth` rechaza a supervisores y empleados. Owner y admin solo llegan a las rutas de suscripción y facturas (y a la exportación de datos); el resto responde 403 `tenant_suspended` |
+| `cancelled` | Igual que `suspended`, más la lista de planes y volver a suscribirse; el resto responde 403 `tenant_cancelled` |
+
+Rutas de exportación de datos: ningún servicio define todavía un pattern de exportación. Cuando alguno lo haga, se permitirá durante la suspensión y la cancelación y se agregará al mapa de rutas.
+
+## Errores
+
+El gateway responde `{ detail, code }`. Los códigos que vienen de los servicios se transmiten tal cual; el gateway agrega los suyos.
+
+| code | HTTP | Origen |
+|------|------|--------|
+| `invalid_credentials` | 401 | `auth` |
+| `invalid_token` | 401 | `auth` |
+| `forbidden` | 403 | Servicios y controles de rol del gateway |
+| `tenant_suspended` | 403 | `auth` y gateway |
+| `tenant_cancelled` | 403 | `auth` y gateway |
+| `feature_not_in_plan` | 403 | Gateway |
+| `csrf_invalid` | 403 | Gateway |
+| `email_taken` | 409 | `auth` |
+| `validation_error` | 422 | Validación de DTOs |
+| `rate_limited` | 429 | Gateway |
+| `upstream_unavailable` | 503 | Gateway (NATS caído o sin servicio que responda) |
+| `upstream_timeout` | 504 | Gateway (sin respuesta dentro de `NATS_TIMEOUT_MS`) |
+
+## Configuración
+
+| Variable | Estado | Descripción |
+|----------|--------|-------------|
+| `PORT` | existe | Puerto HTTP |
+| `NATS_SERVER` | existe | URLs de NATS separadas por coma |
+| `WEB_ORIGIN` | a agregar | Origen web permitido (CORS y Socket.IO) |
+| `COOKIE_SECURE` | a agregar | Flag `Secure` de las cookies; si falta, se deriva de `NODE_ENV` |
+| `NATS_TIMEOUT_MS` | a agregar | Timeout de los pedidos. Valor inicial: `5000` |
+| `RATE_LIMIT_PUBLIC_TTL_MS`, `RATE_LIMIT_PUBLIC_LIMIT` | a agregar | Rutas públicas por IP. Valores iniciales: `60000`, `30` |
+| `RATE_LIMIT_AUTH_TTL_MS`, `RATE_LIMIT_AUTH_LIMIT` | a agregar | Rutas autenticadas por usuario. Valores iniciales: `60000`, `300` |
+
+Los valores de rate limit son estimaciones iniciales a ajustar con tráfico real. El archivo `.env` nunca se commitea.
+
+## Desarrollo
 
 ```bash
-# unit tests
-$ pnpm run test
+# Todo el backend con Docker (NATS + auth + gateway)
+cd backend
+docker compose up --build
 
-# e2e tests
-$ pnpm run test:e2e
+# Solo este servicio
+cd backend/gateway
+pnpm install
+pnpm start:dev
 
-# test coverage
-$ pnpm run test:cov
+# Calidad
+pnpm lint
+pnpm test
+pnpm build
 ```
 
-## Deployment
+## Estado actual
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+Lo que existe hoy:
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+- [x] Prefijo global `api`, escuchando en `PORT`.
+- [x] Módulo cliente NATS (`NATS_SERVICE`).
+- [x] Validación con joi de `PORT` y `NATS_SERVER`.
+- [x] `auth.controller.ts` con placeholders (`login` envía `{ cmd: 'login' }` con payload vacío).
 
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
-```
+Lo que falta:
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-To add it to this project:
-
-```bash
-$ pnpm install @nestjs/observe
-```
-
-Then follow the [setup guide](https://docs.nestjs.com/observability/overview) - it takes a single import and an app key.
-
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- [ ] Versionado por URI (`/api/v1`), CORS y `ValidationPipe` global.
+- [ ] Guard de autenticación, armado del actor, decoradores de rol y funcionalidad, controles de estado del tenant.
+- [ ] Manejo de cookies, detección cookie o bearer y CSRF.
+- [ ] Filtro de `RpcException`, timeouts y helper con `catchError`.
+- [ ] Rate limiting con `@nestjs/throttler`.
+- [ ] Ruta del webhook de Mercado Pago con body crudo.
+- [ ] Gateway Socket.IO de la Torre de Control.
+- [ ] Rutas de cada servicio y las nuevas variables de entorno.
+- [ ] Tests unitarios y e2e.
