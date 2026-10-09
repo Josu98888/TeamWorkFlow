@@ -77,7 +77,7 @@ Plan gating: alert routing is a `pro` feature. The service keeps a local copy of
 
 The service does not own users, roles or site scope, so it asks the owner at the time it routes:
 
-- **Supervisors of a site and owners/admins of a tenant:** request `auth.user.list-recipients` (internal service call, see NATS Contract) with `tenantId`, `roles` and optional `siteId`. `auth` owns roles and the `user_sites` assignments.
+- **Supervisors of a site and owners/admins of a tenant:** request `auth.user.list-recipients` (internal service call, see NATS Contract) with `tenantId`, `roles` and optional `siteId`. `auth` owns roles and the `User.siteIds` assignments.
 - **An employee as recipient:** the event carries `employeeId`; request `organization.employee.get` by `employeeId` to obtain the `userId`.
 - Nothing is cached beyond the processing of one event: assignments and roles change without events, so a stale copy would notify the wrong people. Revisit only if the request volume proves to be a problem.
 - If the owner service does not answer, the event is NOT acknowledged and is redelivered by JetStream; processing is idempotent so redelivery is safe.
