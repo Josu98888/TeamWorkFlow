@@ -2,7 +2,7 @@
 
 Follow /STEPS.rules.md. Order: /STEPS.index.md. Backend conventions: /backend/STEPS.template.md.
 
-**Status:** last verified: 2026-10-09 (S1.1) · next: S1.2 · in progress: — · blocked: S1.6 (TODO(auth) contract rename)
+**Status:** last verified: 2026-10-09 (S1.2) · next: S1.3 · in progress: — · blocked: S1.6 (TODO(auth) contract rename)
 
 Source of truth: `backend/auth/AGENTS.md`. Placeholders (`<lint>`, `<test>`, `<EXCL>`…) are defined in the backend template, run from `backend/auth/`.
 
@@ -19,11 +19,11 @@ Commits: (none, read-only phase)
 
 ## Phase 1 — Foundation (transport, config, errors, validation)
 
-Commits: —
+Commits: 58cd5b3, d12199f, 7bfa96b
 
 - [x] **S1.1** Install dependencies (approved 2026-10-09, see Decisions): `@nestjs/jwt`, `argon2`, `class-validator`, `class-transformer`, `joi`, `dotenv`, `@prisma/client`, `@prisma/adapter-pg`, `pg`, `@nats-io/jetstream`, dev `prisma`, `@types/pg`.
   Check: `pnpm ls @nestjs/jwt argon2 class-validator class-transformer joi @prisma/client prisma @nats-io/jetstream` lists every package with a version.
-- [ ] **S1.2** `src/config/envs.ts` + `src/config/index.ts` with joi, same pattern as the gateway. Variables: AGENTS § Environment Variables (`NATS_SERVER`, `DATABASE_URL`, `JWT_SECRET` min 32 chars, `ACCESS_TOKEN_TTL` default `15m`, `REFRESH_TOKEN_TTL` default `7d`). Create `backend/auth/.env.example` with placeholders only.
+- [x] **S1.2** `src/config/envs.ts` + `src/config/index.ts` with joi, same pattern as the gateway. Variables: AGENTS § Environment Variables (`NATS_SERVER`, `DATABASE_URL`, `JWT_SECRET` min 32 chars, `ACCESS_TOKEN_TTL` default `15m`, `REFRESH_TOKEN_TTL` default `7d`). Create `backend/auth/.env.example` with placeholders only.
   Check: `<test> envs` passes with cases: missing `JWT_SECRET` throws; `JWT_SECRET` of 31 chars throws; TTL defaults applied. `rg -n "JWT_SECRET=.{32,}" .env.example` is empty.
 - [ ] **S1.3** `src/main.ts` becomes `NestFactory.createMicroservice` with `Transport.NATS` and `servers: envs.natsServers` (skill § Microservice bootstrap). Remove `PORT` usage.
   Check: `rg -n "NestFactory.create\(|app.listen" src --glob '!**/*.spec.ts'` is empty; `<build>` passes.
