@@ -25,7 +25,7 @@ Commits: (none, read-only phase)
 
 ## Phase 1 — Decisions
 
-Commits: —
+Commits: 6e87cb4, 241f03a (S1.3: remove `nats` v2), 5e72244 (plan)
 
 - [x] **S1.1** Database layout: ONE PostgreSQL database with ONE PostgreSQL schema per data-owning service (`auth`, `organization`, `attendance`, `tasks`, `notifications`, `billing`). See **Decisions** 2026-10-08. Isolation enforced per DEFAULT(backend) below (one role per service).
   Check: the answer is in **Decisions** and `rg -n "TODO\(backend\) Database" backend/STEPS.md` (from repo root) is empty.
@@ -38,7 +38,7 @@ Commits: —
 
 ## Phase 2 — Infrastructure
 
-Commits: —
+Commits: bd78f9d, 34fbdc1, 4d7bf21
 
 - [x] **S2.0** Approved: edit `backend/docker-compose.yml` (S2.1–S2.4), create `backend/docker-compose.test.yml`, `backend/postgres/init/` and `backend/.env.example` (S2.2, S2.5). See **Decisions** 2026-10-09.
   Check: the approval is in **Decisions**.
@@ -57,7 +57,7 @@ Commits: —
 
 ## Phase 3 — Done checks
 
-Commits: —
+Commits: (verification only, no files)
 
 - [x] **S3.1** Whole stack starts clean.
   Check: `docker compose -f backend/docker-compose.yml up -d --build` then `docker compose -f backend/docker-compose.yml ps` shows every service `running`/`healthy`.
