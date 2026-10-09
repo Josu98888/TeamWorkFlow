@@ -19,7 +19,7 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ## Project Status (READ FIRST)
 
 - Prisma is NOT installed yet and no microservice has `prisma/schema.prisma`, `prisma.config.ts` or `prisma/migrations/` (to create). Setup and installation are described in teamworkflow-nest ("Database Access"); ask the user before installing.
-- Each data-owning microservice (e.g. `backend/auth`) has its OWN schema and its OWN `prisma/migrations/` history. Whether it shares a PostgreSQL database with other services (each service mapped to its own PostgreSQL schema, e.g. `?schema=auth` or the multiSchema approach) or gets its own database is decided later per service. The gateway has none. Run every Prisma command from inside the service folder (`cd backend/<service>`).
+- Each data-owning microservice (e.g. `backend/auth`) has its OWN schema and its OWN `prisma/migrations/` history. All services share the `teamworkflow` database, each mapped to its own PostgreSQL schema with its own role (`backend/STEPS.md` S1.1); how Prisma 7 + `@prisma/adapter-pg` selects the schema (`?schema=auth` vs the adapter option) is verified against the Prisma docs, not assumed. The gateway has none. Run every Prisma command from inside the service folder (`cd backend/<service>`).
 - Conventions here assume **Prisma ORM 7** (stable): connection URL in `prisma.config.ts`, `prisma-client` generator with explicit `output`, driver adapter in the client. Prisma 8 is a release candidate with renamed commands (`db migrate`) and a different client API; do not switch without asking. Verify the installed version: `pnpm list prisma`.
 - If a service has `prisma/` already, read `schema.prisma`, `prisma.config.ts` and `prisma/migrations/` first. Adapt; do not rewrite silently.
 - NEVER edit or delete a migration that was already applied in a shared environment (staging, production, a teammate's DB). Create a new one.
@@ -374,7 +374,7 @@ If a service's DB was created with `db push` or by hand:
 ## Per-service operations
 
 - Each microservice has its own `DATABASE_URL`, `prisma.config.ts`, `prisma/migrations/` and `migration_lock.toml`. Migrate each independently; there is no global migration order between services.
-- In `docker-compose.yml` (to change) every data-owning service gets a PostgreSQL service/database, or shares one with its own schema (decided later per service). Apply migrations as a separate step (a one-shot command or init container running `pnpm exec prisma migrate deploy`), NOT in the service's `start` command when multiple replicas may start at once. `migrate deploy` serializes runs with an advisory lock, but a failing migration should block the release, not crash-loop the app.
+- In `docker-compose.yml` (to change) one `postgres` service hosts the `teamworkflow` database with one schema and one role per data-owning service. Apply migrations as a separate step (a one-shot command or init container running `pnpm exec prisma migrate deploy`), NOT in the service's `start` command when multiple replicas may start at once. `migrate deploy` serializes runs with an advisory lock, but a failing migration should block the release, not crash-loop the app.
 - The Docker build must run `pnpm exec prisma generate` before `nest build`.
 - Changing a cross-service contract is NOT a migration problem: version the NATS pattern/payload (teamworkflow-nest) and keep both sides compatible during the rollout.
 

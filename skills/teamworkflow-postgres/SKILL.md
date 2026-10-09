@@ -20,7 +20,7 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 
 - Prisma and PostgreSQL are NOT set up yet: no `schema.prisma`, no database container in `backend/docker-compose.yml`, no `PrismaService` (all to create; see teamworkflow-nest "Database Access"). Everything below applies once a microservice owns a database.
 - TeamWorkFlow is early stage: tables will be small. Sequential scans on small tables are NORMAL and often faster than index scans. Do not add indexes "just in case".
-- Each data-owning microservice has its own Prisma schema and tables (it may share a PostgreSQL database with other services using its own schema, or have its own database; decided later). Index analysis happens per service, against THAT service's tables. The gateway has no database.
+- Each data-owning microservice has its own Prisma schema and tables (all services share the `teamworkflow` database, each in its own PostgreSQL schema with its own role). Index analysis happens per service, against THAT service's tables. The gateway has no database.
 - Check the PostgreSQL version once (`SELECT version();`); some features below depend on it.
 - There are no partitioned tables. Do not introduce partitioning without asking the user.
 - Conventions assume **Prisma ORM 7** (stable). Verify the installed version before copying schema syntax (`pnpm list prisma`).

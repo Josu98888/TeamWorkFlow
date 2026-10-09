@@ -72,7 +72,7 @@ The backend is a pnpm-managed NestJS 12 monorepo-style folder (`backend/`) with 
 | Validation (to install) | `class-validator` + `class-transformer` | Global `ValidationPipe` |
 | Env config | `joi` + `dotenv` | Pattern: `gateway/src/config/envs.ts` |
 | ORM (to install) | Prisma 7 (stable at time of writing) + `@prisma/adapter-pg` | Per microservice, see "Database Access" |
-| Database | PostgreSQL; each data-owning microservice has its own Prisma schema (shared or separate database decided later) | The gateway NEVER touches a DB |
+| Database | PostgreSQL; one shared database `teamworkflow`, one PostgreSQL schema + role and one Prisma schema per data-owning microservice | The gateway NEVER touches a DB |
 | Tests | Jest 30, `@nestjs/testing`, supertest | Run through the `test` scripts (they use `--experimental-vm-modules`) |
 | Lint / format | oxlint (`pnpm lint`), prettier (`pnpm format`) | |
 | Package manager | pnpm | Run commands from the app folder (`backend/gateway`, `backend/auth`) |
@@ -82,7 +82,7 @@ The backend is a pnpm-managed NestJS 12 monorepo-style folder (`backend/`) with 
 ## Critical Rules
 
 - Two kinds of apps: the **gateway** (HTTP in, NATS out) and **microservices** (NATS in, own data). Never put business logic or DB access in the gateway.
-- Only microservices touch databases. Each data-owning microservice has its OWN Prisma schema and migrations; whether it shares a PostgreSQL database (with its own schema) or gets its own database is decided later per service. Never read another service's tables; ask it over NATS.
+- Only microservices touch databases. Each data-owning microservice has its OWN Prisma schema and migrations; all of them share the `teamworkflow` database, each in its own PostgreSQL schema with its own role (`backend/STEPS.md` S1.1). Never read another service's tables; ask it over NATS.
 - Layers inside a microservice: **message controller -> service -> (repository) -> PrismaService**. Never skip or invert layers.
 - Gateway controllers do HTTP only: parse, call `client.send` once, return the result. No business rules.
 - Controllers in microservices (`@MessagePattern`) do transport only: take the `@Payload()` DTO, call ONE service method.
@@ -269,7 +269,7 @@ DATABASE_URL=postgresql://user:password@localhost:5432/teamworkflow_auth
 
 - `NATS_SERVER` is a comma-separated list split into `string[]` (as in the gateway).
 - In `docker-compose.yml` the service's `environment` must also receive `DATABASE_URL` (host = the postgres service name, not `localhost`).
-- `.env` is never committed. Each microservice has its own `DATABASE_URL` (it may point to a shared PostgreSQL database with the service's own schema, or to its own database).
+- `.env` is never committed. Each microservice has its own `DATABASE_URL` (the shared `teamworkflow` database, the service's own schema and role).
 - Do not add a second config mechanism (`@nestjs/config`) without asking; extend `envs.ts`.
 
 ---
