@@ -27,7 +27,7 @@ Out of scope (do NOT implement here):
 ## Stack
 
 - NestJS 12 microservice over NATS (`@nestjs/microservices`).
-- PostgreSQL + Prisma 7 with its own `prisma/schema.prisma` (whether it shares a database with other services is decided later). Not installed yet.
+- PostgreSQL + Prisma 7 with its own `prisma/schema.prisma` in the `billing` schema of the shared `teamworkflow` database, accessed with its own `billing_svc` role that cannot read other schemas (see `backend/STEPS.md` S1.1). Not installed yet.
 - `class-validator` + `class-transformer` with a global `ValidationPipe` throwing `RpcException`. Not installed yet.
 - Scheduling for the jobs (for example `@nestjs/schedule`). Not installed yet.
 - Mercado Pago access behind the `PaymentProvider` interface (an own HTTP client or the official SDK; ask before installing anything).
