@@ -149,7 +149,7 @@ Los pedidos con respuesta usan `notifications.<recurso>.<accion>` y no llevan te
 
 ## Modelo de datos
 
-Modelos de Prisma: `DeviceToken`, `Notification`, `NotificationDelivery`, `TenantState`, `TenantFeatures` y `ProcessedEvent`. Todos llevan `tenantId` y toda consulta lo filtra; hay tests que prueban el aislamiento entre tenants. `Notification` guarda el `locale` (`es`). Las plantillas viven en el código. El servicio tiene su propio `prisma/schema.prisma`; si comparte base con otros servicios se decide más adelante.
+Modelos de Prisma: `DeviceToken`, `Notification`, `NotificationDelivery`, `TenantState`, `TenantFeatures` y `ProcessedEvent`. Todos llevan `tenantId` y toda consulta lo filtra; hay tests que prueban el aislamiento entre tenants. `Notification` guarda el `locale` (`es`). Las plantillas viven en el código. El servicio tiene su propio `prisma/schema.prisma` y sus tablas viven en el schema `notifications` de la base compartida `teamworkflow`, con un usuario de Postgres propio (`notifications_svc`) que no puede leer los schemas de otros servicios.
 
 ## Configuración
 

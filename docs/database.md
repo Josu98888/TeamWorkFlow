@@ -198,7 +198,7 @@ erDiagram
     String lastName
     String phone
     String avatarMediaId "ref. tasks media"
-    String employeeNumber UK "legajo, nullable, unique per tenant"
+    String employeeNumber UK "legajo, nullable, único por tenant"
     String nationalId "DNI, nullable"
     StringList skills
     Int weeklyHoursLimit "nullable"
@@ -670,7 +670,7 @@ También es futuro: dividir `organization` en `sites`, `employees` y `shifts`, y
 
 > **Solo referencia.** El SQL siguiente es el **diseño previo al MVP**: sus identificadores están en español (`sedes`, `empleados`, `turnos`, ...) y supone la división en los 16 servicios objetivo, PostGIS y Row Level Security. **No** coincide con los modelos del MVP anteriores, que son la fuente de verdad. No lo copie a un schema de Prisma; el SQL de `auth` se eliminó porque el modelo del MVP lo reemplaza.
 
-### Common base: extensions, schemas, roles and RLS helper
+### Base común: extensiones, schemas, roles y función auxiliar de RLS
 
 <details><summary>SQL</summary>
 
@@ -1212,7 +1212,7 @@ CREATE TABLE reportes.exportaciones (
 
 </details>
 
-### billing (superseded: per-employee pricing, USD, Stripe)
+### billing (reemplazado: precio por empleado, USD, Stripe)
 
 <details><summary>SQL</summary>
 
@@ -1339,9 +1339,9 @@ REVOKE UPDATE, DELETE ON auditoria.eventos FROM svc_auditoria;  -- solo inserci�
 
 </details>
 
-### Enable RLS on every tenant table
+### Habilitar RLS en cada tabla de tenant
 
-Only applies if several services share one PostgreSQL database. Not used by the MVP.
+Solo aplica si varios servicios comparten una misma base de datos PostgreSQL. El MVP no lo usa.
 
 <details><summary>SQL</summary>
 

@@ -1,11 +1,40 @@
-#  docker compose up --build 
+#  docker compose up --build
+#  Variables come from backend/.env (see backend/.env.example).
 
 services:
   nats-server:
     image: nats:latest
+    # JetStream on (-js) with its store on a volume (backend/STEPS.md S1.2, S2.1)
+    command: ["-js", "-sd", "/data", "-m", "8222"]
     ports:
       - "4222:4222"
       - "8222:8222"
+    volumes:
+      - nats-data:/data
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      - POSTGRES_DB=teamworkflow
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in backend/.env}
+      - AUTH_DB_PASSWORD=${AUTH_DB_PASSWORD:?set AUTH_DB_PASSWORD in backend/.env}
+      - ORGANIZATION_DB_PASSWORD=${ORGANIZATION_DB_PASSWORD:?set ORGANIZATION_DB_PASSWORD in backend/.env}
+      - ATTENDANCE_DB_PASSWORD=${ATTENDANCE_DB_PASSWORD:?set ATTENDANCE_DB_PASSWORD in backend/.env}
+      - TASKS_DB_PASSWORD=${TASKS_DB_PASSWORD:?set TASKS_DB_PASSWORD in backend/.env}
+      - NOTIFICATIONS_DB_PASSWORD=${NOTIFICATIONS_DB_PASSWORD:?set NOTIFICATIONS_DB_PASSWORD in backend/.env}
+      - BILLING_DB_PASSWORD=${BILLING_DB_PASSWORD:?set BILLING_DB_PASSWORD in backend/.env}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # One schema + one role per service (backend/STEPS.md S1.1, S2.2)
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d teamworkflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   auth-microservice:
     build:
@@ -18,10 +47,14 @@ services:
     environment:
       - PORT=3001
       - NATS_SERVER=nats://nats-server:4222
+      - DATABASE_URL=postgresql://auth_svc:${AUTH_DB_PASSWORD}@postgres:5432/teamworkflow?schema=auth
       # Bind mounts on Windows do not emit file events; polling makes --watch reload work
       - CHOKIDAR_USEPOLLING=true
     depends_on:
-      - nats-server
+      nats-server:
+        condition: service_started
+      postgres:
+        condition: service_healthy
 
   gateway:
     build:
@@ -38,3 +71,6 @@ services:
     depends_on:
       - nats-server
 
+volumes:
+  nats-data:
+  postgres-data:

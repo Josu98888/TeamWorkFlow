@@ -95,7 +95,7 @@ Consume `t.<tenant>.billing.data_retention_expired` (emitted 90 days after the t
 ## Stack
 
 - NestJS 12 microservice over NATS (`@nestjs/microservices`).
-- PostgreSQL + Prisma 7 with its own `prisma/schema.prisma` (whether it shares a database with other services is decided later). Not installed yet.
+- PostgreSQL + Prisma 7 with its own `prisma/schema.prisma` in the `organization` schema of the shared `teamworkflow` database, accessed with its own `organization_svc` role that cannot read other schemas (see `backend/STEPS.md` S1.1). Not installed yet.
 - `class-validator` + `class-transformer` with a global `ValidationPipe` throwing `RpcException`. Not installed yet.
 - Scheduling for the jobs (for example `@nestjs/schedule`). Not installed yet.
 - Env validation with joi in `src/config/envs.ts`, same pattern as the gateway.

@@ -92,7 +92,7 @@ TeamWorkFlow is a multitenant SaaS for managing and monitoring field staff acros
 | Billing microservice (plans, invoices, payments) | `backend/billing/` | NestJS 12, NATS transport, Prisma 7, Mercado Pago behind `PaymentProvider` (docs only, not created yet) | n/a (NATS only) |
 | Message broker | `backend/docker-compose.yml` (`nats-server`) | NATS | 4222 (client), 8222 (monitoring) |
 | Frontend | `frontend/` | Next.js 16, React 19, Tailwind 4, TypeScript 5 | 3000 by default (see note below) |
-| Database | not set up yet | PostgreSQL + Prisma 7 (own Prisma schema per data-owning microservice; shared or separate database decided later) | — |
+| Database | not set up yet | PostgreSQL + Prisma 7 (one shared database `teamworkflow`, one PostgreSQL schema and one role per data-owning microservice) | — |
 
 The MVP is exactly 7 services: `gateway`, `auth`, `organization`, `attendance`, `tasks`, `notifications` and `billing`. Each service folder has its own `AGENTS.md` (source of truth for that service) and a Spanish `README.md`. Naming is English everywhere in the MVP (folders, NATS patterns `<service>.<resource>.<action>`, events `t.<tenant>.<service>.<event>`, error codes, data model); the Spanish names in the root `README.md` belong to the 16-service target architecture.
 
@@ -102,7 +102,7 @@ The MVP is exactly 7 services: `gateway`, `auth`, `organization`, `attendance`, 
 
 - The frontend talks ONLY to the gateway: HTTP (`/api/...`) and, for the Torre de Control, a Socket.IO WebSocket. It never calls a microservice or NATS directly.
 - The gateway has no database and no business logic: it validates input, forwards to microservices with `ClientProxy` (`NATS_SERVICE`) and maps errors to HTTP.
-- Microservices own their data: each one has its own Prisma schema and migrations. Whether a service shares a PostgreSQL database (with its own schema) or gets its own database is decided per service later. Never read another service's tables; ask the owning service over NATS.
+- Microservices own their data: each one has its own Prisma schema and migrations. All services share one PostgreSQL database (`teamworkflow`); each one has its own PostgreSQL schema (`auth`, `organization`, …) and its own role that cannot read other schemas (`backend/STEPS.md` S1.1). Never read another service's tables; ask the owning service over NATS.
 - Microservices throw `RpcException`; the gateway turns them into HTTP errors with the `{ detail, code }` shape (see `teamworkflow-nest`).
 - Environment variables are validated at startup with joi in `src/config/envs.ts`. Add every new variable there and to `.env.example`.
 
@@ -152,7 +152,9 @@ Follow Conventional Commits: `<type>(<scope>): <description>`
 
 Rules for AI agents:
 
-- NEVER commit, push, or create branches unless the user explicitly asks. The user creates branches and pushes.
+- NEVER create, switch, rename, merge or delete branches. Always work on the current branch; the user creates branches.
+- Commit verified work as you go, following `teamworkflow-commits` (never on `main`/`master`). Open pull requests following `teamworkflow-pr`.
+- `git push` only after confirming with the user once (see `teamworkflow-pr`). NEVER `--force`.
 - NEVER add `Co-Authored-By` lines or any AI attribution to commits or PRs.
 - Never commit `.env` files. Only `.env.example` is tracked.
 

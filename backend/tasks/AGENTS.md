@@ -106,7 +106,7 @@ The actor (`userId`, `tenantId`, `role`, `siteIds`) comes from the gateway, whic
 ## Stack
 
 - NestJS 12 microservice over NATS (`@nestjs/microservices`).
-- PostgreSQL + Prisma 7 with its own `prisma/schema.prisma` (whether it shares a database with other services is decided later). Not installed yet.
+- PostgreSQL + Prisma 7 with its own `prisma/schema.prisma` in the `tasks` schema of the shared `teamworkflow` database, accessed with its own `tasks_svc` role that cannot read other schemas (see `backend/STEPS.md` S1.1). Not installed yet.
 - S3-compatible client for presigned URLs (for example `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`) against MinIO locally. Not installed yet.
 - `class-validator` + `class-transformer` with a global `ValidationPipe` throwing `RpcException`. Not installed yet.
 - Scheduling for the expiration job (for example `@nestjs/schedule`). Not installed yet.

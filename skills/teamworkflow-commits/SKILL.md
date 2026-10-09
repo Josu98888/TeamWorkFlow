@@ -22,7 +22,7 @@ allowed-tools: Read, Glob, Grep, Bash
 
 ## Critical Rules
 
-- NEVER create, switch, rename, merge or delete branches. The user creates branches.
+- NEVER create, switch, rename, merge or delete branches. Always work on the current branch; the user creates branches.
 - NEVER commit on `main` / `master`. If the current branch is one of them, STOP and ask the user to create a branch.
 - Format: `type(scope): description` — scope is the domain (`projects`, `tasks`…) or a fixed area.
 - Small, frequent commits: **max 3 files per commit**. A **large file goes alone**.
@@ -30,10 +30,10 @@ allowed-tools: Read, Glob, Grep, Bash
 - Stage files explicitly. NEVER `git add .`, `git add -A` or `git commit -a`.
 - NEVER commit secrets or generated artifacts (`.env*` except `*.example`, `node_modules/`, `.next/`, `dist/`, `coverage/`, `test-results/`).
 - NEVER add `Co-Authored-By` trailers or any AI attribution (no "Generated with ...", no tool or model names) to commit messages. Conventional Commits only.
-- Only commit when the user asks for it. Never commit or push on your own initiative; the user commits and pushes in this repo.
-- NEVER `git push` unless the user asks. NEVER `--force`, NEVER `--no-verify`.
+- Commit on your own initiative after each completed, verified logical step (checks passed), on the current branch.
+- NEVER `git push` without confirming with the user once (see `teamworkflow-pr`). NEVER `--force`, NEVER `--no-verify`.
 - `--amend` only on the last commit and only if it has NOT been pushed.
-- When the user asks you to commit, commit per completed logical step, not one big batch at the end.
+- Commit per completed logical step, not one big batch at the end.
 
 ---
 

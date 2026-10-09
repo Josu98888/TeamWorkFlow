@@ -112,7 +112,7 @@ Consume `t.<tenant>.billing.data_retention_expired` (emitted 90 days after the t
 ## Stack
 
 - NestJS 12 microservice over NATS (`@nestjs/microservices`).
-- PostgreSQL + Prisma 7 with its own `prisma/schema.prisma` (whether it shares a database with other services is decided later). Not installed yet.
+- PostgreSQL + Prisma 7 with its own `prisma/schema.prisma` in the `notifications` schema of the shared `teamworkflow` database, accessed with its own `notifications_svc` role that cannot read other schemas (see `backend/STEPS.md` S1.1). Not installed yet.
 - FCM through the Firebase Admin SDK (`firebase-admin`). Not installed yet.
 - `class-validator` + `class-transformer` with a global `ValidationPipe` throwing `RpcException`. Not installed yet.
 - Scheduling for the retry job (for example `@nestjs/schedule`). Not installed yet.

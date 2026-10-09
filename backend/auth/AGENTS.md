@@ -156,7 +156,7 @@ Out of scope (do NOT implement here):
 ## Stack
 
 - NestJS 12 microservice over NATS (`@nestjs/microservices`).
-- PostgreSQL + Prisma 7 (own `prisma/schema.prisma`; whether it shares a database with other services is decided later). Not installed yet.
+- PostgreSQL + Prisma 7 (own `prisma/schema.prisma`, in the `auth` schema of the shared `teamworkflow` database, accessed with the `auth_svc` role that cannot read other schemas; see `backend/STEPS.md` S1.1). Not installed yet.
 - Password hashing: Argon2id (`argon2` package). Not installed yet.
 - JWT: `@nestjs/jwt`. Not installed yet.
 - Validation: `class-validator` + `class-transformer` with a global `ValidationPipe` throwing `RpcException`. Not installed yet.
@@ -265,7 +265,7 @@ Every query on users, invitations, user sites and tokens filters by `tenantId` (
 | Variable | Description |
 |----------|-------------|
 | `NATS_SERVER` | Comma-separated NATS URLs |
-| `DATABASE_URL` | PostgreSQL connection string for the auth database |
+| `DATABASE_URL` | PostgreSQL connection string for the `teamworkflow` database, `auth` schema, `auth_svc` role |
 | `JWT_SECRET` | Access token signing secret (at least 32 random bytes) |
 | `ACCESS_TOKEN_TTL` | Default `15m` |
 | `REFRESH_TOKEN_TTL` | Default `7d` |

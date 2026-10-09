@@ -131,7 +131,7 @@ El vencimiento es el último día para pagar. Un job diario (09:00) aplica:
 
 `payment_received` se emite **solo** cuando la factura queda totalmente paga y no queda ninguna otra factura vencida. No reactiva a un tenant `cancelled`: eso solo ocurre al volver a suscribirse. Las suscripciones `cancelled` no pasan por mora ni suspensión.
 
-`auth` reacciona a esos eventos y cambia el estado del tenant (ver [auth](../auth/README.md#mora-y-suspensión-del-tenant)). `billing` no envía emails: pide los avisos a `notifications` con `t.{tenant}.notifications.send`, y los destinatarios se obtienen de `auth` (`auth.user.list-recipients`).
+`auth` reacciona a esos eventos y cambia el estado del tenant (ver [auth](../auth/README.md#mora-suspensión-y-cancelación-del-tenant)). `billing` no envía emails: pide los avisos a `notifications` con `t.{tenant}.notifications.send`, y los destinatarios se obtienen de `auth` (`auth.user.list-recipients`).
 
 ### Retención y borrado de datos
 
@@ -235,7 +235,7 @@ Los pedidos con respuesta usan `billing.<recurso>.<accion>` y no llevan tenant e
 
 ## Modelo de datos
 
-Modelos de Prisma: `Plan`, `Subscription`, `SubscriptionPlanChange`, `Invoice`, `InvoiceLine`, `Payment`, `WebhookNotification` y `ProcessedEvent`. Todos (salvo `Plan`) llevan `tenantId` y toda consulta lo filtra. El servicio tiene su propio `prisma/schema.prisma`; si comparte base con otros servicios se decide más adelante.
+Modelos de Prisma: `Plan`, `Subscription`, `SubscriptionPlanChange`, `Invoice`, `InvoiceLine`, `Payment`, `WebhookNotification` y `ProcessedEvent`. Todos (salvo `Plan`) llevan `tenantId` y toda consulta lo filtra. El servicio tiene su propio `prisma/schema.prisma` y sus tablas viven en el schema `billing` de la base compartida `teamworkflow`, con un usuario de Postgres propio (`billing_svc`) que no puede leer los schemas de otros servicios.
 
 ## Configuración
 
