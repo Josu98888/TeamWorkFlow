@@ -177,7 +177,7 @@ Los pedidos con respuesta usan `tasks.<recurso>.<accion>` y no llevan tenant en 
 
 ## Modelo de datos
 
-Modelos de Prisma: `Form`, `FormVersion`, `TaskTemplate`, `Task`, `TaskAnswer`, `Media`, `TenantState`, `TenantFeatures` y `ProcessedEvent`. Todos llevan `tenantId` y toda consulta lo filtra; hay tests que prueban el aislamiento entre tenants. El servicio tiene su propio `prisma/schema.prisma`; si comparte base con otros servicios se decide más adelante.
+Modelos de Prisma: `Form`, `FormVersion`, `TaskTemplate`, `Task`, `TaskAnswer`, `Media`, `TenantState`, `TenantFeatures` y `ProcessedEvent`. Todos llevan `tenantId` y toda consulta lo filtra; hay tests que prueban el aislamiento entre tenants. El servicio tiene su propio `prisma/schema.prisma` y sus tablas viven en el schema `tasks` de la base compartida `teamworkflow`, con un usuario de Postgres propio (`tasks_svc`) que no puede leer los schemas de otros servicios.
 
 ## Configuración
 
