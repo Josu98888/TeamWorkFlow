@@ -35,7 +35,7 @@
 
 | Qué | Dónde vive |
 |-----|-----------|
-| Login, roles, invitaciones y sedes de supervisores (`user_sites`) | `auth` |
+| Login, roles, invitaciones y sedes de supervisores (`User.siteIds`) | `auth` |
 | Fichadas, jornadas, alertas y Torre de Control | `attendance` |
 | Tareas, formularios y fotos | `tasks` |
 | Envío de notificaciones | `notifications` |
