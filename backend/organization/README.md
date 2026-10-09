@@ -155,7 +155,7 @@ Los pedidos con respuesta usan `organization.<recurso>.<accion>` y no llevan ten
 
 ## Modelo de datos
 
-Modelos de Prisma: `Site`, `Post`, `Employee`, `EmployeeSite`, `ShiftTemplate`, `Shift`, `TenantState` y `ProcessedEvent`. Todos llevan `tenantId` y toda consulta lo filtra; hay tests que prueban el aislamiento entre tenants. Las tablas son plurales en `snake_case` mediante `@@map`. El servicio tiene su propio `prisma/schema.prisma`; si comparte base con otros servicios se decide más adelante.
+Modelos de Prisma: `Site`, `Post`, `Employee`, `EmployeeSite`, `ShiftTemplate`, `Shift`, `TenantState` y `ProcessedEvent`. Todos llevan `tenantId` y toda consulta lo filtra; hay tests que prueban el aislamiento entre tenants. Las tablas son plurales en `snake_case` mediante `@@map`. El servicio tiene su propio `prisma/schema.prisma` y sus tablas viven en el schema `organization` de la base compartida `teamworkflow`, con un usuario de Postgres propio (`organization_svc`) que no puede leer los schemas de otros servicios.
 
 ## Configuración
 

@@ -169,7 +169,7 @@ Los pedidos con respuesta usan `attendance.<recurso>.<accion>` y no llevan tenan
 
 ## Modelo de datos
 
-Modelos de Prisma: `ShiftSnapshot`, `ClockEvent`, `ClockEventCorrection`, `Workday`, `Alert`, `TenantState`, `TenantFeatures` y `ProcessedEvent`. Todos llevan `tenantId` y toda consulta lo filtra; hay tests que prueban el aislamiento entre tenants. El servicio tiene su propio `prisma/schema.prisma`; si comparte base con otros servicios se decide más adelante.
+Modelos de Prisma: `ShiftSnapshot`, `ClockEvent`, `ClockEventCorrection`, `Workday`, `Alert`, `TenantState`, `TenantFeatures` y `ProcessedEvent`. Todos llevan `tenantId` y toda consulta lo filtra; hay tests que prueban el aislamiento entre tenants. El servicio tiene su propio `prisma/schema.prisma` y sus tablas viven en el schema `attendance` de la base compartida `teamworkflow`, con un usuario de Postgres propio (`attendance_svc`) que no puede leer los schemas de otros servicios.
 
 ## Configuración
 
