@@ -76,7 +76,7 @@ El MVP se construye con **7 servicios** (los nombres de carpetas, los patrones d
 
 Decisiones comunes del MVP:
 
-- NestJS 12 sobre NATS, Prisma 7 con PostgreSQL (un schema por servicio; si los servicios comparten base de datos se decide más adelante), `class-validator` y Jest.
+- NestJS 12 sobre NATS, Prisma 7 con PostgreSQL (una sola base `teamworkflow`, con un schema y un usuario de Postgres por servicio), `class-validator` y Jest.
 - Los patrones de solicitud-respuesta siguen `<service>.<resource>.<action>` (por ejemplo `billing.invoice.list`); el actor siempre proviene de `auth.token.verify`, nunca de los headers. Los eventos siguen `t.<tenant>.<service>.<event>` en `snake_case` (por ejemplo `t.<tenant>.organization.shift_started`), llevan `eventId` y `occurredAt`, se emiten después del commit y se consumen de forma idempotente.
 - Sin buckets KV para datos de dominio, sin outbox obligatorio y sin Row Level Security obligatorio; toda consulta filtra por `tenantId`.
 - Sin correos ni SMS: los avisos salen a través de `notifications` (push e in-app).
