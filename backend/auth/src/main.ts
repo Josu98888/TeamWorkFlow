@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { AppModule } from './app.module';
+import { createValidationPipe } from './common/pipes/validation.pipe';
 import { envs } from './config';
 
 async function bootstrap() {
@@ -16,6 +17,8 @@ async function bootstrap() {
       },
     },
   );
+
+  app.useGlobalPipes(createValidationPipe());
 
   await app.listen();
   logger.log('Auth microservice listening on NATS');
