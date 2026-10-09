@@ -2,7 +2,7 @@
 
 Follow /STEPS.rules.md. Order: /STEPS.index.md. Backend conventions: /backend/STEPS.template.md.
 
-**Status:** last verified: — · next: S0.1 · in progress: — · blocked: S1.1 (TODO(auth) deps), S1.6 (TODO(auth) contract rename)
+**Status:** last verified: 2026-10-09 (S1.1) · next: S1.2 · in progress: — · blocked: S1.6 (TODO(auth) contract rename)
 
 Source of truth: `backend/auth/AGENTS.md`. Placeholders (`<lint>`, `<test>`, `<EXCL>`…) are defined in the backend template, run from `backend/auth/`.
 
@@ -12,16 +12,16 @@ Source of truth: `backend/auth/AGENTS.md`. Placeholders (`<lint>`, `<test>`, `<E
 
 Commits: (none, read-only phase)
 
-- [ ] **S0.1** Confirm in `/STEPS.index.md` that `auth` is next and has no pending dependency.
+- [x] **S0.1** Confirm in `/STEPS.index.md` that `auth` is next and has no pending dependency.
   Check: `rg -n "auth" STEPS.index.md` (from repo root) shows `auth` as the current domain with no unmet dependency.
-- [ ] **S0.2** Inventory the scaffold to replace: `src/main.ts` (HTTP), `src/auth/auth.controller.ts` (CRUD patterns), `src/auth/entities/auth.entity.ts`, `src/auth/dto/*-auth.dto.ts`, both scaffold specs.
+- [x] **S0.2** Inventory the scaffold to replace: `src/main.ts` (HTTP), `src/auth/auth.controller.ts` (CRUD patterns), `src/auth/entities/auth.entity.ts`, `src/auth/dto/*-auth.dto.ts`, both scaffold specs.
   Check: `rg -n "createAuth|findAllAuth|NestFactory.create\(" src` lists exactly these files (baseline for S1.6 / S1.3).
 
 ## Phase 1 — Foundation (transport, config, errors, validation)
 
 Commits: —
 
-- [!] **S1.1** Install dependencies. TODO(auth) Approve this set (rules §6): `@nestjs/jwt`, `argon2`, `class-validator`, `class-transformer`, `joi`, `dotenv`, `@prisma/client`, `@prisma/adapter-pg`, `pg`, `@nats-io/jetstream`, dev `prisma`, `@types/pg`.
+- [x] **S1.1** Install dependencies (approved 2026-10-09, see Decisions): `@nestjs/jwt`, `argon2`, `class-validator`, `class-transformer`, `joi`, `dotenv`, `@prisma/client`, `@prisma/adapter-pg`, `pg`, `@nats-io/jetstream`, dev `prisma`, `@types/pg`.
   Check: `pnpm ls @nestjs/jwt argon2 class-validator class-transformer joi @prisma/client prisma @nats-io/jetstream` lists every package with a version.
 - [ ] **S1.2** `src/config/envs.ts` + `src/config/index.ts` with joi, same pattern as the gateway. Variables: AGENTS § Environment Variables (`NATS_SERVER`, `DATABASE_URL`, `JWT_SECRET` min 32 chars, `ACCESS_TOKEN_TTL` default `15m`, `REFRESH_TOKEN_TTL` default `7d`). Create `backend/auth/.env.example` with placeholders only.
   Check: `<test> envs` passes with cases: missing `JWT_SECRET` throws; `JWT_SECRET` of 31 chars throws; TTL defaults applied. `rg -n "JWT_SECRET=.{32,}" .env.example` is empty.
@@ -184,7 +184,7 @@ Commits: —
 
 | Step | Waits for |
 |------|-----------|
-| S1.1 | TODO(auth) dependency approval |
+| S1.1 | done (approved 2026-10-09) |
 | S1.2, S1.4–S1.5, S1.8, Phases 2–8, S10 | S1.1 (need the installed deps) |
 | S1.6 | TODO(auth) contract rename approval |
 | S9.1 | S1.6, gateway owner |
@@ -195,7 +195,7 @@ Commits: —
 
 ## Decisions
 
-(none yet)
+- 2026-10-09 S1.1: dependency set approved as listed. `prisma` CLI pinned to 7.10.0 to match `@prisma/client` (pnpm resolved 8.0.0-rc.22). `pnpm-workspace.yaml` allows build scripts for `prisma` and `@prisma/engines`; `argon2` runs from its bundled prebuild.
 
 ## Defaults to confirm
 
