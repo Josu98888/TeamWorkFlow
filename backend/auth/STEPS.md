@@ -46,9 +46,9 @@ Commits: —
 
 - [ ] **S2.1** Database for local dev and tests. Uses the `auth` schema of the shared `teamworkflow` database and the `auth_svc` role (see backend S1.1, S2.2). Backend S2.2 is done. TEST database: `backend/docker-compose.test.yml` (backend S1.4, S2.5).
   Check: `docker compose -f ../docker-compose.yml config --services` lists the auth database service; `pnpm exec prisma migrate status` connects.
-- [ ] **S2.2** `prisma/schema.prisma` + `prisma.config.ts` per skill § Database Access, models per AGENTS § Data Model: `Tenant`, `User`, `UserSite` (`user_sites`, PK `userId`+`siteId`), `RefreshToken`, `Invitation`, `PasswordResetToken`, `ProcessedEvent`. `@@map`/`@map` to snake_case. `src/generated/prisma/` in `.gitignore`.
+- [ ] **S2.2** `prisma/schema.prisma` + `prisma.config.ts` per skill § Database Access, models per AGENTS § Data Model: `Tenant`, `User` (with `siteIds String[]` mapped to `site_ids`, default `[]`), `RefreshToken`, `Invitation`, `PasswordResetToken`, `ProcessedEvent`. `@@map`/`@map` to snake_case. `src/generated/prisma/` in `.gitignore`.
   Check: `pnpm exec prisma validate` passes; `rg -n "src/generated" .gitignore` has one hit.
-- [ ] **S2.3** Indexes for every lookup path (`teamworkflow-postgres`): `users.email` unique, token hashes unique, `users(tenant_id, role)`, `invitations(tenant_id, email)` partial on pending, `refresh_tokens(user_id)`, `user_sites(tenant_id, site_id)`.
+- [ ] **S2.3** Indexes for every lookup path (`teamworkflow-postgres`): `users.email` unique, token hashes unique, `users(tenant_id, role)`, `invitations(tenant_id, email)` partial on pending, `refresh_tokens(user_id)`, GIN index on `users.site_ids` (`@@index([siteIds], type: Gin)`).
   Check: the migration from S2.5 contains each `CREATE (UNIQUE) INDEX` listed here (`rg -n "CREATE (UNIQUE )?INDEX" prisma/migrations` shows all six).
 - [ ] **S2.4** Check constraint: `role = 'PLATFORM_ADMIN'` ⇔ `tenant_id IS NULL` (AGENTS § Data Model). Added as raw SQL in the migration (`--create-only`, then edit).
   Check: `<e2e> db-constraints` (or S10 suite) inserts a `SUPERVISOR` with null tenant and gets a constraint violation; a `PLATFORM_ADMIN` with a tenant also fails.
@@ -97,8 +97,8 @@ Commits: —
 
 - [ ] **S5.1** Shared authorization guard `src/users/user-policy.ts`: same tenant, role table, no self-action, never on `owner` for deactivate/demote, never on or by `platform_admin`.
   Check: `<test> user-policy` passes: table-driven cases for every row of the AGENTS § Roles table plus tenant A actor → tenant B target = `forbidden`.
-- [ ] **S5.2** `auth.user.change-role` (uses S5.1); removing supervisor role deletes its `user_sites`; emits `user_role_changed`.
-  Check: `<test> change-role` passes; supervisor → employee leaves zero `user_sites` rows for that user.
+- [ ] **S5.2** `auth.user.change-role` (uses S5.1); removing supervisor role sets its `siteIds` to `[]`; emits `user_role_changed`.
+  Check: `<test> change-role` passes; supervisor → employee leaves an empty `siteIds` for that user.
 - [ ] **S5.3** `auth.user.assign-sites`: replaces the full set for a `supervisor` only, same tenant; non-supervisor target → `forbidden`.
   Check: `<test> assign-sites` passes; second call with a different set leaves exactly the new set; verify (S3.7) returns it.
 - [ ] **S5.4** `auth.user.deactivate`: `isActive=false`, revoke all refresh tokens, emit `user_deactivated`.
@@ -129,7 +129,7 @@ All handlers: tenant taken from the subject AND checked against the payload; ded
   Check: `<test> tenant-status.cancel` passes: cancel accepted from any state except `deleted`; reactivation only from `cancelled`; supervisor/employee blocked, owner/admin pass verify with `tenantStatus: 'cancelled'`.
 - [ ] **S7.3** `subscription_created` and `plan_changed` store `plan` and `features`, ignoring stale events (`occurredAt` / `effectiveAt` vs `planUpdatedAt`).
   Check: `<test> tenant-plan` passes: an older event after a newer one leaves the newer plan; verify (S3.7) returns the stored `plan` and `features`.
-- [ ] **S7.4** `data_retention_expired` purge (AGENTS § Tenant data purge): only when `cancelled`; deletes users, tokens, invitations, reset tokens, `user_sites`, processed events of that tenant; keeps tombstone (`id`, `name`, `DELETED`); idempotent.
+- [ ] **S7.4** `data_retention_expired` purge (AGENTS § Tenant data purge): only when `cancelled`; deletes users, tokens, invitations, reset tokens, processed events of that tenant; keeps tombstone (`id`, `name`, `DELETED`); idempotent.
   Check: `<test> tenant-purge` passes: other tenants and `platform_admin` untouched; event ignored when not `cancelled`; the purged email can register again.
 - [ ] **S7.5** Subject/payload tenant mismatch is rejected (not applied, acked as poison and logged without payload).
   Check: `<test> tenant-mismatch` passes for one billing event and `employee_created`.
@@ -171,7 +171,7 @@ Commits: —
   Check: `<lint>`, `<test>`, `<build>` and `<e2e>` pass.
 - [ ] **S11.2** Every AGENTS § Tests "Always covered" item has a test that names its step (`Covers: Sx.y`).
   Check: `rg -c "Covers: S" src test` totals at least one hit per step in Phases 3–8.
-- [ ] **S11.3** Tenant filter sweep: no Prisma query on `user`, `invitation`, `userSite`, `refreshToken`, `passwordResetToken` without `tenantId` except the login/refresh/verify lookups by email or token hash.
+- [ ] **S11.3** Tenant filter sweep: no Prisma query on `user`, `invitation`, `refreshToken`, `passwordResetToken` without `tenantId` except the login/refresh/verify lookups by email or token hash.
   Check: `<test> tenant-isolation` passes (one case per repository method, tenant A vs B).
 - [ ] **S11.4** README `Estado actual` and AGENTS `Current Status` reflect what was built.
   Check: `rg -n "scaffold" README.md AGENTS.md` is empty.

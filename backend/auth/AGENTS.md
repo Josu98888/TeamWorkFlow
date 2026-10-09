@@ -14,7 +14,7 @@ Responsibilities:
 - Token verification for the gateway (`auth.token.verify`).
 - Invitations: `owner`/`admin` invite people to their tenant through a single-use link. Employee invitations are also created automatically from the `organization` service (see Invitations).
 - Roles inside a tenant: `owner`, `admin`, `supervisor`, `employee` (fixed, not configurable), plus the platform role `platform_admin`, which belongs to no tenant.
-- Site scope of supervisors (`user_sites`): which sites (owned by `organization`) each supervisor can see.
+- Site scope of supervisors (`User.siteIds`): which sites (owned by `organization`) each supervisor can see.
 - Tenant access status (`active` | `past_due` | `suspended` | `cancelled` | `deleted`), driven by `billing` events (see Tenant status).
 - The tenant's current plan and features (`plan`, `features`), kept from `billing` events and returned by `auth.token.verify` so the gateway can gate routes.
 - Admin-generated password reset links.
@@ -68,13 +68,13 @@ Out of scope (do NOT implement here):
 - Nobody can act on themselves through these admin actions (no self-deactivation, no self-role change).
 - Every check compares the actor's `tenantId` with the target's. A user can NEVER read or modify a user of another tenant, whatever their role.
 
-### Supervisor site scope (`user_sites`)
+### Supervisor site scope (`User.siteIds`)
 
-- `user_sites` stores `tenantId`, `userId`, `siteId` (reference to a site of `organization`, no foreign key across services). Primary key: `userId` + `siteId`.
-- Only users with role `supervisor` can have rows. `auth.user.assign-sites` replaces the full set of sites of one supervisor. It is allowed for `owner` and `admin`, within the same tenant.
+- `User.siteIds` (`String[]`, column `site_ids`, default `[]`) stores the site ids of a supervisor (references to sites of `organization`, no foreign key across services). There is no separate table.
+- Only users with role `supervisor` can have a non-empty `siteIds`; every other role has `[]`. `auth.user.assign-sites` replaces the full array of one supervisor (site ids are deduplicated in the application before saving). It is allowed for `owner` and `admin`, within the same tenant.
 - `auth` does not validate that a `siteId` exists in `organization` (that data is not ours). The caller (gateway/frontend) is responsible for sending real site ids of the tenant.
-- When a supervisor changes role, its `user_sites` rows are removed.
-- `owner` and `admin` see every site of the tenant: they have no rows and `siteIds` is not returned for them.
+- When a supervisor changes role, its `siteIds` is set to `[]`.
+- `owner` and `admin` see every site of the tenant: their `siteIds` is `[]` and it is not returned for them.
 - Site ids are NOT put in the JWT: they change without re-login and could make the token large. They come from `auth.token.verify`.
 
 ### Invitations
@@ -124,7 +124,7 @@ Out of scope (do NOT implement here):
 
 ### Tenant data purge
 
-- On `t.<tenant>.billing.data_retention_expired`, if the tenant is still `cancelled`, `auth` permanently deletes the tenant's users, refresh tokens, invitations, password reset tokens, `user_sites` and processed events, and sets the tenant status `deleted`. This is the only hard deletion of users (see Deactivation): the retention period ended.
+- On `t.<tenant>.billing.data_retention_expired`, if the tenant is still `cancelled`, `auth` permanently deletes the tenant's users, refresh tokens, invitations, password reset tokens and processed events, and sets the tenant status `deleted`. This is the only hard deletion of users (see Deactivation): the retention period ended.
 - It keeps a minimal tombstone: the `Tenant` row with only `id`, `name` and status `deleted` (plan, features and dates are cleared), so the `tenantId` that `billing` still references in its invoices and payments stays consistent. Nothing else is kept.
 - Idempotent: a second delivery finds the tenant already `deleted` and is a no-op. An event for a tenant that is not `cancelled` (for example it resubscribed meanwhile) is ignored.
 - The email of a deleted user becomes free: it can register again as a new tenant.
@@ -251,14 +251,13 @@ Throw `RpcException` with `{ status, code, message }` (see `teamworkflow-nest`).
 ## Data Model (Prisma, to create)
 
 - `Tenant`: `id`, `name`, `status` (`ACTIVE` | `PAST_DUE` | `SUSPENDED` | `CANCELLED` | `DELETED`), `pastDueSince`, `suspendedAt`, `cancelledAt`, `plan` (nullable: `BASIC` | `PRO`), `features` (json, nullable), `planUpdatedAt` (to ignore stale events), `createdAt`.
-- `User`: `id`, `tenantId` (nullable ONLY for `PLATFORM_ADMIN`; a check constraint enforces that every other role has a tenant and `PLATFORM_ADMIN` has none), `email` (unique), `passwordHash`, `role` (`OWNER` | `ADMIN` | `SUPERVISOR` | `EMPLOYEE` | `PLATFORM_ADMIN`), `isActive`, `failedLoginAttempts`, `lockedUntil`, `createdAt`, `updatedAt`.
-- `UserSite`: `tenantId`, `userId`, `siteId` (ref. to a site of `organization`), primary key (`userId`, `siteId`). Table `user_sites`.
+- `User`: `id`, `tenantId` (nullable ONLY for `PLATFORM_ADMIN`; a check constraint enforces that every other role has a tenant and `PLATFORM_ADMIN` has none), `email` (unique), `passwordHash`, `role` (`OWNER` | `ADMIN` | `SUPERVISOR` | `EMPLOYEE` | `PLATFORM_ADMIN`), `isActive`, `failedLoginAttempts`, `lockedUntil`, `siteIds` (`String[]`, column `site_ids`, default `[]`; only `SUPERVISOR` may have a non-empty value; ref. to sites of `organization`), `createdAt`, `updatedAt`.
 - `RefreshToken`: `id`, `userId`, `tokenHash` (unique), `expiresAt`, `revokedAt`, `createdAt`.
 - `Invitation`: `id`, `tenantId`, `email`, `role` (`ADMIN` | `SUPERVISOR` | `EMPLOYEE`), `tokenHash` (unique), `invitedById` (nullable: system), `expiresAt`, `usedAt`, `revokedAt`, `createdAt`.
 - `PasswordResetToken`: `id`, `userId`, `tokenHash` (unique), `createdById`, `expiresAt`, `usedAt`, `createdAt`.
 - A processed-events table (`eventId`) to deduplicate consumed events, if the idempotency of a handler cannot rely on a natural unique key.
 
-Every query on users, invitations, user sites and tokens filters by `tenantId` (or by a `userId` already checked against the actor's tenant). The only queries without `tenantId` are the login/refresh/verify lookups by email or token hash, which must still never return a user across tenants to a tenant actor. Add indexes for every lookup path (`teamworkflow-postgres`).
+Every query on users, invitations and tokens filters by `tenantId` (or by a `userId` already checked against the actor's tenant). The only queries without `tenantId` are the login/refresh/verify lookups by email or token hash, which must still never return a user across tenants to a tenant actor. Add indexes for every lookup path (`teamworkflow-postgres`), including a GIN index on `users.site_ids` (`@@index([siteIds], type: Gin)`) for `auth.user.list-recipients` by `siteId` (query `siteIds has <siteId>` together with `tenantId`; the tenant filter uses the existing users tenant index). `auth.token.verify` reads `siteIds` from the user row (no join).
 
 ## Environment Variables
 
@@ -286,7 +285,7 @@ Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Ne
 ## Tests
 
 - Unit tests for every use case with Prisma and `ClientProxy` mocked (`pnpm test`).
-- Always covered: tenant isolation (admin of tenant A acting on a user of tenant B), role table (including admin vs admin/owner and supervisor/employee being unable to manage users), lockout after 5 failures, generic login errors, refresh rotation (old token rejected), deactivated user rejected by login/refresh/verify, expired/used invitation and reset tokens, owner cannot be deactivated or demoted, `siteIds` returned only for supervisors and replaced by `auth.user.assign-sites`, suspended tenant blocks supervisor/employee (login after correct password, refresh, verify) while owner/admin can log in and get `tenantStatus: "suspended"`, reactivation restores access, a cancelled tenant behaving like a suspended one (supervisor/employee blocked and their refresh tokens revoked, owner/admin allowed with `tenantStatus: "cancelled"`), `payment_received` being a no-op while cancelled, `subscription_reactivated` restoring access, the tenant data purge (`data_retention_expired` deletes users, tokens, invitations and `user_sites` of that tenant only, keeps the tombstone with status `deleted`, is ignored when the tenant is not `cancelled`, is idempotent, and leaves other tenants and `platform_admin` untouched), and idempotent handling of `employee_created`, `payment_overdue`, `subscription_expired`, `subscription_cancelled` and `payment_received` (duplicates produce no second invitation or event). Also covered: `platform_admin` can log in and pass `verify` with null `tenantId`, `tenantStatus`, `plan` and `features`, is never blocked by a tenant status, cannot be created by registration or invitation, cannot be acted on by the user-management actions and cannot use tenant actions; the database constraint rejecting a non-platform user without tenant; `subscription_created` and `plan_changed` storing `plan` and `features` idempotently and ignoring stale events; `verify` returning `plan` and `features`; and `auth.user.list-recipients` returning only active users of the requested roles (and supervisors of the site).
+- Always covered: tenant isolation (admin of tenant A acting on a user of tenant B), role table (including admin vs admin/owner and supervisor/employee being unable to manage users), lockout after 5 failures, generic login errors, refresh rotation (old token rejected), deactivated user rejected by login/refresh/verify, expired/used invitation and reset tokens, owner cannot be deactivated or demoted, `siteIds` returned only for supervisors and replaced by `auth.user.assign-sites`, suspended tenant blocks supervisor/employee (login after correct password, refresh, verify) while owner/admin can log in and get `tenantStatus: "suspended"`, reactivation restores access, a cancelled tenant behaving like a suspended one (supervisor/employee blocked and their refresh tokens revoked, owner/admin allowed with `tenantStatus: "cancelled"`), `payment_received` being a no-op while cancelled, `subscription_reactivated` restoring access, the tenant data purge (`data_retention_expired` deletes users, tokens and invitations of that tenant only, keeps the tombstone with status `deleted`, is ignored when the tenant is not `cancelled`, is idempotent, and leaves other tenants and `platform_admin` untouched), and idempotent handling of `employee_created`, `payment_overdue`, `subscription_expired`, `subscription_cancelled` and `payment_received` (duplicates produce no second invitation or event). Also covered: `platform_admin` can log in and pass `verify` with null `tenantId`, `tenantStatus`, `plan` and `features`, is never blocked by a tenant status, cannot be created by registration or invitation, cannot be acted on by the user-management actions and cannot use tenant actions; the database constraint rejecting a non-platform user without tenant; `subscription_created` and `plan_changed` storing `plan` and `features` idempotently and ignoring stale events; `verify` returning `plan` and `features`; and `auth.user.list-recipients` returning only active users of the requested roles (and supervisors of the site).
 - E2E tests (to create in `test/`) once the microservice transport and the database are set up.
 
 ## Before Finishing a Task

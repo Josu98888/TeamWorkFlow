@@ -84,7 +84,7 @@ Reglas que valen siempre:
 
 ### Sedes de los supervisores
 
-Cada supervisor tiene asignadas las sedes que puede ver (tabla `user_sites`). `owner` y `admin` ven todas las sedes del tenant. Las sedes **no** van dentro del JWT: las devuelve `auth.token.verify`, así un cambio de asignación se aplica sin volver a iniciar sesión.
+Cada supervisor tiene asignadas las sedes que puede ver (columna `users.site_ids`). `owner` y `admin` ven todas las sedes del tenant. Las sedes **no** van dentro del JWT: las devuelve `auth.token.verify`, así un cambio de asignación se aplica sin volver a iniciar sesión.
 
 ## Flujos
 
@@ -247,7 +247,7 @@ Los pedidos con respuesta usan `auth.<recurso>.<accion>` y no llevan tenant en e
 
 ## Modelo de datos
 
-Tablas: `tenants` (con `plan`, `features` y el estado, incluidos `cancelled` y `deleted`), `users`, `user_sites`, `refresh_tokens`, `invitations`, `password_reset_tokens`. `users.tenant_id` es nulo **solo** para el `platform_admin`; una restricción de la base lo garantiza. El diagrama y el SQL están en [docs/database.md](../../docs/database.md#auth). El servicio tiene su propio `prisma/schema.prisma` y sus tablas viven en el schema `auth` de la base compartida `teamworkflow`, con un usuario de Postgres propio (`auth_svc`) que no puede leer los schemas de otros servicios.
+Tablas: `tenants` (con `plan`, `features` y el estado, incluidos `cancelled` y `deleted`), `users` (con `site_ids`, solo para supervisores), `refresh_tokens`, `invitations`, `password_reset_tokens`. `users.tenant_id` es nulo **solo** para el `platform_admin`; una restricción de la base lo garantiza. El diagrama y el SQL están en [docs/database.md](../../docs/database.md#auth). El servicio tiene su propio `prisma/schema.prisma` y sus tablas viven en el schema `auth` de la base compartida `teamworkflow`, con un usuario de Postgres propio (`auth_svc`) que no puede leer los schemas de otros servicios.
 
 ## Configuración
 
