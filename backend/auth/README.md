@@ -34,7 +34,7 @@
 - Invitaciones de admins, supervisores y empleados.
 - Cambios de rol, asignación de sedes a supervisores y desactivación de usuarios.
 - Links de reseteo de contraseña generados por un admin.
-- Estado del tenant (`active`, `past_due`, `suspended`, `cancelled`, `deleted`) a partir de los eventos de `billing` (ver [Mora y suspensión](#mora-y-suspensión-del-tenant)).
+- Estado del tenant (`active`, `past_due`, `suspended`, `cancelled`, `deleted`) a partir de los eventos de `billing` (ver [Mora y suspensión](#mora-suspensión-y-cancelación-del-tenant)).
 - Borrado de los usuarios, tokens e invitaciones de un tenant cancelado al recibir `billing.data_retention_expired`, conservando un registro mínimo del tenant.
 - Plan y funcionalidades del tenant, actualizados con `billing.subscription_created` y `billing.plan_changed` (ver [Plan y funcionalidades](#plan-y-funcionalidades)).
 - El usuario `platform_admin` (ver [Roles y permisos](#roles-y-permisos)).
@@ -247,7 +247,7 @@ Los pedidos con respuesta usan `auth.<recurso>.<accion>` y no llevan tenant en e
 
 ## Modelo de datos
 
-Tablas: `tenants` (con `plan`, `features` y el estado, incluidos `cancelled` y `deleted`), `users`, `user_sites`, `refresh_tokens`, `invitations`, `password_reset_tokens`. `users.tenant_id` es nulo **solo** para el `platform_admin`; una restricción de la base lo garantiza. El diagrama y el SQL están en [docs/database.md](../../docs/database.md#auth). El servicio tiene su propio `prisma/schema.prisma`; si comparte base con otros servicios se decide más adelante.
+Tablas: `tenants` (con `plan`, `features` y el estado, incluidos `cancelled` y `deleted`), `users`, `user_sites`, `refresh_tokens`, `invitations`, `password_reset_tokens`. `users.tenant_id` es nulo **solo** para el `platform_admin`; una restricción de la base lo garantiza. El diagrama y el SQL están en [docs/database.md](../../docs/database.md#auth). El servicio tiene su propio `prisma/schema.prisma` y sus tablas viven en el schema `auth` de la base compartida `teamworkflow`, con un usuario de Postgres propio (`auth_svc`) que no puede leer los schemas de otros servicios.
 
 ## Configuración
 
