@@ -1,8 +1,17 @@
 import { Controller } from '@nestjs/common';
+import { MessagePattern, Payload } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
+import { AUTH_PATTERNS } from './auth.patterns';
+import { RegisterDto } from './dto/register.dto';
+import type { TokenPair } from './token.service';
 
-// Session handlers (`AUTH_PATTERNS`) are added in STEPS Phase 3.
+// Transport only: each handler forwards to one service method.
 @Controller()
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @MessagePattern(AUTH_PATTERNS.register)
+  register(@Payload() dto: RegisterDto): Promise<TokenPair> {
+    return this.authService.register(dto);
+  }
 }
