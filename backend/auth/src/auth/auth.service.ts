@@ -1,17 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { hashPassword, verifyPassword } from '../common/crypto';
+import { hashPassword, hashToken, verifyPassword } from '../common/crypto';
 import { normalizeEmail } from '../common/email';
 import { toWireRole } from '../common/wire';
 import {
   EmailTakenException,
   InvalidCredentialsException,
+  InvalidTokenException,
   TenantCancelledException,
   TenantSuspendedException,
 } from '../common/exceptions/app.exceptions';
 import { AUTH_EVENTS } from '../events/auth.events';
 import { JetStreamService } from '../events/jetstream.service';
+import type { Role, TenantStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { TokenPair, TokenService } from './token.service';
 
@@ -20,6 +23,17 @@ const UNIQUE_VIOLATION = 'P2002';
 // AGENTS � Brute-force protection.
 const MAX_FAILED_LOGINS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000;
+
+// owner, admin and platform_admin are never blocked by the tenant status;
+// supervisor and employee are (AGENTS � Tenant status).
+function assertTenantAllowsAccess(
+  role: Role,
+  status: TenantStatus | undefined,
+): void {
+  if (role !== 'SUPERVISOR' && role !== 'EMPLOYEE') return;
+  if (status === 'SUSPENDED') throw new TenantSuspendedException();
+  if (status === 'CANCELLED') throw new TenantCancelledException();
+}
 
 // Verified when there is no real hash to check (unknown email, locked
 // account), so those paths cost the same Argon2 work as a real attempt.
@@ -37,7 +51,7 @@ function isUniqueViolation(error: unknown): boolean {
   );
 }
 
-// Session use cases (refresh, logout, verify) are added in STEPS Phase 3.
+// Session use cases (logout, verify) are added in STEPS Phase 3.
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -148,20 +162,64 @@ export class AuthService {
       });
     }
 
-    // owner, admin and platform_admin are never blocked by the tenant status.
-    if (user.role === 'SUPERVISOR' || user.role === 'EMPLOYEE') {
-      if (user.tenant?.status === 'SUSPENDED') {
-        throw new TenantSuspendedException();
-      }
-      if (user.tenant?.status === 'CANCELLED') {
-        throw new TenantCancelledException();
-      }
-    }
+    assertTenantAllowsAccess(user.role, user.tenant?.status);
 
     return this.tokens.issueTokenPair({
       id: user.id,
       tenantId: user.tenantId,
       role: user.role,
+    });
+  }
+
+  // Rotation (AGENTS � Sessions and tokens): the used token is revoked and a
+  // new pair is issued in one transaction. A token rejected because its tenant
+  // is blocked is not touched: the status change already revoked those tokens.
+  async refresh(dto: RefreshTokenDto): Promise<TokenPair> {
+    const stored = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash: hashToken(dto.refreshToken) },
+      select: {
+        id: true,
+        revokedAt: true,
+        expiresAt: true,
+        user: {
+          select: {
+            id: true,
+            tenantId: true,
+            role: true,
+            isActive: true,
+            tenant: { select: { status: true } },
+          },
+        },
+      },
+    });
+
+    const now = new Date();
+    if (
+      !stored ||
+      stored.revokedAt ||
+      stored.expiresAt.getTime() <= now.getTime() ||
+      !stored.user.isActive ||
+      stored.user.tenant?.status === 'DELETED'
+    ) {
+      throw new InvalidTokenException();
+    }
+    const { user } = stored;
+    assertTenantAllowsAccess(user.role, user.tenant?.status);
+
+    return this.prisma.$transaction(async (tx) => {
+      // Conditional update: of two concurrent refreshes with the same token,
+      // only one flips `revokedAt` from null; the other sees count 0.
+      const { count } = await tx.refreshToken.updateMany({
+        where: { id: stored.id, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      if (count !== 1) {
+        throw new InvalidTokenException();
+      }
+      return this.tokens.issueTokenPair(
+        { id: user.id, tenantId: user.tenantId, role: user.role },
+        tx,
+      );
     });
   }
 
