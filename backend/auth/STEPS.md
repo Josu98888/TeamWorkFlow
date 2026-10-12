@@ -2,7 +2,7 @@
 
 Follow /STEPS.rules.md. Order: /STEPS.index.md. Backend conventions: /backend/STEPS.template.md.
 
-**Status:** last verified: 2026-10-12 (S2.1, S2.5) · next: S3.1 · in progress: S2.4 (automated check waits for S10.1) · blocked: S9.1, S9.2
+**Status:** last verified: 2026-10-12 (S3.1) · next: S3.2 · in progress: S2.4 (automated check waits for S10.1) · blocked: S9.1, S9.2
 
 Source of truth: `backend/auth/AGENTS.md`. Placeholders (`<lint>`, `<test>`, `<EXCL>`…) are defined in the backend template, run from `backend/auth/`.
 
@@ -63,9 +63,9 @@ Commits: 6e9866d, dea417a, fe1f073, d5cb1f9, 85f4bdc, df4a209, b235632 (partial:
 
 ## Phase 3 — Sessions (register, login, tokens)
 
-Commits: —
+Commits: d8f22dd
 
-- [ ] **S3.1** Crypto helpers `src/common/crypto/`: Argon2id hash/verify, random opaque token (32 bytes, base64url), SHA-256 hash, constant-time compare. DEFAULT(auth): `argon2` library defaults for argon2id.
+- [x] **S3.1** Crypto helpers `src/common/crypto/`: Argon2id hash/verify, random opaque token (32 bytes, base64url), SHA-256 hash, constant-time compare. DEFAULT(auth): `argon2` library defaults for argon2id.
   Check: `<test> crypto` passes: hash starts with `$argon2id$`; same token hashes equal; `timingSafeEqual` used (`rg -n "timingSafeEqual" src/common/crypto` has a hit).
 - [ ] **S3.2** Token service: access JWT (claims exactly `sub`, `tenantId`, `role`, `jti`, `iat`, `exp`; TTL from envs) and refresh token (opaque, stored only as hash, TTL from envs). Token pair `{ accessToken, refreshToken, expiresIn }`.
   Check: `<test> token.service` passes: decoded JWT has exactly those claim keys (no `email`, `name`, `siteIds`, `plan`); DB row stores the hash, never the raw token.
@@ -204,6 +204,7 @@ Commits: —
 - 2026-10-11 S2.1: the dev `postgres` volume was initialised earlier ("Skipping initialization"), and the `auth_svc` password stored in it no longer matches `AUTH_DB_PASSWORD` in `backend/.env`: a TCP login from the host fails with `password authentication failed`. Nothing was changed there (altering a role or recreating the volume needs the user). Fix, user's choice: `ALTER ROLE auth_svc PASSWORD '<value from backend/.env>'` as `postgres` in the dev container, or recreate the dev volume (`docker compose down -v`, loses dev data). The TEST database is unaffected (fresh `tmpfs`, password `test`).
 - 2026-10-11 S2.1: `backend/postgres/init/01-schemas-and-roles.sh` was checked out with CRLF (`core.autocrlf=true`), so the container failed with `/bin/sh^M: bad interpreter` and the TEST database had no `teamworkflow` roles. Fixed with `backend/postgres/.gitattributes` (`*.sh text eol=lf`) and the same for `backend/auth/prisma/migrations` (Prisma checksums migration files).
 - 2026-10-12 S2.1: user chose to recreate the dev volume. Only `backend_postgres-data` was removed (`docker compose rm -sf postgres` + `docker volume rm`), not `down -v`, so `backend_nats-data` was kept; the init script recreated the roles. Two gotchas: (1) a `psql` test over `127.0.0.1` inside the container passes even with a wrong password because the image trusts loopback, so test through the container IP or the host port; (2) on this host another process listens on `[::1]:5432`, so host-side `DATABASE_URL` must use `127.0.0.1`, not `localhost`, and the password must be URL-encoded. Run the Prisma CLI with stdin closed (`</dev/null`) and `CHECKPOINT_DISABLE=1` from Git Bash, otherwise it hangs.
+- 2026-10-12 S3.1: helpers are plain functions in `src/common/crypto/` (`password.ts`, `token.ts`, barrel `index.ts`), not a Nest provider; nothing in them needs injection. `hashToken` returns the SHA-256 digest as lowercase hex (64 chars) for the `*_hash` columns. `safeEqual` digests both inputs with SHA-256 before `timingSafeEqual`, so the comparison always runs on 32-byte buffers and does not throw or leak timing on length mismatch. `verifyPassword` lets `argon2.verify` throw on a malformed stored hash instead of returning `false`.
 - 2026-10-11 S2.2: Prisma `enum`s (`TenantStatus`, `Plan`, `Role`, `InvitationRole`, mapped to snake_case type names) for the closed AGENTS value sets; ids are `uuid(7)`; `users.tenant_id` and `invitations.tenant_id` use `ON DELETE RESTRICT` (tenants are tombstoned, never deleted, and `SET NULL` would collide with `users_role_tenant_check`); refresh and reset tokens cascade with their user; `invited_by_id` is `SET NULL`. `site_ids` is `text[]` (no `uuid` type) because site ids belong to `organization`. `ProcessedEvent` carries `tenant_id` (indexed) so the purge of S7.4 can delete a tenant's rows, without a foreign key. `prisma.config.ts` reads `process.env.DATABASE_URL ?? ''` instead of `env()` because `env()` throws when the variable is unset and `prisma generate` runs in the Docker build.
 - 2026-10-11 S2.3: the pending-invitation index is a plain (not unique) partial index `WHERE used_at IS NULL AND revoked_at IS NULL`, raw SQL in the migration; `migrate dev` reports no drift for it or for the check constraint. The check lists "all six" indexes but the migration has ten (`users.email`, three token hashes, `users(tenant_id, role)`, `users.site_ids` GIN, `refresh_tokens.user_id`, pending invitations, plus `password_reset_tokens.user_id` and `processed_events.tenant_id`); each listed one is present.
 - 2026-10-11 S2.6: `PrismaService` passes `{ schema }` to `PrismaPg`, taken from the `schema` query parameter of `DATABASE_URL` (default `auth`), because the adapter does not read it from the URL. `docker-compose.yml` bind-mounts `./auth/src` over the image, which hides the `src/generated` produced by `RUN pnpm exec prisma generate`: a fresh clone must run `pnpm exec prisma generate` on the host once before `docker compose up`.
