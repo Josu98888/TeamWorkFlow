@@ -17,6 +17,9 @@ jest.mock('../config', () => ({
 // The generated client is ESM-only; the service only needs its class shape.
 jest.mock('../generated/prisma/client', () => ({ PrismaClient: class {} }));
 
+// Real Argon2 hashing is slow when the whole suite runs in parallel.
+jest.setTimeout(30_000);
+
 const TENANT_ID = '0199b7e0-0000-7000-8000-000000000002';
 const USER_ID = '0199b7e0-0000-7000-8000-000000000001';
 const PAIR = { accessToken: 'access', refreshToken: 'refresh', expiresIn: 900 };

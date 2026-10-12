@@ -1,5 +1,11 @@
-import { Plan, Role, TenantStatus } from '../generated/prisma/enums';
 import {
+  InvitationRole,
+  Plan,
+  Role,
+  TenantStatus,
+} from '../generated/prisma/enums';
+import {
+  fromWireInvitationRole,
   fromWirePlan,
   isWireRole,
   fromWireRole,
@@ -56,5 +62,14 @@ describe('wire values', () => {
     expect(isWireRole('OWNER')).toBe(false);
     expect(isWireRole('toString')).toBe(false);
     expect(isWireRole(undefined)).toBe(false);
+  });
+
+  it.each([
+    ['admin', 'ADMIN'],
+    ['supervisor', 'SUPERVISOR'],
+    ['employee', 'EMPLOYEE'],
+  ] as const)('maps invitation role %s to %s', (wire, prisma) => {
+    expect(fromWireInvitationRole(wire)).toBe(prisma);
+    expect(Object.values(InvitationRole)).toContain(prisma);
   });
 });

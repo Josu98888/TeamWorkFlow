@@ -1,4 +1,9 @@
-import type { Plan, Role, TenantStatus } from '../generated/prisma/enums';
+import type {
+  InvitationRole,
+  Plan,
+  Role,
+  TenantStatus,
+} from '../generated/prisma/enums';
 
 // Single owner of the conversion between Prisma enums (internal to auth, e.g.
 // `OWNER`) and the lowercase values that leave the service (JWT claims, event
@@ -7,6 +12,23 @@ import type { Plan, Role, TenantStatus } from '../generated/prisma/enums';
 
 export type WireRole =
   'owner' | 'admin' | 'supervisor' | 'employee' | 'platform_admin';
+
+export const WIRE_ROLES: readonly WireRole[] = [
+  'owner',
+  'admin',
+  'supervisor',
+  'employee',
+  'platform_admin',
+];
+
+// Roles that can be invited (never owner or platform_admin).
+export type WireInvitationRole = 'admin' | 'supervisor' | 'employee';
+
+export const WIRE_INVITATION_ROLES: readonly WireInvitationRole[] = [
+  'admin',
+  'supervisor',
+  'employee',
+];
 
 export type WireTenantStatus =
   'active' | 'past_due' | 'suspended' | 'cancelled' | 'deleted';
@@ -27,6 +49,12 @@ const ROLE_FROM_WIRE: Record<WireRole, Role> = {
   supervisor: 'SUPERVISOR',
   employee: 'EMPLOYEE',
   platform_admin: 'PLATFORM_ADMIN',
+};
+
+const INVITATION_ROLE_FROM_WIRE: Record<WireInvitationRole, InvitationRole> = {
+  admin: 'ADMIN',
+  supervisor: 'SUPERVISOR',
+  employee: 'EMPLOYEE',
 };
 
 const TENANT_STATUS_TO_WIRE: Record<TenantStatus, WireTenantStatus> = {
@@ -62,3 +90,7 @@ export const toWirePlan = (plan: Plan): WirePlan => PLAN_TO_WIRE[plan];
 
 // For billing events, whose `plan` arrives as a wire value.
 export const fromWirePlan = (plan: WirePlan): Plan => PLAN_FROM_WIRE[plan];
+
+export const fromWireInvitationRole = (
+  role: WireInvitationRole,
+): InvitationRole => INVITATION_ROLE_FROM_WIRE[role];
