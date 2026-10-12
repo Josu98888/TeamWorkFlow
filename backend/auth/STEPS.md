@@ -2,7 +2,7 @@
 
 Follow /STEPS.rules.md. Order: /STEPS.index.md. Backend conventions: /backend/STEPS.template.md.
 
-**Status:** last verified: 2026-10-11 (S1.8, S1.9) · next: S2.1 · in progress: — · blocked: —
+**Status:** last verified: 2026-10-11 (S2.2, S2.3, S2.6) · next: S2.1 · in progress: S2.4 · blocked: S2.1, S2.5 (dev database credentials)
 
 Source of truth: `backend/auth/AGENTS.md`. Placeholders (`<lint>`, `<test>`, `<EXCL>`…) are defined in the backend template, run from `backend/auth/`.
 
@@ -42,19 +42,22 @@ Commits: 58cd5b3, d12199f, 7bfa96b, b49f308, c915bf4, 222a607, a643466, f5c81d8,
 
 ## Phase 2 — Data model
 
-Commits: —
+Commits: 6e9866d, dea417a, fe1f073, d5cb1f9, 85f4bdc, df4a209, b235632 (partial: S2.1 and S2.5 pending the dev database, S2.4 automated test pending S10)
 
-- [ ] **S2.1** Database for local dev and tests. Uses the `auth` schema of the shared `teamworkflow` database and the `auth_svc` role (see backend S1.1, S2.2). Backend S2.2 is done. TEST database: `backend/docker-compose.test.yml` (backend S1.4, S2.5).
+- [!] **S2.1** Database for local dev and tests. Uses the `auth` schema of the shared `teamworkflow` database and the `auth_svc` role (see backend S1.1, S2.2). Backend S2.2 is done. TEST database: `backend/docker-compose.test.yml` (backend S1.4, S2.5).
   Check: `docker compose -f ../docker-compose.yml config --services` lists the auth database service; `pnpm exec prisma migrate status` connects.
-- [ ] **S2.2** `prisma/schema.prisma` + `prisma.config.ts` per skill § Database Access, models per AGENTS § Data Model: `Tenant`, `User` (with `siteIds String[]` mapped to `site_ids`, default `[]`), `RefreshToken`, `Invitation`, `PasswordResetToken`, `ProcessedEvent`. `@@map`/`@map` to snake_case. `src/generated/prisma/` in `.gitignore`.
+  Progress 2026-10-11: `config --services` lists `postgres`; the TEST database (`postgres-test`, port 5433) connects and `migrate status` reports up to date. The dev database `backend-postgres-1` rejects the `auth_svc` password that `backend/.env` currently provides (see Blocked).
+- [x] **S2.2** `prisma/schema.prisma` + `prisma.config.ts` per skill § Database Access, models per AGENTS § Data Model: `Tenant`, `User` (with `siteIds String[]` mapped to `site_ids`, default `[]`), `RefreshToken`, `Invitation`, `PasswordResetToken`, `ProcessedEvent`. `@@map`/`@map` to snake_case. `src/generated/prisma/` in `.gitignore`.
   Check: `pnpm exec prisma validate` passes; `rg -n "src/generated" .gitignore` has one hit.
-- [ ] **S2.3** Indexes for every lookup path (`teamworkflow-postgres`): `users.email` unique, token hashes unique, `users(tenant_id, role)`, `invitations(tenant_id, email)` partial on pending, `refresh_tokens(user_id)`, GIN index on `users.site_ids` (`@@index([siteIds], type: Gin)`).
+- [x] **S2.3** Indexes for every lookup path (`teamworkflow-postgres`): `users.email` unique, token hashes unique, `users(tenant_id, role)`, `invitations(tenant_id, email)` partial on pending, `refresh_tokens(user_id)`, GIN index on `users.site_ids` (`@@index([siteIds], type: Gin)`).
   Check: the migration from S2.5 contains each `CREATE (UNIQUE) INDEX` listed here (`rg -n "CREATE (UNIQUE )?INDEX" prisma/migrations` shows all six).
-- [ ] **S2.4** Check constraint: `role = 'PLATFORM_ADMIN'` ⇔ `tenant_id IS NULL` (AGENTS § Data Model). Added as raw SQL in the migration (`--create-only`, then edit).
+- [~] **S2.4** Check constraint: `role = 'PLATFORM_ADMIN'` ⇔ `tenant_id IS NULL` (AGENTS § Data Model). Added as raw SQL in the migration (`--create-only`, then edit).
   Check: `<e2e> db-constraints` (or S10 suite) inserts a `SUPERVISOR` with null tenant and gets a constraint violation; a `PLATFORM_ADMIN` with a tenant also fails.
-- [ ] **S2.5** First migration `init_auth`, reviewed per `teamworkflow-prisma-migrations`.
+  Progress 2026-10-11: constraint `users_role_tenant_check` is in the migration; verified by hand with `psql` on the TEST database (both invalid inserts rejected, valid `OWNER` with tenant and `PLATFORM_ADMIN` without tenant accepted). Missing: the automated `db-constraints` e2e, which needs the harness of S10.1.
+- [!] **S2.5** First migration `init_auth`, reviewed per `teamworkflow-prisma-migrations`.
   Check: `pnpm exec prisma migrate dev --name init_auth` on the dev database succeeds and `pnpm exec prisma migrate deploy` on the TEST database (backend S2.5) succeeds; `pnpm exec prisma migrate status` reports "up to date".
-- [ ] **S2.6** `src/prisma/prisma.module.ts` + `prisma.service.ts` (driver adapter `@prisma/adapter-pg`, `onModuleInit` connect). Dockerfile runs `prisma generate` before `nest build`.
+  Progress 2026-10-11: `init_auth` reviewed and `migrate deploy` + `migrate status` on a clean TEST database succeed ("Database schema is up to date!"). Missing: `migrate dev` on the dev database (S2.1).
+- [x] **S2.6** `src/prisma/prisma.module.ts` + `prisma.service.ts` (driver adapter `@prisma/adapter-pg`, `onModuleInit` connect). Dockerfile runs `prisma generate` before `nest build`.
   Check: `<build>` passes; `rg -n "prisma generate" dockerfile` has one hit.
 
 ## Phase 3 — Sessions (register, login, tokens)
@@ -188,7 +191,9 @@ Commits: —
 | S1.2, S1.4–S1.5, Phases 2–8, S10 | S1.1 (need the installed deps) |
 | S1.6 | done (approved 2026-10-11) |
 | S9.1 | gateway owner |
-| S2.2–S2.6, Phases 3–8 (persistence), S10 | S2.1 |
+| S2.1, S2.5 | User: dev database `auth_svc` password mismatch (see Decisions 2026-10-11 S2.1) |
+| S2.4 (automated check) | S10.1 (e2e harness) |
+| Phases 3–8 (persistence), S10 | S2.1, S2.5 (dev database) |
 | S9.2 | `billing` and `organization` domains |
 
 ## Decisions
@@ -197,6 +202,11 @@ Commits: —
 - 2026-10-11 S1.6: user approved renaming the public contract from `{ cmd: 'login' }` to the `auth.<resource>.<action>` patterns in `src/auth/auth.patterns.ts` (e.g. `auth.login`). The gateway mirror is updated in S9.1.
 - 2026-10-09 S1.3: check fixed to match only `app.listen(` with arguments; a Nest microservice must call `app.listen()` without arguments to start the NATS server.
 - 2026-10-11 S1.8: `JetStreamService` fails startup if NATS is unreachable or auth cannot create or update its own `AUTH_EVENTS` stream (misconfiguration, same as Nest's NATS transport). Only the durables retry in the background, with exponential backoff from 1s up to 30s (no attempt limit, stops on shutdown). A message with no registered handler and a message whose handler throws are `nak`ed (30s and 5s delay) so they are redelivered; a payload that is not valid JSON is `term`inated. Published messages carry `msgID = eventId` so JetStream drops duplicates within its window. Consumed payload types in `auth.events.ts` only cover fields named in AGENTS; each handler step (Phase 7) extends them.
+- 2026-10-11 S2.1: the dev `postgres` volume was initialised earlier ("Skipping initialization"), and the `auth_svc` password stored in it no longer matches `AUTH_DB_PASSWORD` in `backend/.env`: a TCP login from the host fails with `password authentication failed`. Nothing was changed there (altering a role or recreating the volume needs the user). Fix, user's choice: `ALTER ROLE auth_svc PASSWORD '<value from backend/.env>'` as `postgres` in the dev container, or recreate the dev volume (`docker compose down -v`, loses dev data). The TEST database is unaffected (fresh `tmpfs`, password `test`).
+- 2026-10-11 S2.1: `backend/postgres/init/01-schemas-and-roles.sh` was checked out with CRLF (`core.autocrlf=true`), so the container failed with `/bin/sh^M: bad interpreter` and the TEST database had no `teamworkflow` roles. Fixed with `backend/postgres/.gitattributes` (`*.sh text eol=lf`) and the same for `backend/auth/prisma/migrations` (Prisma checksums migration files).
+- 2026-10-11 S2.2: Prisma `enum`s (`TenantStatus`, `Plan`, `Role`, `InvitationRole`, mapped to snake_case type names) for the closed AGENTS value sets; ids are `uuid(7)`; `users.tenant_id` and `invitations.tenant_id` use `ON DELETE RESTRICT` (tenants are tombstoned, never deleted, and `SET NULL` would collide with `users_role_tenant_check`); refresh and reset tokens cascade with their user; `invited_by_id` is `SET NULL`. `site_ids` is `text[]` (no `uuid` type) because site ids belong to `organization`. `ProcessedEvent` carries `tenant_id` (indexed) so the purge of S7.4 can delete a tenant's rows, without a foreign key. `prisma.config.ts` reads `process.env.DATABASE_URL ?? ''` instead of `env()` because `env()` throws when the variable is unset and `prisma generate` runs in the Docker build.
+- 2026-10-11 S2.3: the pending-invitation index is a plain (not unique) partial index `WHERE used_at IS NULL AND revoked_at IS NULL`, raw SQL in the migration; `migrate dev` reports no drift for it or for the check constraint. The check lists "all six" indexes but the migration has ten (`users.email`, three token hashes, `users(tenant_id, role)`, `users.site_ids` GIN, `refresh_tokens.user_id`, pending invitations, plus `password_reset_tokens.user_id` and `processed_events.tenant_id`); each listed one is present.
+- 2026-10-11 S2.6: `PrismaService` passes `{ schema }` to `PrismaPg`, taken from the `schema` query parameter of `DATABASE_URL` (default `auth`), because the adapter does not read it from the URL. `docker-compose.yml` bind-mounts `./auth/src` over the image, which hides the `src/generated` produced by `RUN pnpm exec prisma generate`: a fresh clone must run `pnpm exec prisma generate` on the host once before `docker compose up`.
 
 ## Defaults to confirm
 
