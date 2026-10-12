@@ -2,7 +2,7 @@
 
 Follow /STEPS.rules.md. Order: /STEPS.index.md. Backend conventions: /backend/STEPS.template.md.
 
-**Status:** last verified: 2026-10-12 (S3.1) · next: S3.2 · in progress: S2.4 (automated check waits for S10.1) · blocked: S9.1, S9.2
+**Status:** last verified: 2026-10-12 (S3.8) · next: S4.1 · in progress: S2.4 (automated check waits for S10.1) · blocked: S9.1, S9.2
 
 Source of truth: `backend/auth/AGENTS.md`. Placeholders (`<lint>`, `<test>`, `<EXCL>`…) are defined in the backend template, run from `backend/auth/`.
 
@@ -79,8 +79,9 @@ Commits: d8f22dd, b23b564, 8740abc, 00e2d23, a0b129d, d9bd9a0, 871b55d, 1159841,
   Check: `<test> logout` passes; a refresh with that token afterwards returns `invalid_token`.
 - [x] **S3.7** `auth.token.verify` (AGENTS § Sessions and tokens): signature + expiry + user exists and active + tenant status; returns `{ userId, tenantId, role, siteIds, tenantStatus, plan, features }`; `siteIds` only for supervisor; nulls for `platform_admin`; owner/admin of suspended/cancelled tenant pass with `tenantStatus` set.
   Check: `<test> verify` passes, including: supervisor gets `siteIds`, admin has no `siteIds` key, `platform_admin` gets null `tenantId`/`tenantStatus`/`plan`/`features`, deactivated user → `invalid_token`.
-- [ ] **S3.8** No secrets in logs (AGENTS § Security Rules 1).
+- [x] **S3.8** No secrets in logs (AGENTS § Security Rules 1).
   Check: `rg -n "(log|warn|error|debug)\(.*(password|token|hash)" src -i <EXCL>` is empty.
+  Verified 2026-10-12: the grep has no hits (exit 1) over `src` excluding specs and `src/generated`.
 
 ## Phase 4 — Invitations
 
@@ -198,6 +199,8 @@ Native review (`gentle-ai review status`) fails with `operation_timeout` on gent
 | S3.5 | 1159841 |
 | S3.6 | d91cf09 |
 | S3.7 | 88030f0 |
+
+Known finding to check in that review: `readAccessToken` validates `sub` only as a non-empty string, but `users.id` is `@db.Uuid`; a correctly signed token with a non-UUID `sub` would make Postgres throw instead of returning `invalid_token` (needs `JWT_SECRET` to forge, low risk).
 
 ## Blocked
 
