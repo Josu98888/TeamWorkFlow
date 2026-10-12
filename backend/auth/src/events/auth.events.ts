@@ -2,6 +2,8 @@
 // Single owner of the event names inside `auth`: subjects and filters are built
 // only here; every other file imports from this one.
 
+import type { WireRole } from '../common/wire';
+
 export const AUTH_SERVICE = 'auth';
 
 // Stream owned by auth (backend STEPS S1.2): captures every emitted subject.
@@ -28,12 +30,12 @@ export interface AuthEventPayloads {
     tenantId: string;
     email: string;
     name: string;
-    role: string;
+    role: WireRole;
   };
   user_role_changed: {
     userId: string;
     tenantId: string;
-    role: string;
+    role: WireRole;
     actorId: string;
   };
   user_deactivated: { userId: string; tenantId: string; actorId: string };

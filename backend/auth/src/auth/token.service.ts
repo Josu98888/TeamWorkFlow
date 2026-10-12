@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { generateOpaqueToken, hashToken } from '../common/crypto';
 import { parseDurationSeconds } from '../common/duration';
+import { toWireRole } from '../common/wire';
 import { envs } from '../config';
 import type { Role } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
@@ -43,7 +44,7 @@ export class TokenService {
   ): Promise<TokenPair> {
     // Claims are exactly sub, tenantId, role, jti, iat, exp: no personal data.
     const accessToken = await this.jwt.signAsync(
-      { tenantId: user.tenantId, role: user.role },
+      { tenantId: user.tenantId, role: toWireRole(user.role) },
       {
         subject: user.id,
         jwtid: randomUUID(),

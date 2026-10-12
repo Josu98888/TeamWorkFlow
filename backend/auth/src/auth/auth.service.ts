@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { hashPassword } from '../common/crypto';
 import { normalizeEmail } from '../common/email';
+import { toWireRole } from '../common/wire';
 import { EmailTakenException } from '../common/exceptions/app.exceptions';
 import { AUTH_EVENTS } from '../events/auth.events';
 import { JetStreamService } from '../events/jetstream.service';
@@ -72,7 +73,7 @@ export class AuthService {
       tenantId: tenant.id,
       email: user.email,
       name: dto.name,
-      role: user.role,
+      role: toWireRole(user.role),
     });
 
     return pair;

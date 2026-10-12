@@ -76,7 +76,7 @@ describe('TokenService', () => {
       );
       expect(claims.sub).toBe(USER_ID);
       expect(claims.tenantId).toBe(TENANT_ID);
-      expect(claims.role).toBe('OWNER');
+      expect(claims.role).toBe('owner');
       expect(claims.jti).toMatch(/^[0-9a-f-]{36}$/);
       expect((claims.exp as number) - (claims.iat as number)).toBe(15 * 60);
       const header = JSON.parse(
@@ -106,7 +106,7 @@ describe('TokenService', () => {
 
       const claims = jwt.decode<Record<string, unknown>>(pair.accessToken);
       expect(claims.tenantId).toBeNull();
-      expect(claims.role).toBe('PLATFORM_ADMIN');
+      expect(claims.role).toBe('platform_admin');
     });
 
     it('uses a different jti on every call', async () => {

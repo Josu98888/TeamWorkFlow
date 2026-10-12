@@ -206,7 +206,7 @@ describe('AuthService.register', () => {
         tenantId: TENANT_ID,
         email: 'ana@acme.test',
         name: 'Ana Perez',
-        role: 'OWNER',
+        role: 'owner',
       },
     );
   });
