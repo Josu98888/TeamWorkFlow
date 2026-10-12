@@ -2,7 +2,7 @@
 
 Follow /STEPS.rules.md. Order: /STEPS.index.md. Backend conventions: /backend/STEPS.template.md.
 
-**Status:** last verified: 2026-10-11 (S1.7) · next: S1.8 · in progress: — · blocked: —
+**Status:** last verified: 2026-10-11 (S1.9) · next: S1.8 · in progress: — · blocked: —
 
 Source of truth: `backend/auth/AGENTS.md`. Placeholders (`<lint>`, `<test>`, `<EXCL>`…) are defined in the backend template, run from `backend/auth/`.
 
@@ -19,7 +19,7 @@ Commits: (none, read-only phase)
 
 ## Phase 1 — Foundation (transport, config, errors, validation)
 
-Commits: 58cd5b3, d12199f, 7bfa96b, b49f308, c915bf4, 222a607, a643466, f5c81d8
+Commits: 58cd5b3, d12199f, 7bfa96b, b49f308, c915bf4, 222a607, a643466, f5c81d8, bc56073, 0c6f347
 
 - [x] **S1.1** Install dependencies (approved 2026-10-09, see Decisions): `@nestjs/jwt`, `argon2`, `class-validator`, `class-transformer`, `joi`, `dotenv`, `@prisma/client`, `@prisma/adapter-pg`, `pg`, `@nats-io/jetstream`, dev `prisma`, `@types/pg`.
   Check: `pnpm ls @nestjs/jwt argon2 class-validator class-transformer joi @prisma/client prisma @nats-io/jetstream` lists every package with a version.
@@ -37,7 +37,7 @@ Commits: 58cd5b3, d12199f, 7bfa96b, b49f308, c915bf4, 222a607, a643466, f5c81d8
   Check: `<lint>` passes.
 - [!] **S1.8** Event publishing and consuming over JetStream (AGENTS § Events emitted / consumed: durable consumer, explicit ack). Streams and consumers per backend S1.2: on startup auth creates or updates `AUTH_EVENTS` (`t.*.auth.>`) and its durables `auth-billing` and `auth-organization` (filtered to the subjects in AGENTS § Events consumed), retrying while those streams do not exist yet. Client per backend S1.3: `src/events/jetstream.service.ts` on `@nats-io/jetstream`; Nest's NATS transport does not create durable JetStream consumers. Needs NATS with JetStream on (backend S2.1).
   Check: `<test> jetstream` passes: publish is called with subject `t.<tenantId>.auth.<event>` and a payload with `eventId` (uuid) and ISO-8601 `occurredAt`; a handler that throws does not ack.
-- [ ] **S1.9** `src/events/auth.events.ts`: subject builders and payload types for every emitted event (AGENTS § Events emitted) and every consumed subject. Single owner of event names inside `auth`.
+- [x] **S1.9** `src/events/auth.events.ts`: subject builders and payload types for every emitted event (AGENTS § Events emitted) and every consumed subject. Single owner of event names inside `auth`.
   Check: `rg -n "\.auth\.(user|tenant)_" src <EXCL> --glob '!src/events/**'` is empty (event names only built in `src/events/`).
 
 ## Phase 2 — Data model
