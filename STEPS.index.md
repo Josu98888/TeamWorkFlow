@@ -2,7 +2,7 @@
 
 > Follow `/STEPS.rules.md`. This file is the ONLY place the order is written. Domain `STEPS.md` files reference it, never copy it.
 
-**Next action:** start B1 auth (`backend/auth/STEPS.md`, from S0.1); S1.1 and S1.6 need the user's answers.
+**Next action:** start B1 auth (`backend/auth/STEPS.md`, from S0.1); S1.1 and S1.6 answered.
 
 ## 1. How an agent uses this file
 
@@ -23,7 +23,7 @@ Status values: `not planned` (no `STEPS.md` yet) · `planned` (`STEPS.md` writte
 | # | Domain | STEPS file | Depends on | Status | Next |
 |---|--------|-----------|------------|--------|------|
 | B0 | backend foundation | `backend/STEPS.md` | — | done | — |
-| B1 | auth | `backend/auth/STEPS.md` | B0 | planned | S0.1 (S1.1, S1.6 need TODO(auth) answers) |
+| B1 | auth | `backend/auth/STEPS.md` | B0 | planned | S0.1 (S1.1, S1.6 answered) |
 | B2 | gateway | `backend/gateway/STEPS.md` | B1 | not planned | — |
 | B3 | billing | `backend/billing/STEPS.md` | B1, B2 | not planned | — |
 | B4 | organization | `backend/organization/STEPS.md` | B1, B2, B3 | not planned | — |

@@ -2,7 +2,7 @@
 
 Follow /STEPS.rules.md. Order: /STEPS.index.md. Backend conventions: /backend/STEPS.template.md.
 
-**Status:** last verified: 2026-10-09 (S1.5) · next: S1.6 · in progress: — · blocked: S1.6 (TODO(auth) contract rename)
+**Status:** last verified: 2026-10-11 (S1.6) · next: S1.7 · in progress: — · blocked: —
 
 Source of truth: `backend/auth/AGENTS.md`. Placeholders (`<lint>`, `<test>`, `<EXCL>`…) are defined in the backend template, run from `backend/auth/`.
 
@@ -31,7 +31,7 @@ Commits: 58cd5b3, d12199f, 7bfa96b, b49f308, c915bf4, 222a607, a643466, f5c81d8
   Check: `<test> app.exceptions` passes; one case per code asserts the exact `status` and `code`.
 - [x] **S1.5** Global `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`) whose `exceptionFactory` throws the `validation_error` exception from S1.4.
   Check: `<test> validation` passes: a payload with an unknown field and one with a missing required field both produce `{ status: 422, code: 'validation_error' }`.
-- [!] **S1.6** `src/auth/auth.patterns.ts` with every request-reply pattern in AGENTS § Request-reply, and delete the CRUD scaffold (`createAuth`… handlers, `create-auth.dto.ts`, `update-auth.dto.ts`, `entities/auth.entity.ts`, scaffold specs). TODO(auth) The gateway currently sends `{ cmd: 'login' }`; renaming it is a public contract change (rules §6). Confirm the rename; the gateway side is wired in S9.1.
+- [x] **S1.6** `src/auth/auth.patterns.ts` with every request-reply pattern in AGENTS § Request-reply, and delete the CRUD scaffold (`createAuth`… handlers, `create-auth.dto.ts`, `update-auth.dto.ts`, `entities/auth.entity.ts`, scaffold specs). Rename from `{ cmd: 'login' }` approved, see Decisions 2026-10-11; the gateway side is wired in S9.1.
   Check: `rg -n "createAuth|findAllAuth|findOneAuth|updateAuth|removeAuth|cmd: 'login'" backend/auth/src` (from repo root) is empty; `<build>` passes.
 - [ ] **S1.7** Lint script works without a `test/` folder (today `oxlint --type-aware src/ test/` points at a missing dir). Fixed for free when S10.1 creates `test/`; if lint fails before that, this step stays `[~]` until S10.1.
   Check: `<lint>` passes.
@@ -145,7 +145,7 @@ Commits: —
 
 Commits: —
 
-- [!] **S9.1** Gateway uses the patterns from S1.6 (today it sends `{ cmd: 'login' }`). Owned by the gateway: TODO(auth) blocked on S1.6. The gateway keeps a mirror `backend/gateway/src/auth/auth.patterns.ts` (only the patterns it calls; never `auth.user.list-recipients`).
+- [!] **S9.1** Gateway uses the patterns from S1.6 (today it sends `{ cmd: 'login' }`). Owned by the gateway: waits for the gateway owner (S1.6 done). The gateway keeps a mirror `backend/gateway/src/auth/auth.patterns.ts` (only the patterns it calls; never `auth.user.list-recipients`).
   Check: from repo root, `rg -n "cmd: 'login'" backend/gateway/src` is empty and `rg -n "auth.user.list-recipients" backend/gateway/src` is empty.
 - [!] **S9.2** `billing` and `organization` produce the consumed events. Waits for `billing S?` and `organization S?` (not built yet). Those domains wire back and tick this step.
   Check: S10.3 runs against the real producers.
@@ -186,8 +186,8 @@ Commits: —
 |------|-----------|
 | S1.1 | done (approved 2026-10-09) |
 | S1.2, S1.4–S1.5, S1.8, Phases 2–8, S10 | S1.1 (need the installed deps) |
-| S1.6 | TODO(auth) contract rename approval |
-| S9.1 | S1.6, gateway owner |
+| S1.6 | done (approved 2026-10-11) |
+| S9.1 | gateway owner |
 | S1.8 | S1.1 (`@nats-io/jetstream`), backend S2.1 (JetStream on) |
 | Phases 7–8 (event delivery), S10.3 | S1.8 |
 | S2.2–S2.6, Phases 3–8 (persistence), S10 | S2.1 |
@@ -196,6 +196,7 @@ Commits: —
 ## Decisions
 
 - 2026-10-09 S1.1: dependency set approved as listed. `prisma` CLI pinned to 7.10.0 to match `@prisma/client` (pnpm resolved 8.0.0-rc.22). `pnpm-workspace.yaml` allows build scripts for `prisma` and `@prisma/engines`; `argon2` runs from its bundled prebuild.
+- 2026-10-11 S1.6: user approved renaming the public contract from `{ cmd: 'login' }` to the `auth.<resource>.<action>` patterns in `src/auth/auth.patterns.ts` (e.g. `auth.login`). The gateway mirror is updated in S9.1.
 - 2026-10-09 S1.3: check fixed to match only `app.listen(` with arguments; a Nest microservice must call `app.listen()` without arguments to start the NATS server.
 
 ## Defaults to confirm
