@@ -51,7 +51,7 @@ function isUniqueViolation(error: unknown): boolean {
   );
 }
 
-// Session use cases (logout, verify) are added in STEPS Phase 3.
+// Session use cases (verify) are added in STEPS Phase 3.
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -221,6 +221,17 @@ export class AuthService {
         tx,
       );
     });
+  }
+
+  // Idempotent: an unknown, expired or already revoked token also answers
+  // `{ ok: true }`, so logout reveals nothing about token validity and a double
+  // logout is harmless. The conditional update never rewrites `revokedAt`.
+  async logout(dto: RefreshTokenDto): Promise<{ ok: true }> {
+    await this.prisma.refreshToken.updateMany({
+      where: { tokenHash: hashToken(dto.refreshToken), revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    return { ok: true };
   }
 
   // The increment is atomic; the 5th consecutive failure sets the lock and

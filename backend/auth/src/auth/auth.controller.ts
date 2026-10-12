@@ -26,4 +26,9 @@ export class AuthController {
   refresh(@Payload() dto: RefreshTokenDto): Promise<TokenPair> {
     return this.authService.refresh(dto);
   }
+
+  @MessagePattern(AUTH_PATTERNS.logout)
+  logout(@Payload() dto: RefreshTokenDto): Promise<{ ok: true }> {
+    return this.authService.logout(dto);
+  }
 }
