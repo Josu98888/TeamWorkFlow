@@ -47,6 +47,10 @@ const PLAN_FROM_WIRE: Record<WirePlan, Plan> = {
   pro: 'PRO',
 };
 
+// For untrusted input such as JWT claims.
+export const isWireRole = (value: unknown): value is WireRole =>
+  typeof value === 'string' && Object.hasOwn(ROLE_FROM_WIRE, value);
+
 export const toWireRole = (role: Role): WireRole => ROLE_TO_WIRE[role];
 
 export const fromWireRole = (role: WireRole): Role => ROLE_FROM_WIRE[role];

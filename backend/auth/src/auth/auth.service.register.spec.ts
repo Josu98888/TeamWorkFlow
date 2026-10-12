@@ -1,3 +1,4 @@
+import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { verifyPassword } from '../common/crypto';
 import { EmailTakenException } from '../common/exceptions/app.exceptions';
@@ -84,6 +85,7 @@ describe('AuthService.register', () => {
         AuthService,
         { provide: PrismaService, useValue: prisma },
         { provide: TokenService, useValue: tokens },
+        { provide: JwtService, useValue: {} },
         { provide: JetStreamService, useValue: jetstream },
       ],
     }).compile();

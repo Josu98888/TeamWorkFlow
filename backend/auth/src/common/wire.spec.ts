@@ -1,6 +1,7 @@
 import { Plan, Role, TenantStatus } from '../generated/prisma/enums';
 import {
   fromWirePlan,
+  isWireRole,
   fromWireRole,
   toWirePlan,
   toWireRole,
@@ -48,5 +49,12 @@ describe('wire values', () => {
       Object.values(TenantStatus).sort(),
     );
     expect(plans.map(([p]) => p).sort()).toEqual(Object.values(Plan).sort());
+  });
+
+  it('recognizes only wire roles', () => {
+    expect(roles.every(([, wire]) => isWireRole(wire))).toBe(true);
+    expect(isWireRole('OWNER')).toBe(false);
+    expect(isWireRole('toString')).toBe(false);
+    expect(isWireRole(undefined)).toBe(false);
   });
 });

@@ -4,8 +4,10 @@ import { AuthService } from './auth.service';
 import { AUTH_PATTERNS } from './auth.patterns';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { VerifyTokenDto } from './dto/verify-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import type { TokenPair } from './token.service';
+import type { VerifiedActor } from './verified-actor';
 
 // Transport only: each handler forwards to one service method.
 @Controller()
@@ -30,5 +32,10 @@ export class AuthController {
   @MessagePattern(AUTH_PATTERNS.logout)
   logout(@Payload() dto: RefreshTokenDto): Promise<{ ok: true }> {
     return this.authService.logout(dto);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.tokenVerify)
+  verify(@Payload() dto: VerifyTokenDto): Promise<VerifiedActor> {
+    return this.authService.verify(dto);
   }
 }

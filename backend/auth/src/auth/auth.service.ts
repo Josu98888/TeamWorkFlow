@@ -1,7 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { hashPassword, hashToken, verifyPassword } from '../common/crypto';
 import { normalizeEmail } from '../common/email';
-import { toWireRole } from '../common/wire';
+import {
+  isWireRole,
+  toWirePlan,
+  toWireRole,
+  toWireTenantStatus,
+} from '../common/wire';
+import { envs } from '../config';
 import {
   EmailTakenException,
   InvalidCredentialsException,
@@ -15,8 +22,10 @@ import type { Role, TenantStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { VerifyTokenDto } from './dto/verify-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { TokenPair, TokenService } from './token.service';
+import type { VerifiedActor } from './verified-actor';
 
 const UNIQUE_VIOLATION = 'P2002';
 
@@ -51,7 +60,6 @@ function isUniqueViolation(error: unknown): boolean {
   );
 }
 
-// Session use cases (verify) are added in STEPS Phase 3.
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -59,6 +67,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokens: TokenService,
+    private readonly jwt: JwtService,
     private readonly events: JetStreamService,
   ) {}
 
@@ -232,6 +241,73 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
     return { ok: true };
+  }
+
+  // Called by the gateway on every authenticated request. Signature and expiry
+  // come from the token; identity, role, tenant and plan come from the
+  // database, so deactivation, role changes and suspension apply immediately.
+  async verify(dto: VerifyTokenDto): Promise<VerifiedActor> {
+    const claims = await this.readAccessToken(dto.accessToken);
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: claims.sub },
+      select: {
+        id: true,
+        tenantId: true,
+        role: true,
+        isActive: true,
+        siteIds: true,
+        tenant: { select: { status: true, plan: true, features: true } },
+      },
+    });
+
+    if (
+      !user ||
+      !user.isActive ||
+      user.tenant?.status === 'DELETED' ||
+      // The tenant of the token must still be the user's tenant.
+      claims.tenantId !== user.tenantId
+    ) {
+      throw new InvalidTokenException();
+    }
+    assertTenantAllowsAccess(user.role, user.tenant?.status);
+
+    const { tenant } = user;
+    return {
+      userId: user.id,
+      tenantId: user.tenantId,
+      role: toWireRole(user.role),
+      ...(user.role === 'SUPERVISOR' ? { siteIds: user.siteIds } : {}),
+      tenantStatus: tenant ? toWireTenantStatus(tenant.status) : null,
+      plan: tenant?.plan ? toWirePlan(tenant.plan) : null,
+      features: (tenant?.features as Record<string, boolean> | null) ?? null,
+    };
+  }
+
+  // Any signature, algorithm, expiry or shape problem is the same error.
+  private async readAccessToken(
+    accessToken: string,
+  ): Promise<{ sub: string; tenantId: string | null }> {
+    let claims: unknown;
+    try {
+      claims = await this.jwt.verifyAsync(accessToken, {
+        secret: envs.jwtSecret,
+        algorithms: ['HS256'],
+      });
+    } catch {
+      throw new InvalidTokenException();
+    }
+
+    const { sub, tenantId, role } = (claims ?? {}) as Record<string, unknown>;
+    if (
+      typeof sub !== 'string' ||
+      sub === '' ||
+      !isWireRole(role) ||
+      (tenantId !== null && typeof tenantId !== 'string')
+    ) {
+      throw new InvalidTokenException();
+    }
+    return { sub, tenantId };
   }
 
   // The increment is atomic; the 5th consecutive failure sets the lock and
