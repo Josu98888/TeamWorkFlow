@@ -2,7 +2,7 @@
 
 Follow /STEPS.rules.md. Order: /STEPS.index.md. Backend conventions: /backend/STEPS.template.md.
 
-**Status:** last verified: 2026-10-11 (S1.6) · next: S1.7 · in progress: — · blocked: —
+**Status:** last verified: 2026-10-11 (S1.7) · next: S1.8 · in progress: — · blocked: —
 
 Source of truth: `backend/auth/AGENTS.md`. Placeholders (`<lint>`, `<test>`, `<EXCL>`…) are defined in the backend template, run from `backend/auth/`.
 
@@ -33,7 +33,7 @@ Commits: 58cd5b3, d12199f, 7bfa96b, b49f308, c915bf4, 222a607, a643466, f5c81d8
   Check: `<test> validation` passes: a payload with an unknown field and one with a missing required field both produce `{ status: 422, code: 'validation_error' }`.
 - [x] **S1.6** `src/auth/auth.patterns.ts` with every request-reply pattern in AGENTS § Request-reply, and delete the CRUD scaffold (`createAuth`… handlers, `create-auth.dto.ts`, `update-auth.dto.ts`, `entities/auth.entity.ts`, scaffold specs). Rename from `{ cmd: 'login' }` approved, see Decisions 2026-10-11; the gateway side is wired in S9.1.
   Check: `rg -n "createAuth|findAllAuth|findOneAuth|updateAuth|removeAuth|cmd: 'login'" backend/auth/src` (from repo root) is empty; `<build>` passes.
-- [ ] **S1.7** Lint script works without a `test/` folder (today `oxlint --type-aware src/ test/` points at a missing dir). Fixed for free when S10.1 creates `test/`; if lint fails before that, this step stays `[~]` until S10.1.
+- [x] **S1.7** Lint script works without a `test/` folder (`oxlint --type-aware src/ test/` points at a missing dir). Verified 2026-10-11: oxlint skips the missing path, exits 0, and still reports a violation planted in `src/`; no script change needed.
   Check: `<lint>` passes.
 - [!] **S1.8** Event publishing and consuming over JetStream (AGENTS § Events emitted / consumed: durable consumer, explicit ack). Streams and consumers per backend S1.2: on startup auth creates or updates `AUTH_EVENTS` (`t.*.auth.>`) and its durables `auth-billing` and `auth-organization` (filtered to the subjects in AGENTS § Events consumed), retrying while those streams do not exist yet. Client per backend S1.3: `src/events/jetstream.service.ts` on `@nats-io/jetstream`; Nest's NATS transport does not create durable JetStream consumers. Needs NATS with JetStream on (backend S2.1).
   Check: `<test> jetstream` passes: publish is called with subject `t.<tenantId>.auth.<event>` and a payload with `eventId` (uuid) and ISO-8601 `occurredAt`; a handler that throws does not ack.
