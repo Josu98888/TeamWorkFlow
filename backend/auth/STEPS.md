@@ -2,7 +2,7 @@
 
 Follow /STEPS.rules.md. Order: /STEPS.index.md. Backend conventions: /backend/STEPS.template.md.
 
-**Status:** last verified: 2026-10-11 (S1.9) · next: S1.8 · in progress: — · blocked: —
+**Status:** last verified: 2026-10-11 (S1.8, S1.9) · next: S2.1 · in progress: — · blocked: —
 
 Source of truth: `backend/auth/AGENTS.md`. Placeholders (`<lint>`, `<test>`, `<EXCL>`…) are defined in the backend template, run from `backend/auth/`.
 
@@ -19,7 +19,7 @@ Commits: (none, read-only phase)
 
 ## Phase 1 — Foundation (transport, config, errors, validation)
 
-Commits: 58cd5b3, d12199f, 7bfa96b, b49f308, c915bf4, 222a607, a643466, f5c81d8, bc56073, 0c6f347
+Commits: 58cd5b3, d12199f, 7bfa96b, b49f308, c915bf4, 222a607, a643466, f5c81d8, bc56073, 0c6f347, db84201, 48157a3
 
 - [x] **S1.1** Install dependencies (approved 2026-10-09, see Decisions): `@nestjs/jwt`, `argon2`, `class-validator`, `class-transformer`, `joi`, `dotenv`, `@prisma/client`, `@prisma/adapter-pg`, `pg`, `@nats-io/jetstream`, dev `prisma`, `@types/pg`.
   Check: `pnpm ls @nestjs/jwt argon2 class-validator class-transformer joi @prisma/client prisma @nats-io/jetstream` lists every package with a version.
@@ -35,7 +35,7 @@ Commits: 58cd5b3, d12199f, 7bfa96b, b49f308, c915bf4, 222a607, a643466, f5c81d8,
   Check: `rg -n "createAuth|findAllAuth|findOneAuth|updateAuth|removeAuth|cmd: 'login'" backend/auth/src` (from repo root) is empty; `<build>` passes.
 - [x] **S1.7** Lint script works without a `test/` folder (`oxlint --type-aware src/ test/` points at a missing dir). Verified 2026-10-11: oxlint skips the missing path, exits 0, and still reports a violation planted in `src/`; no script change needed.
   Check: `<lint>` passes.
-- [!] **S1.8** Event publishing and consuming over JetStream (AGENTS § Events emitted / consumed: durable consumer, explicit ack). Streams and consumers per backend S1.2: on startup auth creates or updates `AUTH_EVENTS` (`t.*.auth.>`) and its durables `auth-billing` and `auth-organization` (filtered to the subjects in AGENTS § Events consumed), retrying while those streams do not exist yet. Client per backend S1.3: `src/events/jetstream.service.ts` on `@nats-io/jetstream`; Nest's NATS transport does not create durable JetStream consumers. Needs NATS with JetStream on (backend S2.1).
+- [x] **S1.8** Event publishing and consuming over JetStream (AGENTS § Events emitted / consumed: durable consumer, explicit ack). Streams and consumers per backend S1.2: on startup auth creates or updates `AUTH_EVENTS` (`t.*.auth.>`) and its durables `auth-billing` and `auth-organization` (filtered to the subjects in AGENTS § Events consumed), retrying while those streams do not exist yet. Client per backend S1.3: `src/events/jetstream.service.ts` on `@nats-io/jetstream`; Nest's NATS transport does not create durable JetStream consumers. Verified with unit tests only (JetStream mocked); the real-NATS flow is covered by S10.3.
   Check: `<test> jetstream` passes: publish is called with subject `t.<tenantId>.auth.<event>` and a payload with `eventId` (uuid) and ISO-8601 `occurredAt`; a handler that throws does not ack.
 - [x] **S1.9** `src/events/auth.events.ts`: subject builders and payload types for every emitted event (AGENTS § Events emitted) and every consumed subject. Single owner of event names inside `auth`.
   Check: `rg -n "\.auth\.(user|tenant)_" src <EXCL> --glob '!src/events/**'` is empty (event names only built in `src/events/`).
@@ -158,7 +158,7 @@ Commits: —
   Check: `<e2e>` runs and reports 0 failed.
 - [ ] **S10.2** E2E over NATS: register → login → verify → refresh (old rejected) → logout; invitation create → accept → login; tenant isolation (admin A on user B → `forbidden`).
   Check: `<e2e> session` and `<e2e> isolation` pass. Covers: S3.3–S3.7, S4.1, S4.4, S5.1.
-- [!] **S10.3** E2E for consumed events through JetStream (publish a billing event, assert verify changes). Blocked by S1.8.
+- [ ] **S10.3** E2E for consumed events through JetStream (publish a billing event, assert verify changes).
   Check: `<e2e> events` passes. Covers: S7.1–S7.4, S8.1.
 
 ## Phase 11 — Done checks
@@ -185,11 +185,9 @@ Commits: —
 | Step | Waits for |
 |------|-----------|
 | S1.1 | done (approved 2026-10-09) |
-| S1.2, S1.4–S1.5, S1.8, Phases 2–8, S10 | S1.1 (need the installed deps) |
+| S1.2, S1.4–S1.5, Phases 2–8, S10 | S1.1 (need the installed deps) |
 | S1.6 | done (approved 2026-10-11) |
 | S9.1 | gateway owner |
-| S1.8 | S1.1 (`@nats-io/jetstream`), backend S2.1 (JetStream on) |
-| Phases 7–8 (event delivery), S10.3 | S1.8 |
 | S2.2–S2.6, Phases 3–8 (persistence), S10 | S2.1 |
 | S9.2 | `billing` and `organization` domains |
 
@@ -198,6 +196,7 @@ Commits: —
 - 2026-10-09 S1.1: dependency set approved as listed. `prisma` CLI pinned to 7.10.0 to match `@prisma/client` (pnpm resolved 8.0.0-rc.22). `pnpm-workspace.yaml` allows build scripts for `prisma` and `@prisma/engines`; `argon2` runs from its bundled prebuild.
 - 2026-10-11 S1.6: user approved renaming the public contract from `{ cmd: 'login' }` to the `auth.<resource>.<action>` patterns in `src/auth/auth.patterns.ts` (e.g. `auth.login`). The gateway mirror is updated in S9.1.
 - 2026-10-09 S1.3: check fixed to match only `app.listen(` with arguments; a Nest microservice must call `app.listen()` without arguments to start the NATS server.
+- 2026-10-11 S1.8: `JetStreamService` fails startup if NATS is unreachable or auth cannot create or update its own `AUTH_EVENTS` stream (misconfiguration, same as Nest's NATS transport). Only the durables retry in the background, with exponential backoff from 1s up to 30s (no attempt limit, stops on shutdown). A message with no registered handler and a message whose handler throws are `nak`ed (30s and 5s delay) so they are redelivered; a payload that is not valid JSON is `term`inated. Published messages carry `msgID = eventId` so JetStream drops duplicates within its window. Consumed payload types in `auth.events.ts` only cover fields named in AGENTS; each handler step (Phase 7) extends them.
 
 ## Defaults to confirm
 
