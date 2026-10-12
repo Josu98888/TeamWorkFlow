@@ -1,5 +1,9 @@
 import { hashPassword, verifyPassword } from './password';
 
+// Argon2 allocates 64 MiB per hash; with the whole suite running in parallel
+// the default 5 s timeout is flaky.
+jest.setTimeout(30_000);
+
 // Covers: S3.1
 describe('password', () => {
   it('hashes with argon2id', async () => {

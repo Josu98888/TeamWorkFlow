@@ -1,15 +1,33 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { hashPassword } from '../common/crypto';
+import { hashPassword, verifyPassword } from '../common/crypto';
 import { normalizeEmail } from '../common/email';
 import { toWireRole } from '../common/wire';
-import { EmailTakenException } from '../common/exceptions/app.exceptions';
+import {
+  EmailTakenException,
+  InvalidCredentialsException,
+  TenantCancelledException,
+  TenantSuspendedException,
+} from '../common/exceptions/app.exceptions';
 import { AUTH_EVENTS } from '../events/auth.events';
 import { JetStreamService } from '../events/jetstream.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { TokenPair, TokenService } from './token.service';
 
 const UNIQUE_VIOLATION = 'P2002';
+
+// AGENTS � Brute-force protection.
+const MAX_FAILED_LOGINS = 5;
+const LOCK_DURATION_MS = 15 * 60 * 1000;
+
+// Verified when there is no real hash to check (unknown email, locked
+// account), so those paths cost the same Argon2 work as a real attempt.
+let dummyHash: Promise<string> | undefined;
+function getDummyHash(): Promise<string> {
+  dummyHash ??= hashPassword('timing-equalizer');
+  return dummyHash;
+}
 
 function isUniqueViolation(error: unknown): boolean {
   return (
@@ -19,7 +37,7 @@ function isUniqueViolation(error: unknown): boolean {
   );
 }
 
-// Session use cases (login, tokens) are added in STEPS Phase 3.
+// Session use cases (refresh, logout, verify) are added in STEPS Phase 3.
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -77,5 +95,92 @@ export class AuthService {
     });
 
     return pair;
+  }
+
+  // AGENTS � Brute-force protection and � Tenant status. Every failure is the
+  // same generic error, except tenant_suspended / tenant_cancelled, which are
+  // returned only after a correct password.
+  async login(dto: LoginDto): Promise<TokenPair> {
+    const user = await this.prisma.user.findUnique({
+      where: { email: normalizeEmail(dto.email) },
+      select: {
+        id: true,
+        tenantId: true,
+        role: true,
+        passwordHash: true,
+        isActive: true,
+        failedLoginAttempts: true,
+        lockedUntil: true,
+        tenant: { select: { status: true } },
+      },
+    });
+
+    // Unknown email, or locked: no counter change (an attempt during the lock
+    // neither counts nor extends it), but the same hashing cost.
+    if (
+      !user ||
+      (user.lockedUntil && user.lockedUntil.getTime() > Date.now())
+    ) {
+      await verifyPassword(await getDummyHash(), dto.password);
+      throw new InvalidCredentialsException();
+    }
+
+    const passwordMatches = await verifyPassword(
+      user.passwordHash,
+      dto.password,
+    );
+
+    // Deactivated users and purged tenants are indistinguishable from a wrong
+    // password; their failures are not counted.
+    if (!user.isActive || user.tenant?.status === 'DELETED') {
+      throw new InvalidCredentialsException();
+    }
+
+    if (!passwordMatches) {
+      await this.recordFailedLogin(user.id);
+      throw new InvalidCredentialsException();
+    }
+
+    if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginAttempts: 0, lockedUntil: null },
+      });
+    }
+
+    // owner, admin and platform_admin are never blocked by the tenant status.
+    if (user.role === 'SUPERVISOR' || user.role === 'EMPLOYEE') {
+      if (user.tenant?.status === 'SUSPENDED') {
+        throw new TenantSuspendedException();
+      }
+      if (user.tenant?.status === 'CANCELLED') {
+        throw new TenantCancelledException();
+      }
+    }
+
+    return this.tokens.issueTokenPair({
+      id: user.id,
+      tenantId: user.tenantId,
+      role: user.role,
+    });
+  }
+
+  // The increment is atomic; the 5th consecutive failure sets the lock and
+  // resets the counter, so once the lock expires the count starts fresh.
+  private async recordFailedLogin(userId: string): Promise<void> {
+    const { failedLoginAttempts } = await this.prisma.user.update({
+      where: { id: userId },
+      data: { failedLoginAttempts: { increment: 1 } },
+      select: { failedLoginAttempts: true },
+    });
+    if (failedLoginAttempts >= MAX_FAILED_LOGINS) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          failedLoginAttempts: 0,
+          lockedUntil: new Date(Date.now() + LOCK_DURATION_MS),
+        },
+      });
+    }
   }
 }
