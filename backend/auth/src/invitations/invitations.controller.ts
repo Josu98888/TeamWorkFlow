@@ -3,6 +3,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import { AUTH_PATTERNS } from '../auth/auth.patterns';
 import { CreateInvitationDto } from './dto/invitation-create.dto';
 import { ListInvitationsDto } from './dto/invitation-list.dto';
+import { RegenerateInvitationDto } from './dto/invitation-regenerate.dto';
 import {
   CreatedInvitation,
   InvitationsService,
@@ -22,5 +23,12 @@ export class InvitationsController {
   @MessagePattern(AUTH_PATTERNS.invitationList)
   list(@Payload() dto: ListInvitationsDto): Promise<PendingInvitation[]> {
     return this.invitations.list(dto);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.invitationRegenerate)
+  regenerate(
+    @Payload() dto: RegenerateInvitationDto,
+  ): Promise<CreatedInvitation> {
+    return this.invitations.regenerate(dto);
   }
 }
