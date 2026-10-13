@@ -2,7 +2,7 @@
 
 Follow /STEPS.rules.md. Order: /STEPS.index.md. Backend conventions: /backend/STEPS.template.md.
 
-**Status:** last verified: 2026-10-13 (S5.1) · next: S5.2 · in progress: S2.4 (automated check waits for S10.1) · blocked: S9.1, S9.2
+**Status:** last verified: 2026-10-13 (S5.2) · next: S5.3 · in progress: S2.4 (automated check waits for S10.1) · blocked: S9.1, S9.2
 
 Source of truth: `backend/auth/AGENTS.md`. Placeholders (`<lint>`, `<test>`, `<EXCL>`…) are defined in the backend template, run from `backend/auth/`.
 
@@ -98,11 +98,11 @@ Commits: de64216, 3a7c517, 8d2c793, 5ab70fa, ef83d8e, 0442db1, 119d5c5, fcd43d6,
 
 ## Phase 5 — User management and password reset
 
-Commits: 6e7544b
+Commits: 6e7544b, cc227d8, 61cda9c, 7fe0764, dd7ea79, f40b606
 
 - [x] **S5.1** Shared authorization guard `src/users/user-policy.ts`: same tenant, role table, no self-action, never on `owner` for deactivate/demote, never on or by `platform_admin`.
   Check: `<test> user-policy` passes: table-driven cases for every row of the AGENTS § Roles table plus tenant A actor → tenant B target = `forbidden`.
-- [ ] **S5.2** `auth.user.change-role` (uses S5.1); removing supervisor role sets its `siteIds` to `[]`; emits `user_role_changed`.
+- [x] **S5.2** `auth.user.change-role` (uses S5.1); removing supervisor role sets its `siteIds` to `[]`; emits `user_role_changed`.
   Check: `<test> change-role` passes; supervisor → employee leaves an empty `siteIds` for that user.
 - [ ] **S5.3** `auth.user.assign-sites`: replaces the full set for a `supervisor` only, same tenant; non-supervisor target → `forbidden`.
   Check: `<test> assign-sites` passes; second call with a different set leaves exactly the new set; verify (S3.7) returns it.
@@ -204,6 +204,7 @@ Native review (`gentle-ai review status`) fails with `operation_timeout` on gent
 | S4.3 | 0442db1, 119d5c5, fcd43d6 |
 | S4.4 | d5d095c, 40d641b, 198f3fe, d3e84ae |
 | S5.1 | 6e7544b |
+| S5.2 | 61cda9c, 7fe0764, dd7ea79, f40b606 |
 
 Known finding to check in that review: `readAccessToken` validates `sub` only as a non-empty string, but `users.id` is `@db.Uuid`; a correctly signed token with a non-UUID `sub` would make Postgres throw instead of returning `invalid_token` (needs `JWT_SECRET` to forge, low risk).
 
@@ -220,6 +221,7 @@ Known finding to check in that review: `readAccessToken` validates `sub` only as
 
 ## Decisions
 
+- 2026-10-13 S5.2: `UserChangeRoleService` (`src/users/user-change-role.service.ts`) behind `UsersController`/`UsersModule` (registered in `AppModule`). The wire `role` is limited by validation to `admin|supervisor|employee` (422 for `owner`, `platform_admin`, Prisma enum values or extra fields): AGENTS has no ownership transfer and `platform_admin` is seed/CLI only. Flow: only an owner/admin actor with a tenant gets past `isUserManager` (else `forbidden` before any query); inside one transaction the target is read with `{ id, tenantId: actor.tenantId, isActive: true }` and `canChangeRole` decides. Unknown id, user of another tenant, inactive user and any refused change all answer the same `forbidden` (403), like S4.3: no not-found code in AGENTS and a distinct answer would reveal ids of other tenants. Inactive targets are refused (conservative: a deactivated user has no active role to change and would produce a misleading event). The same role is a no-op: `{ ok: true }`, no write, no event. The write is `updateMany({ id, tenantId, isActive: true, role: <role read> })` and must report count 1 (else `forbidden`), so a concurrent role change cannot slip past the policy decision. Every role change sets `siteIds: []` (a supervisor losing the role loses its sites; the user never is a supervisor with sites otherwise). After commit it publishes `user_role_changed` with `{ userId, tenantId, role (wire), actorId }`. Existing sessions need nothing: `auth.token.verify` reads the role from the database. No schema change.
 - 2026-10-13 S5.1: `src/users/user-policy.ts` owns the AGENTS § Roles table as pure functions; actors are `{ userId, tenantId, role }` and targets `{ userId, tenantId, role }` (target role read from the database, wire value). Exports: `isUserManager(actor)` (owner/admin with a tenant), `canManageRole(actor, targetRole)` (owner: admin/supervisor/employee; admin: supervisor/employee; nobody on owner or platform_admin; false without tenant), `canChangeRole(actor, target, newRole)`, `canAssignSites(actor, target)`, `canDeactivate(actor, target)`, `canCreatePasswordReset(actor, target)`, plus `CHANGEABLE_ROLES` (`admin|supervisor|employee`). Every per-user function also requires: actor tenant non-null and equal to the target tenant, no self-action, and `canManageRole(actor, target.role)`, which makes owner and platform_admin targets and any tenant mismatch `false`. `canChangeRole` additionally needs a `newRole` in `CHANGEABLE_ROLES` that the actor may manage (so to or from `admin` is owner only, and nobody becomes owner or platform_admin). `canAssignSites` also needs a supervisor target. `canCreatePasswordReset` has no extra rule beyond the common ones: an owner's reset link is never generated through this pattern (AGENTS table lists only admin/supervisor/employee targets). Folded `canInvite`/`canListInvitations`: `src/invitations/invitation-policy.ts` keeps its names and spec but now delegates to `canManageRole`/`isUserManager`, so the table has one owner; behavior is identical (invitation suites green, 290 tests with the new policy spec). The policy only answers boolean; the use cases throw `forbidden` and must look the target up with the actor's tenant. No schema change.
 - 2026-10-09 S1.1: dependency set approved as listed. `prisma` CLI pinned to 7.10.0 to match `@prisma/client` (pnpm resolved 8.0.0-rc.22). `pnpm-workspace.yaml` allows build scripts for `prisma` and `@prisma/engines`; `argon2` runs from its bundled prebuild.
 - 2026-10-11 S1.6: user approved renaming the public contract from `{ cmd: 'login' }` to the `auth.<resource>.<action>` patterns in `src/auth/auth.patterns.ts` (e.g. `auth.login`). The gateway mirror is updated in S9.1.
