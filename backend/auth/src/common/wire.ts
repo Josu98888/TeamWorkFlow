@@ -57,6 +57,12 @@ const INVITATION_ROLE_FROM_WIRE: Record<WireInvitationRole, InvitationRole> = {
   employee: 'EMPLOYEE',
 };
 
+const INVITATION_ROLE_TO_WIRE: Record<InvitationRole, WireInvitationRole> = {
+  ADMIN: 'admin',
+  SUPERVISOR: 'supervisor',
+  EMPLOYEE: 'employee',
+};
+
 const TENANT_STATUS_TO_WIRE: Record<TenantStatus, WireTenantStatus> = {
   ACTIVE: 'active',
   PAST_DUE: 'past_due',
@@ -94,3 +100,7 @@ export const fromWirePlan = (plan: WirePlan): Plan => PLAN_FROM_WIRE[plan];
 export const fromWireInvitationRole = (
   role: WireInvitationRole,
 ): InvitationRole => INVITATION_ROLE_FROM_WIRE[role];
+
+export const toWireInvitationRole = (
+  role: InvitationRole,
+): WireInvitationRole => INVITATION_ROLE_TO_WIRE[role];

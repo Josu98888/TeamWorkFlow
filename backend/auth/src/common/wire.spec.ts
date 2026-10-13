@@ -8,6 +8,7 @@ import {
   fromWireInvitationRole,
   fromWirePlan,
   isWireRole,
+  toWireInvitationRole,
   fromWireRole,
   toWirePlan,
   toWireRole,
@@ -70,6 +71,7 @@ describe('wire values', () => {
     ['employee', 'EMPLOYEE'],
   ] as const)('maps invitation role %s to %s', (wire, prisma) => {
     expect(fromWireInvitationRole(wire)).toBe(prisma);
+    expect(toWireInvitationRole(prisma)).toBe(wire);
     expect(Object.values(InvitationRole)).toContain(prisma);
   });
 });
