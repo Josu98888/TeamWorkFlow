@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { hashPassword, hashToken, verifyPassword } from '../common/crypto';
 import { normalizeEmail } from '../common/email';
+import { assertTenantAllowsAccess } from '../common/tenant-access';
 import {
   isWireRole,
   toWirePlan,
@@ -13,12 +14,9 @@ import {
   EmailTakenException,
   InvalidCredentialsException,
   InvalidTokenException,
-  TenantCancelledException,
-  TenantSuspendedException,
 } from '../common/exceptions/app.exceptions';
 import { AUTH_EVENTS } from '../events/auth.events';
 import { JetStreamService } from '../events/jetstream.service';
-import type { Role, TenantStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -32,17 +30,6 @@ const UNIQUE_VIOLATION = 'P2002';
 // AGENTS � Brute-force protection.
 const MAX_FAILED_LOGINS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000;
-
-// owner, admin and platform_admin are never blocked by the tenant status;
-// supervisor and employee are (AGENTS � Tenant status).
-function assertTenantAllowsAccess(
-  role: Role,
-  status: TenantStatus | undefined,
-): void {
-  if (role !== 'SUPERVISOR' && role !== 'EMPLOYEE') return;
-  if (status === 'SUSPENDED') throw new TenantSuspendedException();
-  if (status === 'CANCELLED') throw new TenantCancelledException();
-}
 
 // Verified when there is no real hash to check (unknown email, locked
 // account), so those paths cost the same Argon2 work as a real attempt.
