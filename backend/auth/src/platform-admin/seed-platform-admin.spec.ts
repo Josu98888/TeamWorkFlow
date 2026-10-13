@@ -5,6 +5,9 @@ import type { SeedPlatformAdminDeps, SeedPrompt } from './seed-platform-admin';
 // The generated client is ESM-only; only its class shape is needed here.
 jest.mock('../generated/prisma/client', () => ({ PrismaClient: class {} }));
 
+// Argon2 hashing is slow under a full parallel run.
+jest.setTimeout(30_000);
+
 const PASSWORD = 'correct horse battery';
 const EMAIL = 'root@acme.test';
 
