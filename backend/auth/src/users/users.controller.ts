@@ -4,9 +4,11 @@ import { AUTH_PATTERNS } from '../auth/auth.patterns';
 import { AssignUserSitesDto } from './dto/user-assign-sites.dto';
 import { ChangeUserRoleDto } from './dto/user-change-role.dto';
 import { DeactivateUserDto } from './dto/user-deactivate.dto';
+import { ListRecipientsDto } from './dto/user-list-recipients.dto';
 import { UserAssignSitesService } from './user-assign-sites.service';
 import { UserChangeRoleService } from './user-change-role.service';
 import { UserDeactivateService } from './user-deactivate.service';
+import { UserListRecipientsService } from './user-list-recipients.service';
 
 // Transport only: each handler forwards to one service method.
 @Controller()
@@ -15,6 +17,7 @@ export class UsersController {
     private readonly changeRoleService: UserChangeRoleService,
     private readonly assignSitesService: UserAssignSitesService,
     private readonly deactivateService: UserDeactivateService,
+    private readonly listRecipientsService: UserListRecipientsService,
   ) {}
 
   @MessagePattern(AUTH_PATTERNS.userChangeRole)
@@ -30,5 +33,13 @@ export class UsersController {
   @MessagePattern(AUTH_PATTERNS.userDeactivate)
   deactivate(@Payload() dto: DeactivateUserDto): Promise<{ ok: true }> {
     return this.deactivateService.deactivate(dto);
+  }
+
+  // Internal services only (e.g. notifications); the gateway never routes it.
+  @MessagePattern(AUTH_PATTERNS.userListRecipients)
+  listRecipients(
+    @Payload() dto: ListRecipientsDto,
+  ): Promise<{ userIds: string[] }> {
+    return this.listRecipientsService.listRecipients(dto);
   }
 }
