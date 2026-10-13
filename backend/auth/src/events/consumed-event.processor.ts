@@ -22,6 +22,16 @@ export interface ConsumedEventContext {
   tx: Prisma.TransactionClient;
 }
 
+// Thrown by a handler when the payload is well-formed as an envelope but its
+// event-specific fields are invalid. It can never succeed, so the processor
+// rolls the transaction back, logs without the payload and acks (no redelivery).
+export class PoisonEventError extends Error {
+  constructor() {
+    super('Invalid event payload');
+    this.name = 'PoisonEventError';
+  }
+}
+
 // One handler per consumed subject filter (S7.x, S8.1).
 export interface ConsumedEventHandler {
   filter: ConsumedSubject;
@@ -75,16 +85,26 @@ export class ConsumedEventProcessor {
     const envelope = this.accept(message);
     if (!envelope) return;
 
-    const effects = await this.prisma.$transaction(async (tx) => {
-      // ON CONFLICT DO NOTHING: a duplicate neither fails nor aborts the
-      // transaction, and a concurrent duplicate waits for the first commit.
-      const inserted = await tx.processedEvent.createMany({
-        data: [{ eventId: envelope.eventId, tenantId: envelope.tenantId }],
-        skipDuplicates: true,
+    let effects: PostCommitEffect[];
+    try {
+      effects = await this.prisma.$transaction(async (tx) => {
+        // ON CONFLICT DO NOTHING: a duplicate neither fails nor aborts the
+        // transaction, and a concurrent duplicate waits for the first commit.
+        const inserted = await tx.processedEvent.createMany({
+          data: [{ eventId: envelope.eventId, tenantId: envelope.tenantId }],
+          skipDuplicates: true,
+        });
+        if (inserted.count === 0) return [];
+        return handler.handle({ ...envelope, tx });
       });
-      if (inserted.count === 0) return [];
-      return handler.handle({ ...envelope, tx });
-    });
+    } catch (error) {
+      if (error instanceof PoisonEventError) {
+        // Rolled back (the eventId is not recorded) and acked by returning.
+        this.logger.error(`Discarding invalid event on ${message.subject}`);
+        return;
+      }
+      throw error;
+    }
 
     for (const effect of effects) {
       try {

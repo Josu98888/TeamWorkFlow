@@ -1,6 +1,9 @@
 import { Logger } from '@nestjs/common';
 import { CONSUMED_SUBJECTS } from './auth.events';
-import { ConsumedEventProcessor } from './consumed-event.processor';
+import {
+  ConsumedEventProcessor,
+  PoisonEventError,
+} from './consumed-event.processor';
 import type {
   ConsumedEventContext,
   ConsumedEventHandler,
@@ -24,7 +27,7 @@ function message(overrides: Partial<ConsumedMessage> = {}): ConsumedMessage {
   };
 }
 
-// Covers: S7.1
+// Covers: S7.1, S7.3
 describe('ConsumedEventProcessor', () => {
   let processed: Set<string>;
   let committed: boolean;
@@ -158,6 +161,26 @@ describe('ConsumedEventProcessor', () => {
     handle.mockResolvedValueOnce([effect]);
     await processor.process(handler, message());
     expect(effect).toHaveBeenCalledTimes(1);
+  });
+
+  it('a handler that throws PoisonEventError is rolled back, logged without payload and acked', async () => {
+    const effect = jest.fn(() => Promise.resolve());
+    handle.mockImplementationOnce(() => Promise.reject(new PoisonEventError()));
+
+    await expect(
+      processor.process(handler, message()),
+    ).resolves.toBeUndefined();
+
+    expect(processed.size).toBe(0);
+    expect(errorLog).toHaveBeenCalledTimes(1);
+    expect(String(errorLog.mock.calls[0][0])).not.toContain(EVENT_ID);
+    expect(effect).not.toHaveBeenCalled();
+  });
+
+  it('an unexpected error is still rethrown (only PoisonEventError is acked)', async () => {
+    handle.mockRejectedValueOnce(new TypeError('boom'));
+
+    await expect(processor.process(handler, message())).rejects.toThrow('boom');
   });
 
   it('a failing effect is logged without payload and does not reject (the data is committed)', async () => {
