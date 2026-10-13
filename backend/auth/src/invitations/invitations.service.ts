@@ -11,9 +11,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateInvitationDto } from './dto/invitation-create.dto';
 import { ListInvitationsDto } from './dto/invitation-list.dto';
 import { RegenerateInvitationDto } from './dto/invitation-regenerate.dto';
-import { canInvite, canListInvitations } from './invitation-policy';
-
-const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+import {
+  canInvite,
+  canListInvitations,
+  INVITATION_TTL_MS,
+} from './invitation-policy';
 
 export interface CreatedInvitation {
   invitationId: string;

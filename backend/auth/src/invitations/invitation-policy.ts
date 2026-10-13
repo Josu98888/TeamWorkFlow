@@ -1,6 +1,9 @@
 import type { WireInvitationRole, WireRole } from '../common/wire';
 import { canManageRole, isUserManager } from '../users/user-policy';
 
+// Lifetime of an invitation link (AGENTS § Invitations): 7 days.
+export const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 // Who can invite which role (AGENTS roles table). The table has one owner,
 // `users/user-policy.ts` (S5.1); these wrappers keep the invitation names.
 // The actor is trusted as the gateway took it from `auth.token.verify`.
