@@ -23,8 +23,9 @@ export class TenantStatusConflictError extends Error {
   }
 }
 
-// Consumers of `payment_overdue`, `subscription_expired` and `payment_received`
-// (AGENTS § Tenant status). Dedupe, tenant check and the transaction come from
+// Consumers of the billing events that change the tenant status (AGENTS §
+// Tenant status): `payment_overdue`, `subscription_expired`, `payment_received`,
+// `subscription_cancelled` and `subscription_reactivated`. Dedupe, tenant check and the transaction come from
 // `ConsumedEventProcessor`; this class only decides and applies the transition.
 @Injectable()
 export class TenantStatusBillingHandlers implements OnModuleInit {
@@ -38,6 +39,8 @@ export class TenantStatusBillingHandlers implements OnModuleInit {
       [CONSUMED_SUBJECTS.paymentOverdue, 'payment_overdue'],
       [CONSUMED_SUBJECTS.subscriptionExpired, 'subscription_expired'],
       [CONSUMED_SUBJECTS.paymentReceived, 'payment_received'],
+      [CONSUMED_SUBJECTS.subscriptionCancelled, 'subscription_cancelled'],
+      [CONSUMED_SUBJECTS.subscriptionReactivated, 'subscription_reactivated'],
     ];
     for (const [filter, event] of handlers) {
       this.processor.register({
@@ -94,6 +97,11 @@ export class TenantStatusBillingHandlers implements OnModuleInit {
         return this.events.publish(tenantId, AUTH_EVENTS.tenantSuspended, {
           tenantId,
           suspendedAt: change.data.suspendedAt.toISOString(),
+        });
+      case 'CANCELLED':
+        return this.events.publish(tenantId, AUTH_EVENTS.tenantCancelled, {
+          tenantId,
+          cancelledAt: change.data.cancelledAt.toISOString(),
         });
       case 'ACTIVE':
         return this.events.publish(tenantId, AUTH_EVENTS.tenantReactivated, {

@@ -1,16 +1,26 @@
 import type { TenantStatus } from '../generated/prisma/enums';
 
-// Billing events that move the tenant between `active`, `past_due` and
-// `suspended` (AGENTS § Tenant status). S7.2 adds the cancel/reactivate ones.
+// Billing events that move the tenant between `active`, `past_due`,
+// `suspended` and `cancelled` (AGENTS § Tenant status).
 export type BillingStatusEvent =
-  'payment_overdue' | 'subscription_expired' | 'payment_received';
+  | 'payment_overdue'
+  | 'subscription_expired'
+  | 'payment_received'
+  | 'subscription_cancelled'
+  | 'subscription_reactivated';
 
 export interface TenantStatusChange {
   // Columns written together with the new status.
   data:
     | { status: 'PAST_DUE'; pastDueSince: Date }
     | { status: 'SUSPENDED'; suspendedAt: Date }
-    | { status: 'ACTIVE'; pastDueSince: null; suspendedAt: null };
+    | { status: 'CANCELLED'; cancelledAt: Date }
+    | {
+        status: 'ACTIVE';
+        pastDueSince: null;
+        suspendedAt: null;
+        cancelledAt: null;
+      };
   // Supervisors and employees lose their refresh tokens when access is cut.
   revokeSessions: boolean;
 }
@@ -46,7 +56,34 @@ export function billingTransition(
       // Never reactivates `cancelled` (only `subscription_reactivated` does).
       return status === 'PAST_DUE' || status === 'SUSPENDED'
         ? {
-            data: { status: 'ACTIVE', pastDueSince: null, suspendedAt: null },
+            data: {
+              status: 'ACTIVE',
+              pastDueSince: null,
+              suspendedAt: null,
+              cancelledAt: null,
+            },
+            revokeSessions: false,
+          }
+        : null;
+    case 'subscription_cancelled':
+      // From any state except `deleted`; already `cancelled` is a no-op. The
+      // other dates are kept until a reactivation clears them.
+      return status === 'CANCELLED' || status === 'DELETED'
+        ? null
+        : {
+            data: { status: 'CANCELLED', cancelledAt: at },
+            revokeSessions: true,
+          };
+    case 'subscription_reactivated':
+      // Only a `cancelled` tenant; `payment_received` can never do this.
+      return status === 'CANCELLED'
+        ? {
+            data: {
+              status: 'ACTIVE',
+              pastDueSince: null,
+              suspendedAt: null,
+              cancelledAt: null,
+            },
             revokeSessions: false,
           }
         : null;
