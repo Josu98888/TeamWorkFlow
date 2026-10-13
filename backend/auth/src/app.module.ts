@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
 import { EventsModule } from './events/events.module';
 import { InvitationsModule } from './invitations/invitations.module';
+import { PasswordResetModule } from './password-reset/password-reset.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 
@@ -11,6 +12,7 @@ import { UsersModule } from './users/users.module';
     AuthModule,
     InvitationsModule,
     UsersModule,
+    PasswordResetModule,
     EventsModule,
   ],
 })
