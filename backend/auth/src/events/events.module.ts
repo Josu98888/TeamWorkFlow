@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { envs } from '../config';
+import { ConsumedEventProcessor } from './consumed-event.processor';
 import { JETSTREAM_OPTIONS, JetStreamService } from './jetstream.service';
 
 @Module({
@@ -9,7 +10,8 @@ import { JETSTREAM_OPTIONS, JetStreamService } from './jetstream.service';
       useFactory: () => ({ servers: envs.natsServers }),
     },
     JetStreamService,
+    ConsumedEventProcessor,
   ],
-  exports: [JetStreamService],
+  exports: [JetStreamService, ConsumedEventProcessor],
 })
 export class EventsModule {}
