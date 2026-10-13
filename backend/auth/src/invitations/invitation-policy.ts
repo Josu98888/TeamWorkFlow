@@ -19,3 +19,14 @@ export function canInvite(
       return false;
   }
 }
+
+// Listing pending invitations: owner and admin of a tenant (AGENTS roles table).
+export function canListInvitations(actor: {
+  tenantId: string | null;
+  role: WireRole;
+}): boolean {
+  return (
+    actor.tenantId !== null &&
+    (actor.role === 'owner' || actor.role === 'admin')
+  );
+}

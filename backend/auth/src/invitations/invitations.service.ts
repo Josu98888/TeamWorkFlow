@@ -1,14 +1,16 @@
 import { Injectable } from '@nestjs/common';
+import type { WireInvitationRole } from '../common/wire';
 import { generateOpaqueToken, hashToken } from '../common/crypto';
 import { normalizeEmail } from '../common/email';
 import {
   EmailTakenException,
   ForbiddenException,
 } from '../common/exceptions/app.exceptions';
-import { fromWireInvitationRole } from '../common/wire';
+import { fromWireInvitationRole, toWireInvitationRole } from '../common/wire';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInvitationDto } from './dto/invitation-create.dto';
-import { canInvite } from './invitation-policy';
+import { ListInvitationsDto } from './dto/invitation-list.dto';
+import { canInvite, canListInvitations } from './invitation-policy';
 
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -17,6 +19,14 @@ export interface CreatedInvitation {
   // Raw single-use token: returned once, only its hash is stored.
   token: string;
   // ISO-8601 UTC (JSON over NATS has no Date type).
+  expiresAt: string;
+}
+
+export interface PendingInvitation {
+  invitationId: string;
+  email: string;
+  role: WireInvitationRole;
+  // ISO-8601 UTC.
   expiresAt: string;
 }
 
@@ -68,5 +78,32 @@ export class InvitationsService {
       token,
       expiresAt: invitation.expiresAt.toISOString(),
     };
+  }
+
+  // Pending = not used, not revoked and not expired. Metadata only: the token
+  // exists solely as a hash, so links cannot be listed (AGENTS Invitations).
+  async list(dto: ListInvitationsDto): Promise<PendingInvitation[]> {
+    const { actor } = dto;
+    if (!canListInvitations(actor) || actor.tenantId === null) {
+      throw new ForbiddenException();
+    }
+
+    const invitations = await this.prisma.invitation.findMany({
+      where: {
+        tenantId: actor.tenantId,
+        usedAt: null,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      select: { id: true, email: true, role: true, expiresAt: true },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    });
+
+    return invitations.map((invitation) => ({
+      invitationId: invitation.id,
+      email: invitation.email,
+      role: toWireInvitationRole(invitation.role),
+      expiresAt: invitation.expiresAt.toISOString(),
+    }));
   }
 }
