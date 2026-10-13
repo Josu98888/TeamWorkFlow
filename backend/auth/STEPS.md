@@ -141,9 +141,9 @@ All handlers: tenant taken from the subject AND checked against the payload; ded
 
 ## Phase 8 — Organization events
 
-Commits: —
+Commits: 5f3e7bc, fdbd1b9, 306b019, 253a2f9
 
-- [ ] **S8.1** `t.<tenant>.organization.employee_created` creates an `employee` invitation (`invitedById` null), idempotent by `eventId`, no duplicate when the email already has a pending invitation or a user.
+- [x] **S8.1** `t.<tenant>.organization.employee_created` creates an `employee` invitation (`invitedById` null), idempotent by `eventId`, no duplicate when the email already has a pending invitation or a user.
   Check: `<test> employee-created` passes: same event twice → one invitation; existing user → no invitation.
 
 ## Phase 9 — Close the loop
@@ -215,6 +215,7 @@ Native review (`gentle-ai review status`) fails with `operation_timeout` on gent
 | S7.3 | 30e26ee, a9b7d04, f7c0547, a89c3ca |
 | S7.4 | 61aa2e6, 7b00214, a89c3ca |
 | S7.5 | 51419da |
+| S8.1 | 5f3e7bc, fdbd1b9, 306b019, 253a2f9 |
 
 Known finding to check in that review: `readAccessToken` validates `sub` only as a non-empty string, but `users.id` is `@db.Uuid`; a correctly signed token with a non-UUID `sub` would make Postgres throw instead of returning `invalid_token` (needs `JWT_SECRET` to forge, low risk).
 
