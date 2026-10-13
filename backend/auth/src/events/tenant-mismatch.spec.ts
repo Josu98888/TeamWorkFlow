@@ -1,10 +1,10 @@
 import { Logger } from '@nestjs/common';
+import { EmployeeCreatedHandlers } from '../invitations/employee-created.handlers';
 import { TenantPlanHandlers } from '../tenants/tenant-plan.handlers';
 import { TenantPurgeHandlers } from '../tenants/tenant-purge.handlers';
 import { TenantStatusBillingHandlers } from '../tenants/tenant-status.billing.handlers';
 import { CONSUMED_SUBJECTS, subjectMatches } from './auth.events';
 import { ConsumedEventProcessor } from './consumed-event.processor';
-import type { ConsumedEventHandler } from './consumed-event.processor';
 import type { ConsumedMessage } from './jetstream.service';
 
 jest.mock('../config', () => ({ envs: {} }));
@@ -56,8 +56,6 @@ describe('subject/payload tenant mismatch on consumed events', () => {
     run: (m: ConsumedMessage) => Promise<void>;
   }[];
   let errorLog: jest.SpyInstance;
-  // A stub for `employee_created` (its real handler is S8.1).
-  const employeeCreated = jest.fn();
   // Every database method is a mock: a rejected event must reach none of them.
   const prisma = {
     $transaction: jest.fn(),
@@ -66,10 +64,14 @@ describe('subject/payload tenant mismatch on consumed events', () => {
       findUnique: jest.fn(),
       updateMany: jest.fn(),
     },
-    user: { deleteMany: jest.fn() },
+    user: { deleteMany: jest.fn(), findUnique: jest.fn() },
     refreshToken: { updateMany: jest.fn(), deleteMany: jest.fn() },
     passwordResetToken: { deleteMany: jest.fn() },
-    invitation: { create: jest.fn(), deleteMany: jest.fn() },
+    invitation: {
+      create: jest.fn(),
+      deleteMany: jest.fn(),
+      findFirst: jest.fn(),
+    },
   };
   const publish = jest.fn();
 
@@ -81,11 +83,13 @@ describe('subject/payload tenant mismatch on consumed events', () => {
       prisma.tenant.findUnique,
       prisma.tenant.updateMany,
       prisma.user.deleteMany,
+      prisma.user.findUnique,
       prisma.refreshToken.updateMany,
       prisma.refreshToken.deleteMany,
       prisma.passwordResetToken.deleteMany,
       prisma.invitation.create,
       prisma.invitation.deleteMany,
+      prisma.invitation.findFirst,
       publish,
     ];
   }
@@ -133,11 +137,7 @@ describe('subject/payload tenant mismatch on consumed events', () => {
     ).onModuleInit();
     new TenantPlanHandlers(processor).onModuleInit();
     new TenantPurgeHandlers(processor).onModuleInit();
-    const stub: ConsumedEventHandler = {
-      filter: CONSUMED_SUBJECTS.employeeCreated,
-      handle: employeeCreated,
-    };
-    processor.register(stub);
+    new EmployeeCreatedHandlers(processor).onModuleInit();
   });
 
   afterEach(() => {
@@ -150,7 +150,6 @@ describe('subject/payload tenant mismatch on consumed events', () => {
         deliver(filter, extra, TENANT_A, { tenantId: TENANT_B }),
       ).resolves.toBeUndefined();
 
-      expect(employeeCreated).not.toHaveBeenCalled();
       for (const mock of writes()) expect(mock).not.toHaveBeenCalled();
       expect(errorLog).toHaveBeenCalledTimes(1);
       const logged = String(errorLog.mock.calls[0][0]);
@@ -174,7 +173,6 @@ describe('subject/payload tenant mismatch on consumed events', () => {
         deliver(filter, extra, TENANT_A, fields),
       ).resolves.toBeUndefined();
 
-      expect(employeeCreated).not.toHaveBeenCalled();
       for (const mock of writes()) expect(mock).not.toHaveBeenCalled();
       expect(errorLog).toHaveBeenCalledTimes(1);
     });
@@ -184,18 +182,19 @@ describe('subject/payload tenant mismatch on consumed events', () => {
         deliver(filter, extra, null, { tenantId: TENANT_A }),
       ).resolves.toBeUndefined();
 
-      expect(employeeCreated).not.toHaveBeenCalled();
       for (const mock of writes()) expect(mock).not.toHaveBeenCalled();
     });
   });
 
   it('control: when subject and payload agree the employee_created handler runs', async () => {
-    employeeCreated.mockResolvedValue([]);
     prisma.$transaction.mockImplementation(
       (callback: (tx: typeof prisma) => unknown) =>
         Promise.resolve(callback(prisma)),
     );
     prisma.processedEvent.createMany.mockResolvedValue({ count: 1 });
+    prisma.tenant.findUnique.mockResolvedValue({ status: 'ACTIVE' });
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.invitation.findFirst.mockResolvedValue(null);
 
     await deliver(
       CONSUMED_SUBJECTS.employeeCreated,
@@ -204,10 +203,14 @@ describe('subject/payload tenant mismatch on consumed events', () => {
       { tenantId: TENANT_A },
     );
 
-    expect(employeeCreated).toHaveBeenCalledTimes(1);
-    expect(employeeCreated).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: TENANT_A, eventId: EVENT_ID }),
-    );
+    expect(prisma.invitation.create).toHaveBeenCalledTimes(1);
+    expect(prisma.invitation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        tenantId: TENANT_A,
+        email: 'employee@example.com',
+        invitedById: null,
+      }) as unknown,
+    });
     expect(errorLog).not.toHaveBeenCalled();
   });
 });
