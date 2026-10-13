@@ -61,7 +61,19 @@ const DEFAULT_RETRY_INITIAL_MS = 1_000;
 const DEFAULT_RETRY_MAX_MS = 30_000;
 // Redelivery delays for messages that were not acked.
 const HANDLER_FAILED_NAK_MS = 5_000;
+const HANDLER_FAILED_NAK_MAX_MS = 5 * 60_000;
 const NO_HANDLER_NAK_MS = 30_000;
+// A message whose handler keeps failing is given up after this many deliveries
+// (about 1.5 hours with the backoff above), so a poison message cannot loop forever.
+export const MAX_DELIVERIES = 20;
+
+// 5s, 10s, 20s, ... capped at 5 minutes.
+export function handlerRetryDelayMs(deliveryCount: number) {
+  return Math.min(
+    HANDLER_FAILED_NAK_MS * 2 ** Math.max(deliveryCount - 1, 0),
+    HANDLER_FAILED_NAK_MAX_MS,
+  );
+}
 
 function errorName(error: unknown) {
   return error instanceof Error ? error.name : 'UnknownError';
@@ -267,10 +279,18 @@ export class JetStreamService implements OnModuleInit, OnModuleDestroy {
       message.ack();
     } catch (error) {
       // Never log the payload or the error message: either may carry user data.
+      const deliveries = message.info.deliveryCount;
+      if (deliveries >= MAX_DELIVERIES) {
+        this.logger.error(
+          `Handler failed for ${message.subject} (${errorName(error)}) after ${deliveries} deliveries, giving up`,
+        );
+        message.term('max deliveries reached');
+        return;
+      }
       this.logger.error(
         `Handler failed for ${message.subject} (${errorName(error)}), will be redelivered`,
       );
-      message.nak(HANDLER_FAILED_NAK_MS);
+      message.nak(handlerRetryDelayMs(deliveries));
     }
   }
 

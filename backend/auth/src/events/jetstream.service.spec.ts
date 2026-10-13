@@ -7,7 +7,11 @@ import {
 } from '@nats-io/jetstream';
 import { connect } from '@nats-io/transport-node';
 import { AUTH_EVENTS, CONSUMED_SUBJECTS } from './auth.events';
-import { JetStreamService } from './jetstream.service';
+import {
+  JetStreamService,
+  MAX_DELIVERIES,
+  handlerRetryDelayMs,
+} from './jetstream.service';
 
 jest.mock('@nats-io/transport-node', () => ({ connect: jest.fn() }));
 jest.mock('@nats-io/jetstream', () => ({
@@ -34,11 +38,13 @@ interface FakeMessage {
   ack: jest.Mock;
   nak: jest.Mock;
   term: jest.Mock;
+  info: { deliveryCount: number };
 }
 
 function fakeMessage(subject: string, payload: unknown): FakeMessage {
   return {
     subject,
+    info: { deliveryCount: 1 },
     json: jest.fn(() => payload),
     ack: jest.fn(),
     nak: jest.fn(),
@@ -342,6 +348,37 @@ describe('JetStreamService', () => {
       const logged = String(errorLog.mock.calls[0][0]);
       expect(logged).toContain(subject);
       expect(logged).not.toContain('secret@example.com');
+    });
+
+    it('redelivers with a growing delay while the handler keeps failing', async () => {
+      service.registerHandler(CONSUMED_SUBJECTS.paymentOverdue, () =>
+        Promise.reject(new Error('db down')),
+      );
+      const first = fakeMessage(subject, {});
+      const third = fakeMessage(subject, {});
+      third.info.deliveryCount = 3;
+
+      feeds['auth-billing'].push(first);
+      feeds['auth-billing'].push(third);
+      await until(() => third.nak.mock.calls.length === 1);
+
+      expect(first.nak).toHaveBeenCalledWith(5_000);
+      expect(third.nak).toHaveBeenCalledWith(20_000);
+      expect(handlerRetryDelayMs(20)).toBe(300_000);
+    });
+
+    it('terminates a message whose handler failed on the last allowed delivery', async () => {
+      service.registerHandler(CONSUMED_SUBJECTS.paymentOverdue, () =>
+        Promise.reject(new Error('db down')),
+      );
+      const message = fakeMessage(subject, {});
+      message.info.deliveryCount = MAX_DELIVERIES;
+
+      feeds['auth-billing'].push(message);
+      await until(() => message.term.mock.calls.length === 1);
+
+      expect(message.nak).not.toHaveBeenCalled();
+      expect(message.ack).not.toHaveBeenCalled();
     });
 
     it('does not ack a message without a registered handler', async () => {
