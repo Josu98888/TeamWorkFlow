@@ -252,14 +252,17 @@ describe('UserChangeRoleService.changeRole', () => {
       ['admin', 'OWNER', 'employee'],
       ['owner', 'PLATFORM_ADMIN', 'employee'],
       ['admin', 'PLATFORM_ADMIN', 'supervisor'],
-    ] as const)('%s changing %s to %s is forbidden', async (a, current, next) => {
-      users = [target({ role: current })];
+    ] as const)(
+      '%s changing %s to %s is forbidden',
+      async (a, current, next) => {
+        users = [target({ role: current })];
 
-      expectForbidden(await errorOf(service.changeRole(dto(next, a))));
+        expectForbidden(await errorOf(service.changeRole(dto(next, a))));
 
-      expect(users[0].role).toBe(current);
-      expect(updateMany).not.toHaveBeenCalled();
-    });
+        expect(users[0].role).toBe(current);
+        expect(updateMany).not.toHaveBeenCalled();
+      },
+    );
 
     it.each(['supervisor', 'employee', 'platform_admin'] as const)(
       'an actor with role %s is forbidden before any query',

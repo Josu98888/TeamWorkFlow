@@ -136,12 +136,9 @@ describe('user policy (AGENTS roles table)', () => {
       ['supervisor', 'employee', 'supervisor', false],
       ['employee', 'supervisor', 'employee', false],
       ['platform_admin', 'employee', 'supervisor', false],
-    ] as const)(
-      '%s changing %s to %s -> %s',
-      (a, current, next, expected) => {
-        expect(canChangeRole(actor(a), target(current), next)).toBe(expected);
-      },
-    );
+    ] as const)('%s changing %s to %s -> %s', (a, current, next, expected) => {
+      expect(canChangeRole(actor(a), target(current), next)).toBe(expected);
+    });
 
     it('is forbidden on oneself', () => {
       expect(

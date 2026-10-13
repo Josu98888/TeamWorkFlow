@@ -162,9 +162,9 @@ describe('UserAssignSitesService.assignSites', () => {
 
   describe('replacing the set', () => {
     it('stores the given set for a supervisor', async () => {
-      await expect(
-        service.assignSites(dto([SITE_1, SITE_2])),
-      ).resolves.toEqual({ ok: true });
+      await expect(service.assignSites(dto([SITE_1, SITE_2]))).resolves.toEqual(
+        { ok: true },
+      );
 
       expect(users[0].siteIds).toEqual([SITE_1, SITE_2]);
     });
