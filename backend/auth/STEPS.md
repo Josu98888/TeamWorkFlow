@@ -2,7 +2,7 @@
 
 Follow /STEPS.rules.md. Order: /STEPS.index.md. Backend conventions: /backend/STEPS.template.md.
 
-**Status:** last verified: 2026-10-12 (S4.4) · next: S5.1 · in progress: S2.4 (automated check waits for S10.1) · blocked: S9.1, S9.2
+**Status:** last verified: 2026-10-13 (S5.1) · next: S5.2 · in progress: S2.4 (automated check waits for S10.1) · blocked: S9.1, S9.2
 
 Source of truth: `backend/auth/AGENTS.md`. Placeholders (`<lint>`, `<test>`, `<EXCL>`…) are defined in the backend template, run from `backend/auth/`.
 
@@ -98,9 +98,9 @@ Commits: de64216, 3a7c517, 8d2c793, 5ab70fa, ef83d8e, 0442db1, 119d5c5, fcd43d6,
 
 ## Phase 5 — User management and password reset
 
-Commits: —
+Commits: 6e7544b
 
-- [ ] **S5.1** Shared authorization guard `src/users/user-policy.ts`: same tenant, role table, no self-action, never on `owner` for deactivate/demote, never on or by `platform_admin`.
+- [x] **S5.1** Shared authorization guard `src/users/user-policy.ts`: same tenant, role table, no self-action, never on `owner` for deactivate/demote, never on or by `platform_admin`.
   Check: `<test> user-policy` passes: table-driven cases for every row of the AGENTS § Roles table plus tenant A actor → tenant B target = `forbidden`.
 - [ ] **S5.2** `auth.user.change-role` (uses S5.1); removing supervisor role sets its `siteIds` to `[]`; emits `user_role_changed`.
   Check: `<test> change-role` passes; supervisor → employee leaves an empty `siteIds` for that user.
@@ -203,6 +203,7 @@ Native review (`gentle-ai review status`) fails with `operation_timeout` on gent
 | S4.2 | 3a7c517, 8d2c793, 5ab70fa, ef83d8e |
 | S4.3 | 0442db1, 119d5c5, fcd43d6 |
 | S4.4 | d5d095c, 40d641b, 198f3fe, d3e84ae |
+| S5.1 | 6e7544b |
 
 Known finding to check in that review: `readAccessToken` validates `sub` only as a non-empty string, but `users.id` is `@db.Uuid`; a correctly signed token with a non-UUID `sub` would make Postgres throw instead of returning `invalid_token` (needs `JWT_SECRET` to forge, low risk).
 
@@ -219,6 +220,7 @@ Known finding to check in that review: `readAccessToken` validates `sub` only as
 
 ## Decisions
 
+- 2026-10-13 S5.1: `src/users/user-policy.ts` owns the AGENTS § Roles table as pure functions; actors are `{ userId, tenantId, role }` and targets `{ userId, tenantId, role }` (target role read from the database, wire value). Exports: `isUserManager(actor)` (owner/admin with a tenant), `canManageRole(actor, targetRole)` (owner: admin/supervisor/employee; admin: supervisor/employee; nobody on owner or platform_admin; false without tenant), `canChangeRole(actor, target, newRole)`, `canAssignSites(actor, target)`, `canDeactivate(actor, target)`, `canCreatePasswordReset(actor, target)`, plus `CHANGEABLE_ROLES` (`admin|supervisor|employee`). Every per-user function also requires: actor tenant non-null and equal to the target tenant, no self-action, and `canManageRole(actor, target.role)`, which makes owner and platform_admin targets and any tenant mismatch `false`. `canChangeRole` additionally needs a `newRole` in `CHANGEABLE_ROLES` that the actor may manage (so to or from `admin` is owner only, and nobody becomes owner or platform_admin). `canAssignSites` also needs a supervisor target. `canCreatePasswordReset` has no extra rule beyond the common ones: an owner's reset link is never generated through this pattern (AGENTS table lists only admin/supervisor/employee targets). Folded `canInvite`/`canListInvitations`: `src/invitations/invitation-policy.ts` keeps its names and spec but now delegates to `canManageRole`/`isUserManager`, so the table has one owner; behavior is identical (invitation suites green, 290 tests with the new policy spec). The policy only answers boolean; the use cases throw `forbidden` and must look the target up with the actor's tenant. No schema change.
 - 2026-10-09 S1.1: dependency set approved as listed. `prisma` CLI pinned to 7.10.0 to match `@prisma/client` (pnpm resolved 8.0.0-rc.22). `pnpm-workspace.yaml` allows build scripts for `prisma` and `@prisma/engines`; `argon2` runs from its bundled prebuild.
 - 2026-10-11 S1.6: user approved renaming the public contract from `{ cmd: 'login' }` to the `auth.<resource>.<action>` patterns in `src/auth/auth.patterns.ts` (e.g. `auth.login`). The gateway mirror is updated in S9.1.
 - 2026-10-09 S1.3: check fixed to match only `app.listen(` with arguments; a Nest microservice must call `app.listen()` without arguments to start the NATS server.
