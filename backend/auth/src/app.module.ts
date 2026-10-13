@@ -4,6 +4,7 @@ import { EventsModule } from './events/events.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { PasswordResetModule } from './password-reset/password-reset.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { TenantsModule } from './tenants/tenants.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -14,6 +15,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     PasswordResetModule,
     EventsModule,
+    TenantsModule,
   ],
 })
 export class AppModule {}
