@@ -157,9 +157,9 @@ Commits: —
 
 ## Phase 10 — E2E
 
-Commits: —
+Commits: 7d50f48, fb34393, b436515
 
-- [ ] **S10.1** `test/jest-e2e.json` and a harness that targets `backend/docker-compose.test.yml` (backend S2.5: NATS 4223, PostgreSQL 5433) and applies the `auth` migrations there before the suite. Fake data only.
+- [x] **S10.1** `test/jest-e2e.json` and a harness that targets `backend/docker-compose.test.yml` (backend S2.5: NATS 4223, PostgreSQL 5433) and applies the `auth` migrations there before the suite. Fake data only.
   Check: `<e2e>` runs and reports 0 failed.
 - [ ] **S10.2** E2E over NATS: register → login → verify → refresh (old rejected) → logout; invitation create → accept → login; tenant isolation (admin A on user B → `forbidden`).
   Check: `<e2e> session` and `<e2e> isolation` pass. Covers: S3.3–S3.7, S4.1, S4.4, S5.1.
@@ -216,6 +216,7 @@ Native review (`gentle-ai review status`) fails with `operation_timeout` on gent
 | S7.4 | 61aa2e6, 7b00214, a89c3ca |
 | S7.5 | 51419da |
 | S8.1 | 5f3e7bc, fdbd1b9, 306b019, 253a2f9 |
+| S10.1 | 7d50f48, fb34393, b436515 |
 
 Known finding to check in that review: `readAccessToken` validates `sub` only as a non-empty string, but `users.id` is `@db.Uuid`; a correctly signed token with a non-UUID `sub` would make Postgres throw instead of returning `invalid_token` (needs `JWT_SECRET` to forge, low risk).
 
@@ -276,4 +277,5 @@ Known finding to check in that review: `readAccessToken` validates `sub` only as
 - DEFAULT(auth): registration password length 8 to 128 characters, no composition rules (S3.3).
 - DEFAULT(auth): one `ProcessedEvent` table (`eventId` PK) for every consumer (Phase 7, S8.1).
 - DEFAULT(auth): platform admin seed as `prisma/seed-platform-admin.ts` + `seed:platform-admin` script with interactive prompt (S6.1).
+- DEFAULT(auth): e2e harness in `test/` (S10.1): specs are `test/*.e2e-spec.ts` (never matched by the unit config), one jest worker (`maxWorkers: 1`, shared database), `globalSetup` runs `prisma migrate deploy` against the test stack only, `setupFiles` overwrite the env with test-only values and refuse ports 4222/5432. Helpers: `startAuthApp()` (boots `AppModule` on NATS 4223 and a client `send`), `cleanDatabase()` (truncates every `auth` table), `db()` (raw `pg`). `moduleNameMapper` strips `.js` from relative imports because the Prisma client is generated with them.
 - DEFAULT(auth): source layout `src/auth/` (sessions), `src/invitations/`, `src/users/`, `src/password-reset/`, `src/tenants/`, `src/events/`, `src/common/`, `src/prisma/`.
