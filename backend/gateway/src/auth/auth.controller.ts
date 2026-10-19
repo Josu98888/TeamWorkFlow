@@ -1,30 +1,33 @@
-import { Controller, Inject } from '@nestjs/common';
-import { Post } from '@nestjs/common';
+import { Controller, Inject, Post, Body } from '@nestjs/common';
 import { NATS_SERVICE } from '../config';
 import { ClientProxy } from '@nestjs/microservices';
+import { authPatterns } from './auth.patterns';
+import { Public } from '../common/decorators/public.decorator';
 
 @Controller('auth')
 export class AuthController {
   @Inject(NATS_SERVICE) private readonly client: ClientProxy;
-  constructor() {} 
 
+  @Public()
   @Post('login')
-  login() {
-    return this.client.send({ cmd: 'login' }, {});
+  login(@Body() body: any) {
+    return this.client.send(authPatterns.login, body);
   }
 
   @Post('logout')
-  logout() {
-    return { message: 'Logout successful' };
+  logout(@Body() body: any) {
+    return this.client.send(authPatterns.logout, body);
   } 
 
+  @Public()
   @Post('register')
-  register() {
-    return { message: 'Registration successful' };
+  register(@Body() body: any) {
+    return this.client.send(authPatterns.register, body);
   }
 
-   @Post('refresh-token')
-  refreshToken() {
-    return { message: 'Token refreshed successfully' };
+  @Public()
+  @Post('refresh-token')
+  refreshToken(@Body() body: any) {
+    return this.client.send(authPatterns.refreshToken, body);
   }
 }

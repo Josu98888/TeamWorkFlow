@@ -16,7 +16,7 @@ Responsibilities:
 
 Out of scope (do NOT implement here):
 
-- Login, passwords, roles, invitations, site scope of supervisors (`user_sites`): owned by `auth`. `organization` receives the actor from the gateway and trusts it.
+- Login, passwords, roles, invitations, site scope of supervisors (`User.siteIds`): owned by `auth`. `organization` receives the actor from the gateway and trusts it.
 - Clock-ins, workdays, alerts and the Torre de Control summaries: owned by `attendance`.
 - Tasks, forms and photos: owned by `tasks`. Avatars are stored by `tasks` media; here only the media id is kept.
 - Sending notifications: owned by `notifications`.

@@ -10,6 +10,9 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
+# The Prisma Client is generated code (src/generated, gitignored): build it before nest build
+RUN pnpm exec prisma generate
+
 EXPOSE 3001
 
 CMD ["pnpm", "run", "start:dev"]

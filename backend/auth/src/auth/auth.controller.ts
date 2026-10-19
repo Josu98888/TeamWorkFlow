@@ -1,35 +1,41 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
-import { CreateAuthDto } from './dto/create-auth.dto';
-import { UpdateAuthDto } from './dto/update-auth.dto';
+import { AUTH_PATTERNS } from './auth.patterns';
+import { LoginDto } from './dto/login.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { VerifyTokenDto } from './dto/verify-token.dto';
+import { RegisterDto } from './dto/register.dto';
+import type { TokenPair } from './token.service';
+import type { VerifiedActor } from './verified-actor';
 
+// Transport only: each handler forwards to one service method.
 @Controller()
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @MessagePattern('createAuth')
-  create(@Payload() createAuthDto: CreateAuthDto) {
-    return this.authService.create(createAuthDto);
+  @MessagePattern(AUTH_PATTERNS.register)
+  register(@Payload() dto: RegisterDto): Promise<TokenPair> {
+    return this.authService.register(dto);
   }
 
-  @MessagePattern('findAllAuth')
-  findAll() {
-    return this.authService.findAll();
+  @MessagePattern(AUTH_PATTERNS.login)
+  login(@Payload() dto: LoginDto): Promise<TokenPair> {
+    return this.authService.login(dto);
   }
 
-  @MessagePattern('findOneAuth')
-  findOne(@Payload() id: number) {
-    return this.authService.findOne(id);
+  @MessagePattern(AUTH_PATTERNS.tokenRefresh)
+  refresh(@Payload() dto: RefreshTokenDto): Promise<TokenPair> {
+    return this.authService.refresh(dto);
   }
 
-  @MessagePattern('updateAuth')
-  update(@Payload() updateAuthDto: UpdateAuthDto) {
-    return this.authService.update(updateAuthDto.id, updateAuthDto);
+  @MessagePattern(AUTH_PATTERNS.logout)
+  logout(@Payload() dto: RefreshTokenDto): Promise<{ ok: true }> {
+    return this.authService.logout(dto);
   }
 
-  @MessagePattern('removeAuth')
-  remove(@Payload() id: number) {
-    return this.authService.remove(id);
+  @MessagePattern(AUTH_PATTERNS.tokenVerify)
+  verify(@Payload() dto: VerifyTokenDto): Promise<VerifiedActor> {
+    return this.authService.verify(dto);
   }
 }

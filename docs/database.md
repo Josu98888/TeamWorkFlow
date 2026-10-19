@@ -66,7 +66,6 @@ Identidad, sesiones y estado de acceso del tenant. Fuente de verdad: [`backend/a
 ```mermaid
 erDiagram
   Tenant ||--o{ User : "tiene"
-  User ||--o{ UserSite : "supervisa"
   User ||--o{ RefreshToken : "sesiones"
   Tenant ||--o{ Invitation : "emite"
   User ||--o{ Invitation : "invitedBy"
@@ -94,13 +93,9 @@ erDiagram
     Boolean isActive
     Int failedLoginAttempts
     DateTime lockedUntil
+    StringList siteIds "solo SUPERVISOR; ref. organization"
     DateTime createdAt
     DateTime updatedAt
-  }
-  UserSite {
-    String tenantId
-    String userId PK, FK
-    String siteId PK "ref. organization"
   }
   RefreshToken {
     String id PK
@@ -143,9 +138,9 @@ Reglas clave:
 - `User.tenantId` admite null solo para `PLATFORM_ADMIN`; una restricción check garantiza que todos los demás roles tengan un tenant y que `PLATFORM_ADMIN` no tenga ninguno.
 - Los roles son fijos: `OWNER`, `ADMIN`, `SUPERVISOR`, `EMPLOYEE` y el rol de plataforma `PLATFORM_ADMIN`. Los usuarios nunca se eliminan definitivamente mientras su tenant exista; se desactivan (`isActive = false`).
 - Los tokens de refresco, de invitación y de restablecimiento de contraseña se guardan solo como hashes SHA-256.
-- `UserSite` (tabla `user_sites`) tiene clave primaria (`userId`, `siteId`) y filas solo para supervisores; `siteId` referencia una sede de `organization` sin clave foránea y no se valida aquí.
+- `User.siteIds` (columna `site_ids`, arreglo con valor por defecto vacío) guarda las sedes de un supervisor; los demás roles tienen `[]`. Cada `siteId` referencia una sede de `organization` sin clave foránea y no se valida aquí. Tiene un índice GIN para filtrar destinatarios por sede.
 - `Tenant` conserva el `plan` y las `features` vigentes a partir de los eventos de `billing`, y `planUpdatedAt` evita que un evento desactualizado sobrescriba uno más nuevo.
-- Purga: con `data_retention_expired` se eliminan los usuarios, tokens, invitaciones, `user_sites` y eventos procesados del tenant, y la fila de `Tenant` permanece como registro residual (`id`, `name`, estado `DELETED`).
+- Purga: con `data_retention_expired` se eliminan los usuarios, tokens, invitaciones y eventos procesados del tenant, y la fila de `Tenant` permanece como registro residual (`id`, `name`, estado `DELETED`).
 - `auth` no usa RLS en `tenants` ni en `users` porque resuelve el tenant durante el login; aun así, toda consulta filtra por `tenantId`.
 
 ## organization
