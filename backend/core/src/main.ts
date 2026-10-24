@@ -21,6 +21,6 @@ async function bootstrap() {
   await app.startAllMicroservices();
 
   await app.listen(envs.port);
-  logger.log(`Core is running on: http://localhost:/api/v1`);
+  logger.log(`Core is running on: http://localhost:${envs.port}/api/v1`);
 }
 void bootstrap();
