@@ -159,18 +159,18 @@ Out of scope (do NOT implement here):
 
 - NestJS 12 module inside `backend/core`; HTTP controllers for this module's endpoints live in `src/auth/` (see `backend/core/AGENTS.md`). NATS is used for JetStream events and for the one request responder `telemetry` needs (`auth.token.verify`).
 - PostgreSQL + Prisma 7 (own `src/auth/prisma/schema.prisma`, migrations and generated client, colocated in the module; Prisma config `backend/core/prisma.auth.config.ts`, scripts `pnpm prisma:auth:generate` / `prisma:auth:migrate:dev` / `prisma:auth:migrate:deploy` / `prisma:auth:migrate:status`; `auth` schema of the shared `teamworkflow` database, accessed with the `auth_svc` role that cannot read other schemas; see `backend/STEPS.md` S1.1). `PrismaService` is private to `AuthModule`.
-- Password hashing: Argon2id (`argon2` package). Not installed yet.
-- JWT: `@nestjs/jwt`. Not installed yet.
-- Validation: `class-validator` + `class-transformer` with the global `ValidationPipe` of `core` (422 `validation_error`). Not installed yet.
+- Password hashing: Argon2id (`argon2` package).
+- JWT: `@nestjs/jwt`.
+- Validation: `class-validator` + `class-transformer` with the global `ValidationPipe` of `core` (422 `validation_error`); the NATS responder binds the same pipe itself.
 - Env validation with joi in `src/config/envs.ts`, same pattern as the rest of `core`.
 
 Ask before installing any dependency.
 
 ## Current Status (READ FIRST)
 
-Until task T6 of `odd/tasks/two-service-architecture.md` runs, the auth code still lives in `backend/auth` (a NATS microservice with `@MessagePattern` handlers, implemented step by step; the status of each step is in [STEPS.md](STEPS.md)) and the HTTP layer in `backend/gateway`. T6 merges both into `backend/core`: this module's `@MessagePattern` handlers become HTTP controllers calling the same services, `auth.token.verify` is also kept as a NATS responder for `telemetry`, and the services, DTOs, events and tests move unchanged. The `backend/core` folder does not contain code yet.
+Task T6 of `odd/tasks/two-service-architecture.md` is merging `backend/auth` (a NATS microservice with `@MessagePattern` handlers; step status in [STEPS.md](STEPS.md)) and `backend/gateway` into `backend/core`: handlers become HTTP controllers calling the same services, and `auth.token.verify` is also kept as a NATS responder for `telemetry`. Done in `src/auth/` so far: Prisma layout, crypto, wire and tenant access (T6.3); and, in T6.4a, `AuthService` (register, login, refresh, logout, verify), `TokenService`, the register/login/refresh/logout/verify DTOs, the HTTP controller (`POST /api/auth/register|login|refresh|logout`; `refresh` replaces the gateway's `refresh-token`), the `auth.token.verify` NATS responder, `JetStreamService` for publishing (`src/auth/events/`, producer side only) and `AuthModule` (exports only `AuthService`). The global guard lives in `src/http/guards/`. Not moved yet: invitations, users and password reset (T6.4b), the consumed-event processor and handlers, tenants and platform admin (T6.5).
 
-NOTE (gap): the previous text of this section described the initial Nest CLI skeleton and "Not installed yet" dependencies, which no longer matches the code in `backend/auth`; it was replaced by this paragraph and the Stack list above is still the planned stack.
+NOTE (gap): `POST /auth/logout` is guarded, but `AuthService.logout` does not check that the refresh token belongs to the actor (behavior moved unchanged); decide whether to scope it. Web cookies and CSRF are not implemented: the guard reads `Authorization: Bearer` only and tokens are returned in the JSON body.
 
 Do not change the code in `backend/auth` or `backend/gateway` for the merge without the user asking for it (T6).
 
