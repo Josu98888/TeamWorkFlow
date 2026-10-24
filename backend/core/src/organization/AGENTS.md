@@ -1,12 +1,12 @@
-# AGENTS.md — `organization` microservice
+# AGENTS.md — `organization` module (`backend/core`)
 
-Guide for coding agents working on this service. Read it fully before making changes. It overrides the root `AGENTS.md` when they conflict. Code patterns live in `skills/teamworkflow-nest`; migrations in `skills/teamworkflow-prisma-migrations`.
+Guide for coding agents working on the `organization` module of `backend/core`. Read `backend/core/AGENTS.md` (core-wide rules: module boundaries, HTTP layer, event bus) and then this file fully before making changes. This file overrides the root `AGENTS.md` and `backend/core/AGENTS.md` for the `organization` domain rules when they conflict. Code patterns live in `skills/teamworkflow-nest`; migrations in `skills/teamworkflow-prisma-migrations`.
 
-## What this service is
+## What this module is
 
-`organization` knows WHERE and WHEN people work: the sites of a tenant, the people who work there, and the shifts that connect both. Every other operational service (attendance, tasks, notifications) asks it or listens to it.
+`organization` knows WHERE and WHEN people work: the sites of a tenant, the people who work there, and the shifts that connect both. Every other operational module (tasks, notifications) and the `telemetry` service (`attendance` domain) ask it or listen to it.
 
-It is one NestJS 12 app with three internal modules: `sites`, `employees` and `shifts`. In the 16-service target architecture of the root README these may be split later, so keep modules separable: a module never reads another module's tables directly, it calls the other module's exported service.
+It is a module of the `backend/core` modular monolith (`src/organization/`, `OrganizationModule`) with three internal sub-modules: `sites`, `employees` and `shifts`. Other core modules reach it only through its exported facade service, or through its events; it can be extracted to its own service later without changing its event consumers (`docs/architecture.md`). Keep the sub-modules separable too: a sub-module never reads another sub-module's tables directly, it calls the other's exported service.
 
 Responsibilities:
 
@@ -16,8 +16,8 @@ Responsibilities:
 
 Out of scope (do NOT implement here):
 
-- Login, passwords, roles, invitations, site scope of supervisors (`User.siteIds`): owned by `auth`. `organization` receives the actor from the gateway and trusts it.
-- Clock-ins, workdays, alerts and the Torre de Control summaries: owned by `attendance`.
+- Login, passwords, roles, invitations, site scope of supervisors (`User.siteIds`): owned by `auth`. `organization` receives the actor from the HTTP layer of `core` (its own HTTP controllers) and trusts it.
+- Clock-ins, workdays, alerts and the Torre de Control summaries: owned by the `attendance` domain, which lives in the `telemetry` service (`backend/telemetry`).
 - Tasks, forms and photos: owned by `tasks`. Avatars are stored by `tasks` media; here only the media id is kept.
 - Sending notifications: owned by `notifications`.
 - Payroll, holidays, night hours, automatic emergency replacement, polygon geofences, PostGIS. Future work; ask before adding.
@@ -41,7 +41,7 @@ Out of scope (do NOT implement here):
 5. An admin creates an operational employee with email through `organization.employee.create`. It emits `t.<tenant>.organization.employee_created`; `auth` consumes it to create an `employee` invitation. The email is unique per tenant.
 6. Employees are never hard-deleted.
 
-### Roles in this service
+### Roles in this module
 
 | Action | owner / admin | supervisor | employee |
 |--------|:-------------:|:----------:|:--------:|
@@ -52,7 +52,7 @@ Out of scope (do NOT implement here):
 | Read sites, employees, shifts | ✅ all | ✅ only `siteIds` | own profile and own shifts only |
 
 - `owner` and `admin` see every site of the tenant. A supervisor acts only on sites listed in the actor's `siteIds`; anything outside them answers 404 (never 403) to prevent enumeration.
-- The actor (`userId`, `tenantId`, `role`, `siteIds`) comes from the gateway, which got it from `auth.token.verify`. Never read tenant or role from the payload body.
+- The actor (`userId`, `tenantId`, `role`, `siteIds`) comes from the HTTP layer of `core`, which got it from `auth.token.verify`. Never read tenant or role from the payload body.
 
 ### Shift templates and generation
 
@@ -86,64 +86,66 @@ Each transition is applied once (compare-and-set on the status or on a marker co
 
 ### Tenant suspension and cancellation
 
-Consume `t.<tenant>.auth.tenant_suspended`, `tenant_cancelled` and `tenant_reactivated`. While a tenant is suspended or cancelled: the generator and the lifecycle job skip it (no `shift_*` events). Interactive requests are not blocked here (the gateway does that). Data is kept. After reactivation the jobs resume and the lifecycle job catches up.
+Consume `t.<tenant>.auth.tenant_suspended`, `tenant_cancelled` and `tenant_reactivated`. While a tenant is suspended or cancelled: the generator and the lifecycle job skip it (no `shift_*` events). Interactive requests are not blocked here (the HTTP layer of `core` does that). Data is kept. After reactivation the jobs resume and the lifecycle job catches up.
 
 ### Tenant data purge
 
-Consume `t.<tenant>.billing.data_retention_expired` (emitted 90 days after the tenant was cancelled). It permanently deletes ALL the tenant's data in this service: sites, posts, employees and their enabled sites, shift templates, shifts, tenant state and processed events. It is idempotent (a second delivery finds nothing and is a no-op), runs in one transaction, and emits no `shift_*` or `site_updated` events (the other services purge their own copies from the same event).
+Consume `t.<tenant>.billing.data_retention_expired` (emitted 90 days after the tenant was cancelled). It permanently deletes ALL the tenant's data in this module: sites, posts, employees and their enabled sites, shift templates, shifts, tenant state and processed events. It is idempotent (a second delivery finds nothing and is a no-op), runs in one transaction, and emits no `shift_*` or `site_updated` events (the other modules and `telemetry` purge their own copies from the same event).
 
 ## Stack
 
-- NestJS 12 microservice over NATS (`@nestjs/microservices`).
-- PostgreSQL + Prisma 7 with its own `prisma/schema.prisma` in the `organization` schema of the shared `teamworkflow` database, accessed with its own `organization_svc` role that cannot read other schemas (see `backend/STEPS.md` S1.1). Not installed yet.
-- `class-validator` + `class-transformer` with a global `ValidationPipe` throwing `RpcException`. Not installed yet.
+- NestJS 12 module inside `backend/core`; HTTP controllers for this module's endpoints live in `src/organization/` (see `backend/core/AGENTS.md`). NATS is used for JetStream events and for the request responders that `telemetry` needs (see NATS Contract).
+- PostgreSQL + Prisma 7 with its own `prisma/schema.prisma` in the `organization` schema of the shared `teamworkflow` database, accessed through its own Prisma client with its own `organization_svc` role that cannot read other schemas (see `backend/STEPS.md` S1.1). Not installed yet.
+- `class-validator` + `class-transformer` with the global `ValidationPipe` of `core` (422 `validation_error`). Not installed yet.
 - Scheduling for the jobs (for example `@nestjs/schedule`). Not installed yet.
-- Env validation with joi in `src/config/envs.ts`, same pattern as the gateway.
+- Env validation with joi in `src/config/envs.ts`, same pattern as the rest of `core`.
 - Jest for tests.
 
 Ask before installing any dependency.
 
 ## Current Status (READ FIRST)
 
-The folder contains only this `AGENTS.md` and the `README.md`. There is no Nest app yet: no `package.json`, no `src/`, no Prisma, no Dockerfile, no entry in `backend/docker-compose.yml`.
+`backend/core` does not exist yet (task T6 of `odd/tasks/two-service-architecture.md` creates it from `backend/gateway` + `backend/auth`). This folder contains only this `AGENTS.md`: there is no `OrganizationModule`, no Prisma schema, no controllers.
 
 First tasks, in order (ask before each install):
 
-- [ ] Scaffold the Nest app (microservice bootstrap with `Transport.NATS`, `src/config/envs.ts`, `.env.example`).
+- [ ] Create `OrganizationModule` in `backend/core/src/organization/` (needs `backend/core` from T6), its config in `src/config/envs.ts` and `.env.example`.
 - [ ] Prisma schema and first migration for `sites`.
-- [ ] Modules `sites`, `employees`, `shifts`, with their patterns constants.
+- [ ] Sub-modules `sites`, `employees`, `shifts`, with their HTTP controllers, the exported facade service and the pattern constants for the NATS responders.
 - [ ] Consumers of `auth` events and the jobs.
-- [ ] Add the service to `backend/docker-compose.yml` and the gateway routes.
+- [ ] Expose the module routes through its HTTP controllers in `core` (no separate service, no extra compose entry).
 
 ## NATS Contract
 
-Request-reply patterns follow `organization.<resource>.<action>` and carry NO tenant in the subject: the tenant comes from the actor. Domain events follow `t.<tenant>.organization.<event>` (JetStream, snake_case names). Keep the pattern names in constants files (to create: `src/<module>/<module>.patterns.ts`) and keep the gateway side in sync.
+Operation names follow `organization.<resource>.<action>` and carry NO tenant: the tenant comes from the actor. Domain events follow `t.<tenant>.organization.<event>` (JetStream, snake_case names).
 
-### Request-reply (`@MessagePattern`)
+In `core` the operations below are **in-process calls** to the module's facade service (invoked by the module's HTTP controllers and by other core modules); the pattern string is kept as the operation's stable name. Only these three are also **NATS request-reply responders**, because `telemetry` (a separate service) needs them: `organization.site.get`, `organization.employee.get`, `organization.shift.get`. Keep the names in constants files (to create: `src/organization/organization.patterns.ts`).
+
+### Operations (module facade) and NATS responders
 
 "actor" = `{ userId, tenantId, role, siteIds }` from `auth.token.verify`. Lists return `{ items, total }`.
 
-| Pattern | Caller | Payload | Returns |
+| Operation | Caller | Payload | Returns |
 |---------|--------|---------|---------|
-| `organization.site.create` / `update` | gateway (owner/admin) | actor, site fields (and `siteId` on update) | site |
-| `organization.site.get` | gateway, `attendance` | actor, `siteId` | site with geofence and `qrCode` |
-| `organization.site.list` | gateway | actor, `page`, `pageSize` | sites visible to the actor |
-| `organization.site.rotate-qr` | gateway (owner/admin) | actor, `siteId` | site with the new `qrCode` |
-| `organization.post.create` / `update` / `list` | gateway | actor, `siteId`, post fields | post / posts |
-| `organization.employee.create` | gateway (owner/admin) | actor, profile + operational fields, `email` | employee |
-| `organization.employee.update` | gateway (owner/admin) | actor, `employeeId`, fields (skills, enabled sites, weekly limit, ...) | employee |
-| `organization.employee.get` | gateway, other services | actor, `employeeId` OR `userId` | employee |
-| `organization.employee.list` | gateway | actor, filters, `page`, `pageSize` | employees |
-| `organization.employee.list-available` | gateway (owner/admin/supervisor) | actor, `shiftId` | employees able to replace, sorted by fewest weekly hours first |
-| `organization.shift-template.create` / `update` / `deactivate` / `list` | gateway (owner/admin) | actor, template fields | template / templates |
-| `organization.shift.create` | gateway (owner/admin/supervisor) | actor, site, post, `startsAt`, `endsAt`, optional `employeeId` | `{ shift, warnings }` |
+| `organization.site.create` / `update` | HTTP controller (owner/admin) | actor, site fields (and `siteId` on update) | site |
+| `organization.site.get` | HTTP controller; `telemetry` (NATS responder) | actor, `siteId` | site with geofence and `qrCode` |
+| `organization.site.list` | HTTP controller | actor, `page`, `pageSize` | sites visible to the actor |
+| `organization.site.rotate-qr` | HTTP controller (owner/admin) | actor, `siteId` | site with the new `qrCode` |
+| `organization.post.create` / `update` / `list` | HTTP controller | actor, `siteId`, post fields | post / posts |
+| `organization.employee.create` | HTTP controller (owner/admin) | actor, profile + operational fields, `email` | employee |
+| `organization.employee.update` | HTTP controller (owner/admin) | actor, `employeeId`, fields (skills, enabled sites, weekly limit, ...) | employee |
+| `organization.employee.get` | HTTP controller, other core modules (facade); `telemetry` (NATS responder) | actor, `employeeId` OR `userId` | employee |
+| `organization.employee.list` | HTTP controller | actor, filters, `page`, `pageSize` | employees |
+| `organization.employee.list-available` | HTTP controller (owner/admin/supervisor) | actor, `shiftId` | employees able to replace, sorted by fewest weekly hours first |
+| `organization.shift-template.create` / `update` / `deactivate` / `list` | HTTP controller (owner/admin) | actor, template fields | template / templates |
+| `organization.shift.create` | HTTP controller (owner/admin/supervisor) | actor, site, post, `startsAt`, `endsAt`, optional `employeeId` | `{ shift, warnings }` |
 | `organization.shift.update` | same | actor, `shiftId`, `version`, fields | `{ shift, warnings }` |
 | `organization.shift.reassign` | same | actor, `shiftId`, `version`, `employeeId` or `null` | `{ shift, warnings }` |
 | `organization.shift.cancel` | same | actor, `shiftId`, `version` | shift |
-| `organization.shift.get` | gateway, `attendance`, `tasks` | actor, `shiftId` | shift |
-| `organization.shift.list` | gateway | actor, filter by `siteId`, `employeeId` or `day` (site timezone), `page`, `pageSize` | shifts |
+| `organization.shift.get` | HTTP controller, `tasks` (facade); `telemetry` (NATS responder) | actor, `shiftId` | shift |
+| `organization.shift.list` | HTTP controller | actor, filter by `siteId`, `employeeId` or `day` (site timezone), `page`, `pageSize` | shifts |
 
-Calls between services (for example `attendance` asking `organization.shift.get`) carry the same actor the gateway got, or, for background work without a user, an explicit `tenantId` in the payload. Never accept a tenant from a client.
+Calls from other modules or from `telemetry` (for example `telemetry` asking `organization.shift.get` over NATS) carry the same actor the HTTP layer got, or, for background work without a user, an explicit `tenantId` in the payload. Never accept a tenant from a client.
 
 ### Events emitted (JetStream)
 
@@ -176,7 +178,7 @@ The tenant of a consumed event comes from the subject and is checked against the
 
 ### Errors
 
-Throw `RpcException` with `{ status, code, message }` (see `teamworkflow-nest`). The gateway maps it to HTTP `{ detail, code }`.
+Throw `RpcException` with `{ status, code, message }` (see `teamworkflow-nest`). The HTTP exception filter of `core` maps it to HTTP `{ detail, code }`.
 
 | code | status | When |
 |------|--------|------|
@@ -209,11 +211,11 @@ The jobs are the only code that reads across tenants. They still process one ten
 
 | Variable | Description |
 |----------|-------------|
-| `NATS_SERVER` | Comma-separated NATS URLs |
-| `DATABASE_URL` | PostgreSQL connection string for this service |
+| `NATS_SERVER` | Comma-separated NATS URLs (shared by all of `core`) |
+| `DATABASE_URL` | PostgreSQL connection string for this module (its own role and schema) |
 | `SHIFT_HORIZON_DAYS` | Days ahead the generator fills. Default `14` |
 
-Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Never commit `.env`.
+Variable names are provisional until the shared `core` config exists (T4/T6): in `core` each module has its own database URL for its own role. Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Never commit `.env`.
 
 ## Security Rules (non-negotiable)
 
@@ -222,11 +224,11 @@ Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Ne
 3. Supervisors never touch a site outside `siteIds`; out-of-scope resources answer 404.
 4. Never log personal data (national id, phone, email) in full.
 5. Never return the site `qrCode` to an `employee` actor through listing endpoints; only the internal call from `attendance` and admin/supervisor reads include it.
-6. Never read another service's tables; ask over NATS.
+6. Never read another module's tables or use its Prisma client; call its exported facade service or consume its events.
 
 ## Tests
 
-- Unit tests for every use case with Prisma and `ClientProxy` mocked (`pnpm test`).
+- Unit tests for every use case with Prisma and the facades of other modules mocked (`pnpm test`).
 - Always covered: tenant isolation on every module; supervisor limited to `siteIds` (404 outside); overlap blocks while the four warnings do not; optimistic locking; generator idempotency (run twice, no duplicates) and the 14-day horizon in the site timezone; lifecycle job transitions and catch-up; `user_created` linking by email vs creating a profile; `user_deactivated` unassigning future shifts only; QR rotation invalidating the old value; suspended and cancelled tenants skipped by the jobs and resumed after `tenant_reactivated`; tenant data purge (`data_retention_expired` deletes every row of the tenant, leaves other tenants untouched and is idempotent); idempotent handling of every consumed event.
 - E2E tests (to create in `test/`) once the transport and the database are set up, against a dedicated test database.
 
@@ -234,5 +236,5 @@ Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Ne
 
 - [ ] `pnpm lint`, `pnpm test` and `pnpm build` pass.
 - [ ] Schema changes come with a reviewed Prisma migration.
-- [ ] If you changed a pattern, event or payload, you updated this file, the gateway and the consuming services' docs, and called it out in the PR description.
+- [ ] If you changed a pattern, event or payload, you updated this file, `backend/core/AGENTS.md` and the consuming modules' and services' docs (`telemetry`), and called it out in the PR description.
 - [ ] No secrets or personal data in logs, tests or fixtures.
