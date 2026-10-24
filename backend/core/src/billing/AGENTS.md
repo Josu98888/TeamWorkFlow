@@ -1,10 +1,10 @@
-# AGENTS.md — `billing` microservice
+# AGENTS.md — `billing` module (`backend/core`)
 
-Guide for coding agents working on this service. Read it fully before making changes. It overrides the root `AGENTS.md` when they conflict. Code patterns live in `skills/teamworkflow-nest`; migrations in `skills/teamworkflow-prisma-migrations`.
+Guide for coding agents working on the `billing` module of `backend/core`. Read `backend/core/AGENTS.md` (core-wide rules: module boundaries, HTTP layer, event bus) and then this file fully before making changes. This file overrides the root `AGENTS.md` and `backend/core/AGENTS.md` for the `billing` domain rules when they conflict. Code patterns live in `skills/teamworkflow-nest`; migrations in `skills/teamworkflow-prisma-migrations`.
 
-## What this service is
+## What this module is
 
-`billing` charges for the platform. It knows which plan each tenant has, what it owes and whether it paid. When a tenant does not pay it announces it so `auth` can restrict access; when it pays it announces that too. It is one NestJS 12 app with internal modules `plans`, `subscriptions`, `invoicing`, `payments` and `collections`; keep them separable (a module never reads another module's tables, it calls the other module's exported service).
+`billing` charges for the platform. It knows which plan each tenant has, what it owes and whether it paid. When a tenant does not pay it announces it so `auth` can restrict access; when it pays it announces that too. It is a module of the `backend/core` modular monolith (`src/billing/`, `BillingModule`) with internal sub-modules `plans`, `subscriptions`, `invoicing`, `payments` and `collections`. Other core modules reach it only through its exported facade service or its events; it can be extracted to its own service later without changing its event consumers (`docs/architecture.md`). Keep the sub-modules separable (a sub-module never reads another sub-module's tables, it calls the other's exported service).
 
 Responsibilities:
 
@@ -17,7 +17,7 @@ Responsibilities:
 Out of scope (do NOT implement here):
 
 - Tenants and users: owned by `auth`. Billing only knows the `tenantId`.
-- Deleting the identity data and the operational data of a cancelled tenant: each service purges its own when it consumes `data_retention_expired` (billing only decides WHEN, and purges its own data).
+- Deleting the identity data and the operational data of a cancelled tenant: each module of `core` and `telemetry` purge their own when they consume `data_retention_expired` (billing only decides WHEN, and purges its own data).
 - Delivering notifications (push, in-app): owned by `notifications`. Billing asks for them with `t.<tenant>.notifications.send`.
 - Emails and SMS: there are none in the platform for now.
 - Fiscal e-invoice (ARCA): out of the MVP. An invoice here is an internal statement; a person issues the fiscal receipt elsewhere and a platform admin stores its external number.
@@ -26,28 +26,28 @@ Out of scope (do NOT implement here):
 
 ## Stack
 
-- NestJS 12 microservice over NATS (`@nestjs/microservices`).
-- PostgreSQL + Prisma 7 with its own `prisma/schema.prisma` in the `billing` schema of the shared `teamworkflow` database, accessed with its own `billing_svc` role that cannot read other schemas (see `backend/STEPS.md` S1.1). Not installed yet.
-- `class-validator` + `class-transformer` with a global `ValidationPipe` throwing `RpcException`. Not installed yet.
+- NestJS 12 module inside `backend/core`; HTTP controllers for this module's endpoints (including the public Mercado Pago webhook) live in `src/billing/` (see `backend/core/AGENTS.md`). NATS is used for JetStream events only: this module answers no NATS requests.
+- PostgreSQL + Prisma 7 with its own `prisma/schema.prisma` in the `billing` schema of the shared `teamworkflow` database, accessed through its own Prisma client with its own `billing_svc` role that cannot read other schemas (see `backend/STEPS.md` S1.1). Not installed yet.
+- `class-validator` + `class-transformer` with the global `ValidationPipe` of `core` (422 `validation_error`). Not installed yet.
 - Scheduling for the jobs (for example `@nestjs/schedule`). Not installed yet.
 - Mercado Pago access behind the `PaymentProvider` interface (an own HTTP client or the official SDK; ask before installing anything).
-- Env validation with joi in `src/config/envs.ts`, same pattern as the gateway.
+- Env validation with joi in `src/config/envs.ts`, same pattern as the rest of `core`.
 - Jest for tests.
 
 Ask before installing any dependency.
 
 ## Current Status (READ FIRST)
 
-The folder contains only this `AGENTS.md` and the `README.md`. There is no Nest app yet: no `package.json`, no `src/`, no Prisma, no Dockerfile, no entry in `backend/docker-compose.yml`.
+`backend/core` does not exist yet (task T6 of `odd/tasks/two-service-architecture.md` creates it from `backend/gateway` + `backend/auth`). This folder contains only this `AGENTS.md`: there is no `BillingModule`, no Prisma schema, no controllers.
 
 First tasks, in order (ask before each install):
 
-- [ ] Scaffold the Nest app (microservice bootstrap with `Transport.NATS`, `src/config/envs.ts`, `.env.example`).
+- [ ] Create `BillingModule` in `backend/core/src/billing/` (needs `backend/core` from T6), its config in `src/config/envs.ts` and `.env.example`.
 - [ ] Pure domain module: money calculation and subscription state machine, with table tests.
 - [ ] Prisma schema and first migration (`Plan`, `Subscription`, `Invoice`).
-- [ ] Consumer of `auth.tenant_created`, plans and subscriptions modules.
+- [ ] Consumer of `auth.tenant_created`, plans and subscriptions sub-modules.
 - [ ] Invoicing (monthly close), payments (`fake` provider first, then Mercado Pago) and collections jobs.
-- [ ] Add the service to `backend/docker-compose.yml`, the gateway routes (including the public webhook route) and the plan gating in the gateway.
+- [ ] Expose the module routes through its HTTP controllers in `core` (including the public webhook route, with raw body capture) and wire the plan gating in the HTTP layer of `core`.
 
 ## Money rules (non-negotiable)
 
@@ -69,7 +69,7 @@ First tasks, in order (ask before each install):
 | `pro` | everything in `basic` + tasks and forms, alerts and the Torre de Control | fixed monthly ARS price |
 
 - The price is per plan, NOT per employee, and there is no usage metering.
-- Features are stored per plan as a JSON object, for example `{ "tasks": true, "alerts": true, "tower": true }` (`basic` has them all `false`). The gateway maps routes to feature keys (see Plan gating).
+- Features are stored per plan as a JSON object, for example `{ "tasks": true, "alerts": true, "tower": true }` (`basic` has them all `false`). The HTTP layer of `core` maps routes to feature keys (see Plan gating).
 - Enterprise is future work.
 - A price change applies from the NEXT invoice issued; invoices already issued keep the price they copied. Only a `platform_admin` can change prices and features.
 
@@ -146,7 +146,7 @@ Every payment is recorded in `Payment` and only a payment that is approved, in `
 
 - The `PaymentProvider` interface (always used, never the HTTP client directly) has: `createPaymentLink(invoice)`, `getPayment(paymentId)`, `searchPaymentsByReference(invoiceId)` and `validateWebhook(headers, rawBody)`. Providers: `mercadopago` and `fake` (local and tests: generates links and simulates approved/rejected payments and webhooks). `PAYMENT_PROVIDER` selects one.
 - **Payment link:** one per invoice, `external_reference` = `invoiceId`, total = balance, expiry = due date + `GRACE_DAYS`. Owner/admin get it in the app with `billing.invoice.payment-link`, which regenerates it when expired.
-- **Webhook:** Mercado Pago calls the public gateway route `POST /api/v1/webhooks/mercadopago` (no JWT, rate limited), which forwards the RAW body and the headers to `billing.webhook.mercadopago`. Billing: (1) validates the signature with `MP_WEBHOOK_SECRET` following the current Mercado Pago documentation (verify it before implementing); invalid signature = reject without processing; (2) deduplicates by notification id in `WebhookNotification`; (3) ALWAYS fetches the payment from the Mercado Pago API; (4) applies the payment rule above; (5) is idempotent by `(provider, providerPaymentId)` and answers fast.
+- **Webhook:** Mercado Pago calls the public route `POST /api/v1/webhooks/mercadopago` (no JWT, rate limited), served by the billing HTTP controller, which hands the RAW body and the headers to the facade operation `billing.webhook.mercadopago` untouched. Billing: (1) validates the signature with `MP_WEBHOOK_SECRET` following the current Mercado Pago documentation (verify it before implementing); invalid signature = reject without processing; (2) deduplicates by notification id in `WebhookNotification`; (3) ALWAYS fetches the payment from the Mercado Pago API; (4) applies the payment rule above; (5) is idempotent by `(provider, providerPaymentId)` and answers fast.
 - **Reconciliation:** a daily job (06:00) uses `searchPaymentsByReference` for every issued unpaid invoice, in case a webhook was lost.
 
 **Manual payment (bank transfer):** `billing.admin.payment.register` (`platform_admin` only) with invoice, amount, date and bank reference; it follows the same rules as a Mercado Pago payment.
@@ -166,45 +166,47 @@ Every payment is recorded in `Payment` and only a payment that is approved, in `
 
 ### Plan gating (decision)
 
-Billing does NOT expose any shared key-value store. `auth` keeps the tenant's current plan and features, fed by `subscription_created` and `plan_changed`, and `auth.token.verify` returns `plan` and `features`. The gateway blocks the routes whose feature the plan lacks with 403 `feature_not_in_plan`. The services that own pro work (`attendance`, `tasks`, `notifications`) also keep a local per-tenant copy of `features`, fed by the same two events, to skip the automatic pro work for basic tenants. Other services never ask `billing` whether a feature is enabled, so `subscription_created` and `plan_changed` must always carry the full `features`.
+Billing does NOT expose any shared key-value store. `auth` keeps the tenant's current plan and features, fed by `subscription_created` and `plan_changed`, and `auth.token.verify` returns `plan` and `features`. The HTTP layer of `core` blocks the routes whose feature the plan lacks with 403 `feature_not_in_plan`. The modules and services that own pro work (`attendance` in `telemetry`, `tasks`, `notifications`) also keep a local per-tenant copy of `features`, fed by the same two events, to skip the automatic pro work for basic tenants. Other modules and services never ask `billing` whether a feature is enabled, so `subscription_created` and `plan_changed` must always carry the full `features`.
 
-While a tenant is `suspended` the gateway only lets owner/admin use the billing routes needed to pay (`billing.subscription.get`, `billing.invoice.*`) and data export; see `auth`. While it is `cancelled` the same applies, plus `billing.plan.list` and `billing.subscription.resubscribe`.
+While a tenant is `suspended` the HTTP layer of `core` only lets owner/admin use the billing routes needed to pay (`billing.subscription.get`, `billing.invoice.*`) and data export; see `auth`. While it is `cancelled` the same applies, plus `billing.plan.list` and `billing.subscription.resubscribe`.
 
 ## NATS Contract
 
-Request-reply patterns follow `billing.<resource>.<action>` and carry NO tenant in the subject: the tenant comes from the actor. Domain events follow `t.<tenant>.billing.<event>` (JetStream, snake_case names). Keep the pattern names in constants files (to create: `src/<module>/<module>.patterns.ts`) and keep the gateway side in sync.
+Operation names follow `billing.<resource>.<action>` and carry NO tenant: the tenant comes from the actor. Domain events follow `t.<tenant>.billing.<event>` (JetStream, snake_case names).
 
-### Request-reply (`@MessagePattern`)
+In `core` every operation below is an **in-process call** to the module's facade service (invoked by the module's HTTP controllers); the pattern string is kept as the operation's stable name. `telemetry` consumes billing's plan events but does not request anything from this module, so there are **no NATS request-reply responders** here. Keep the names in a constants file (to create: `src/billing/billing.patterns.ts`).
+
+### Operations (module facade) and NATS responders
 
 "actor" = `{ userId, tenantId, role }` from `auth.token.verify` (`tenantId` is null for `platform_admin`). Lists return `{ items, total }`.
 
-| Pattern | Caller | Payload | Returns |
+| Operation | Caller | Payload | Returns |
 |---------|--------|---------|---------|
-| `billing.plan.list` | gateway (owner/admin) | actor | plans with price and features |
-| `billing.subscription.get` | gateway (owner/admin) | actor | plan, status, `trialEndsAt`, `nextPlan`, `cancelAtPeriodEnd`, features |
-| `billing.subscription.change-plan` | gateway (owner/admin) | actor, `plan` | subscription |
-| `billing.subscription.cancel` | gateway (owner/admin) | actor | subscription |
-| `billing.subscription.cancel-undo` | gateway (owner/admin) | actor | subscription |
-| `billing.subscription.resubscribe` | gateway (owner/admin, also while the tenant is `cancelled`) | actor, `plan` | the new subscription |
-| `billing.invoice.list` / `get` | gateway (owner/admin) | actor, `invoiceId` or filters, `page`, `pageSize` | invoice(s) with lines and payments |
-| `billing.invoice.payment-link` | gateway (owner/admin) | actor, `invoiceId` | `{ url, expiresAt }` (regenerated if expired) |
-| `billing.webhook.mercadopago` | gateway only (public route) | raw body, headers | `{ ok: true }` |
-| `billing.admin.plan.update` | gateway (platform_admin) | actor, `plan`, `monthlyPrice`, `features` | plan (applies from the next invoice) |
-| `billing.admin.subscription.list` | gateway (platform_admin) | actor, filters, `page`, `pageSize` | subscriptions of every tenant |
-| `billing.admin.subscription.extend-trial` | gateway (platform_admin) | actor, `tenantId`, `trialEndsAt` | subscription |
-| `billing.admin.invoice.list` | gateway (platform_admin) | actor, `tenantId`, filters | invoices |
-| `billing.admin.invoice.void` | gateway (platform_admin) | actor, `invoiceId`, `reason` | invoice |
-| `billing.admin.invoice.issue` | gateway (platform_admin) | actor, `tenantId`, `period` | invoice |
-| `billing.admin.invoice.set-fiscal-receipt` | gateway (platform_admin) | actor, `invoiceId`, `receiptNumber` | invoice |
-| `billing.admin.payment.register` | gateway (platform_admin) | actor, `invoiceId`, `amount`, `paidAt`, `reference` | payment |
+| `billing.plan.list` | HTTP controller (owner/admin) | actor | plans with price and features |
+| `billing.subscription.get` | HTTP controller (owner/admin) | actor | plan, status, `trialEndsAt`, `nextPlan`, `cancelAtPeriodEnd`, features |
+| `billing.subscription.change-plan` | HTTP controller (owner/admin) | actor, `plan` | subscription |
+| `billing.subscription.cancel` | HTTP controller (owner/admin) | actor | subscription |
+| `billing.subscription.cancel-undo` | HTTP controller (owner/admin) | actor | subscription |
+| `billing.subscription.resubscribe` | HTTP controller (owner/admin, also while the tenant is `cancelled`) | actor, `plan` | the new subscription |
+| `billing.invoice.list` / `get` | HTTP controller (owner/admin) | actor, `invoiceId` or filters, `page`, `pageSize` | invoice(s) with lines and payments |
+| `billing.invoice.payment-link` | HTTP controller (owner/admin) | actor, `invoiceId` | `{ url, expiresAt }` (regenerated if expired) |
+| `billing.webhook.mercadopago` | HTTP controller only (public route) | raw body, headers | `{ ok: true }` |
+| `billing.admin.plan.update` | HTTP controller (platform_admin) | actor, `plan`, `monthlyPrice`, `features` | plan (applies from the next invoice) |
+| `billing.admin.subscription.list` | HTTP controller (platform_admin) | actor, filters, `page`, `pageSize` | subscriptions of every tenant |
+| `billing.admin.subscription.extend-trial` | HTTP controller (platform_admin) | actor, `tenantId`, `trialEndsAt` | subscription |
+| `billing.admin.invoice.list` | HTTP controller (platform_admin) | actor, `tenantId`, filters | invoices |
+| `billing.admin.invoice.void` | HTTP controller (platform_admin) | actor, `invoiceId`, `reason` | invoice |
+| `billing.admin.invoice.issue` | HTTP controller (platform_admin) | actor, `tenantId`, `period` | invoice |
+| `billing.admin.invoice.set-fiscal-receipt` | HTTP controller (platform_admin) | actor, `invoiceId`, `receiptNumber` | invoice |
+| `billing.admin.payment.register` | HTTP controller (platform_admin) | actor, `invoiceId`, `amount`, `paidAt`, `reference` | payment |
 
-### Requests this service makes to other services
+### Calls this module makes to other modules
 
-| Pattern | Owner | Payload | Returns |
+| Operation (facade of the owner) | Owner | Payload | Returns |
 |---------|-------|---------|---------|
 | `auth.user.list-recipients` | `auth` | `tenantId`, `roles`, optional `siteId` | `{ userIds }` of active users |
 
-Service-to-service calls carry an explicit `tenantId` taken from the data being processed, never from a client.
+Module-to-module facade calls (in-process, no NATS) carry an explicit `tenantId` taken from the data being processed, never from a client.
 
 ### Events emitted (JetStream)
 
@@ -237,7 +239,7 @@ The tenant of a consumed event comes from the subject and is checked against the
 
 ### Errors
 
-Throw `RpcException` with `{ status, code, message }` (see `teamworkflow-nest`). The gateway maps it to HTTP `{ detail, code }`.
+Throw `RpcException` with `{ status, code, message }` (see `teamworkflow-nest`). The HTTP exception filter of `core` maps it to HTTP `{ detail, code }`.
 
 | code | status | When |
 |------|--------|------|
@@ -285,8 +287,8 @@ Use an injectable clock so tests control time.
 
 | Variable | Description |
 |----------|-------------|
-| `NATS_SERVER` | Comma-separated NATS URLs |
-| `DATABASE_URL` | PostgreSQL connection string for this service |
+| `NATS_SERVER` | Comma-separated NATS URLs (shared by all of `core`) |
+| `DATABASE_URL` | PostgreSQL connection string for this module (its own role and schema) |
 | `PAYMENT_PROVIDER` | `mercadopago` or `fake` |
 | `MP_ACCESS_TOKEN` | Mercado Pago access token (required when the provider is `mercadopago`) |
 | `MP_WEBHOOK_SECRET` | Key to validate webhook signatures (required with `mercadopago`) |
@@ -298,7 +300,7 @@ Use an injectable clock so tests control time.
 | `DATA_RETENTION_DAYS` | Days between `cancelled` and the deletion of the tenant's data. Default `90` |
 | `APP_URL` | Base URL of the web app, used for the payment return URLs |
 
-Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Never commit `.env` or secrets.
+Variable names are provisional until the shared `core` config exists (T4/T6): in `core` each module has its own database URL for its own role. Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Never commit `.env` or secrets.
 
 ## Security Rules (non-negotiable)
 
@@ -306,12 +308,12 @@ Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Ne
 2. Every query filters by `tenantId`; a test proves tenant isolation.
 3. Never log access tokens, signatures, full webhook bodies, payment provider payloads or card data.
 4. Validate the webhook signature before any processing; never trust webhook amounts or status.
-5. Never read another service's tables; ask over NATS.
+5. Never read another module's tables or use its Prisma client; call its exported facade service or consume its events.
 6. No `float` in any money calculation.
 
 ## Tests
 
-- Unit tests for every use case with Prisma, `ClientProxy` and the payment provider mocked (`pnpm test`); use the `fake` provider for payment flows.
+- Unit tests for every use case with Prisma, the facades of other modules and the payment provider mocked (`pnpm test`); use the `fake` provider for payment flows.
 - The pure domain has table tests for the invoice calculation: full month, prorated first month after the trial, prorated last month, VAT as its own line, half-up rounding per line, price change between invoices, highest plan of the month.
 - The state machine has one test per allowed and per forbidden transition.
 - Always covered: tenant isolation; `tenant_created` twice creates one subscription; close executed twice issues one invoice; void then re-issue; upgrade immediate vs downgrade next period; cancel issuing the last invoice (a full month) before `cancelled`, with no mid-month prorating; undo of a pending cancellation (and `no_pending_cancellation`); resubscribe creating a new active subscription without trial, emitting `plan_changed` and `subscription_reactivated`, with the first invoice prorated from the resubscription day, and refused unless the subscription is `cancelled`; due date as the last day to pay (delay day 1 is the day after); collections ignoring cancelled subscriptions; data retention (warning 7 days before, `data_retention_expired` emitted once at day 90, nothing emitted if the tenant resubscribed) and billing's own purge keeping invoices and payments (idempotent, other tenants untouched); webhook with invalid signature, duplicate webhook, payment amount different from the balance (`needs_review`), non-approved payment, payment of an invoice of another tenant; manual payment with the same rules; reconciliation finding a lost payment; payment link regenerated when expired; collections on delay days 1, 4, 6 and 7 with no duplicate notices; `payment_received` only when no overdue invoice remains; `platform_admin` allowed on `billing.admin.*` and every other role refused; no float anywhere in money code.
@@ -323,5 +325,5 @@ Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Ne
 - [ ] No floating point in any money calculation.
 - [ ] No issued invoice is ever modified; only voided.
 - [ ] Schema changes come with a reviewed Prisma migration.
-- [ ] If you changed a pattern, event or payload, you updated this file, the gateway and the consuming services' docs (`auth`, `notifications`), and called it out in the PR description.
+- [ ] If you changed a pattern, event or payload, you updated this file, `backend/core/AGENTS.md` and the consuming modules' and services' docs (`auth`, `notifications`, `telemetry`), and called it out in the PR description.
 - [ ] No secrets, tokens, signatures or payment data in logs, tests or fixtures.
