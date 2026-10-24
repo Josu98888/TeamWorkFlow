@@ -57,6 +57,7 @@ Seven services mean seven deploys, pipelines and databases to operate, plus dist
 
 ## Delivery
 - Strategy: `ask-on-risk`. Docs tasks T1–T5 are large but passive; code tasks T6–T7 likely exceed ~400 lines (mostly moves).
+- Execution (user, 2026-10-24): finish all remaining slices first (T6.3 through T7), one stacked branch per slice; Docker-dependent checks (test-DB migrate, `test:e2e` needing DB/NATS, compose up, login smoke) and pushes/PRs are batched at the end.
 - Chain strategy (user, 2026-10-24): `feature-branch-chain`. Slice PRs chain onto `feat/backend/auth`; the whole branch merges into `develop` at the end, never into `main`.
 
 ## Progress
