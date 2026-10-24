@@ -19,7 +19,7 @@ allowed-tools: Read, Edit, Write, Glob, Grep, Bash, WebFetch, WebSearch, Task
 
 ## Project Status (READ FIRST)
 
-The frontend is a fresh Next.js scaffold. The NestJS backend already exists in `backend/` (HTTP gateway at `backend/gateway`, microservices over NATS; see teamworkflow-nest).
+The frontend is a fresh Next.js scaffold. The NestJS backend already exists in `backend/`. The target is 2 services behind one origin: `core` (public HTTP API under `/api`, modular monolith) and `telemetry` (`/api/v1/telemetry` and the `/ws` WebSocket). Today `core` is still the separate `backend/gateway` + `backend/auth` apps and `telemetry` has no code yet (see teamworkflow-nest).
 Most files in this skill **do not exist yet**.
 
 - Before importing any module or library, check it exists (Glob/Grep, `frontend/package.json`).
@@ -34,8 +34,8 @@ Most files in this skill **do not exist yet**.
 ## Critical Rules
 
 - Server Components by default; `"use client"` only when required (see teamworkflow-react).
-- The frontend NEVER accesses the database. All data goes through the NestJS gateway (`backend/gateway`, global prefix `/api`) via `backendFetch`. NEVER call a microservice or NATS directly.
-- The gateway is the source of truth: `types.ts` mirrors the gateway DTOs (camelCase JSON, see teamworkflow-nest).
+- The frontend NEVER accesses the database. All data goes through the public HTTP API (`core` under the global prefix `/api`, `telemetry` under `/api/v1/telemetry`; one origin) via `backendFetch`. NEVER call NATS or an internal service port directly.
+- The backend DTOs are the source of truth: `types.ts` mirrors the response DTOs of `core` and `telemetry` (camelCase JSON, see teamworkflow-nest).
 - From `app/` or other domains, import a domain ONLY through `@/domains/<domain>` (client-safe), `@/domains/<domain>/server` (server-only) or `@/domains/<domain>/actions`. No deep imports.
 - Server Actions live in `domains/<domain>/actions.ts`; Zod schemas in `domains/<domain>/schemas.ts`.
 - ALWAYS validate Server Action input with Zod on the server.
@@ -93,7 +93,7 @@ cd frontend
 
 ```bash
 # frontend/.env.local (NOT committed)
-BACKEND_URL=http://localhost:3000/api   # gateway base URL (global prefix /api)
+BACKEND_URL=http://localhost:3000/api   # core base URL (global prefix /api); telemetry is reached under /api/v1/telemetry on the same origin
 ```
 
 ```bash
@@ -111,8 +111,8 @@ import "server-only";
 
 const BACKEND_URL = process.env.BACKEND_URL;
 
-// Gateway error shape (teamworkflow-nest): { detail, code, errors? }
-export type GatewayError = {
+// Backend error shape (core and telemetry, teamworkflow-nest): { detail, code, errors? }
+export type ApiError = {
   detail: string;
   code: string;
   errors?: { field: string; constraints: string[] }[];
@@ -123,7 +123,7 @@ export class BackendError extends Error {
     public status: number,
     public code: string,
     message: string,
-    public errors: GatewayError["errors"] = undefined,
+    public errors: ApiError["errors"] = undefined,
   ) {
     super(message);
   }
@@ -141,7 +141,7 @@ export async function backendFetch<T>(path: string, init: RequestInit = {}): Pro
   });
 
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as GatewayError | null;
+    const body = (await res.json().catch(() => null)) as ApiError | null;
     throw new BackendError(res.status, body?.code ?? "unknown_error", body?.detail ?? res.statusText, body?.errors);
   }
   if (res.status === 204) return undefined as T;
@@ -161,8 +161,8 @@ export const authToken = process.env.BACKEND_AUTH_TOKEN; // exported secret
 
 When asked to implement a feature like "list projects" or "create a project":
 
-1. **Backend contract.** Grep `backend/gateway/src/<domain>/` for the controller and DTOs of the resource (if it does not exist yet, agree the contract with the backend first, see teamworkflow-nest). Note paths, methods and field names.
-2. **Types** → `domains/<domain>/types.ts`, mirroring the gateway DTOs.
+1. **Backend contract.** Grep `backend/core/src/<module>/` (or `backend/telemetry/src/<module>/` for attendance resources) for the controller and DTOs of the resource, and read the route map in `backend/core/AGENTS.md` / `backend/telemetry/AGENTS.md`; until T6 the code is in `backend/gateway/src/<domain>/` and `backend/auth/src/` (if it does not exist yet, agree the contract with the backend first, see teamworkflow-nest). Note paths, methods and field names.
+2. **Types** → `domains/<domain>/types.ts`, mirroring the backend response DTOs.
 3. **Backend calls** → `domains/<domain>/api.ts`, using `backendFetch`.
 4. **Server public API** → export what `app/` needs from `domains/<domain>/server.ts`.
 5. **Validation** → `domains/<domain>/schemas.ts` (only if there is input to validate).
@@ -175,7 +175,7 @@ When asked to implement a feature like "list projects" or "create a project":
 
 ```ts
 // frontend/domains/projects/types.ts
-// Mirrors the gateway DTOs (to create) — keep field names identical to the API.
+// Mirrors the backend response DTOs (to create) — keep field names identical to the API.
 export type ProjectStatus = "planned" | "active" | "completed";
 
 export type Project = {
@@ -187,7 +187,7 @@ export type Project = {
   createdAt: string;
 };
 
-// The owner is NOT part of the input: the gateway takes it from the authenticated user.
+// The owner is NOT part of the input: the backend takes it from the authenticated user.
 export type CreateProjectInput = {
   name: string;
   description?: string;
@@ -195,11 +195,11 @@ export type CreateProjectInput = {
 };
 ```
 
-> The NestJS gateway returns camelCase JSON, ISO-8601 datetimes and `null` for empty optionals (teamworkflow-nest). Mirror whatever the DTO exposes.
+> The NestJS backend returns camelCase JSON, ISO-8601 datetimes and `null` for empty optionals (teamworkflow-nest). Mirror whatever the DTO exposes.
 
 ### Backend calls (private)
 
-> Collection endpoints of the gateway return a paginated `PageDto<T>` (`items`, `total`, `page`, `pageSize`, see teamworkflow-nest). The `getProjects` example below returns `Project[]` for brevity; unwrap `items` or type the page when the endpoint exists.
+> Collection endpoints of the backend return a paginated `PageDto<T>` (`items`, `total`, `page`, `pageSize`, see teamworkflow-nest). The `getProjects` example below returns `Project[]` for brevity; unwrap `items` or type the page when the endpoint exists.
 
 ```ts
 // frontend/domains/projects/api.ts
@@ -456,7 +456,7 @@ Create at `app/api/webhooks/<provider>/route.ts`:
 
 - Read the raw body with `await request.text()` BEFORE parsing JSON.
 - Verify the provider signature first. Verification helpers go in `shared/lib/webhooks.ts`.
-- Forward the validated payload to the gateway via `backendFetch`; business logic lives in the backend.
+- Forward the validated payload to the backend via `backendFetch`; business logic lives in the backend.
 - Return `401` on invalid signature.
 
 ---
@@ -466,7 +466,7 @@ Create at `app/api/webhooks/<provider>/route.ts`:
 Create `proxy.ts` (next to `app/`) only on the first concrete need: redirects, headers or the auth guard.
 
 - Runs on Node.js (no Edge).
-- Only **optimistic** checks (cookie present or not). Real authorization lives in Server Actions, data fetchers and the gateway.
+- Only **optimistic** checks (cookie present or not). Real authorization lives in Server Actions, data fetchers and the backend (the guard of `core`/`telemetry`).
 
 ```ts
 // frontend/proxy.ts
@@ -552,7 +552,7 @@ If a Client Component imports one of these, the build fails instead of leaking s
 - [ ] Every imported module and library exists (or was created/installed in this change)
 - [ ] No deep imports: `app/` and other domains use `@/domains/x`, `@/domains/x/server`, `@/domains/x/actions`
 - [ ] `index.ts` exports nothing server-only
-- [ ] Types mirror the gateway DTOs
+- [ ] Types mirror the backend DTOs
 - [ ] Backend calls only through `backendFetch` in `domains/*/api.ts`
 - [ ] Schemas in `schemas.ts`; Server Actions validate with Zod
 - [ ] `params` / `searchParams` awaited
