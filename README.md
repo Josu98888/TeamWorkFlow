@@ -8,11 +8,10 @@
 
 Hoy solo existen:
 
-- `backend/gateway`: punto de entrada HTTP (guard de autenticación, filtro de excepciones y controlador de auth).
-- `backend/auth`: servicio de autenticación con la mayor parte de la lógica descrita en la sección [auth](#2-auth) ya implementada.
+- `backend/core`: monolito modular con el módulo `auth` y la capa HTTP pública (guard de autenticación, filtro de excepciones, rutas de auth), ya implementados.
 - `frontend/`: esqueleto de Next.js.
 
-El MVP se rediseñó como **2 servicios** (`core` y `telemetry`; ver [MVP](#mvp) y [docs/architecture.md](docs/architecture.md)). **Migración en curso:** `backend/core` todavía no existe; `backend/gateway` y `backend/auth` se fusionarán en él y pasarán a ser su capa HTTP y su módulo `auth`. `backend/telemetry` tampoco existe todavía. También hay documentación de diseño (sin código) de los módulos del MVP en `backend/organization`, `backend/attendance`, `backend/tasks`, `backend/notifications` y `backend/billing`; esa documentación se reorganizará en `backend/core` y `backend/telemetry`. Todo lo demás (esos módulos, las bases de datos, la Torre de Control, etc.) está **planificado**; consulte la sección [MVP](#mvp) y, más abajo, la arquitectura objetivo.
+El MVP se rediseñó como **2 servicios** (`core` y `telemetry`; ver [MVP](#mvp) y [docs/architecture.md](docs/architecture.md)). `backend/core` ya contiene la capa HTTP y el módulo `auth` (las apps `backend/gateway` y `backend/auth` se fusionaron en él y se eliminaron). `backend/telemetry` no existe todavía. También hay documentación de diseño (sin código) de los módulos del MVP en `backend/organization`, `backend/attendance`, `backend/tasks`, `backend/notifications` y `backend/billing`; esa documentación se reorganizará en `backend/core` y `backend/telemetry`. Todo lo demás (esos módulos, las bases de datos, la Torre de Control, etc.) está **planificado**; consulte la sección [MVP](#mvp) y, más abajo, la arquitectura objetivo.
 
 ## Descripción de la aplicación
 
@@ -66,7 +65,7 @@ El MVP se construye con **2 servicios de backend** (los nombres de carpetas, los
 
 | Servicio del MVP | Carpeta | Contiene | Expone |
 |---|---|---|---|
-| `core` (monolito modular) | `backend/core/` (por crear) | Módulos `auth`, `organization`, `tasks`, `notifications` y `billing`, y la API HTTP pública (el antiguo `gateway`) | HTTP `/api`; responde las peticiones NATS de telemetría (`auth.token.verify`, `organization.*.get`) |
+| `core` (monolito modular) | `backend/core/` (`auth` y capa HTTP implementados; el resto de módulos por crear) | Módulos `auth`, `organization`, `tasks`, `notifications` y `billing`, y la API HTTP pública (el antiguo `gateway`) | HTTP `/api`; responde las peticiones NATS de telemetría (`auth.token.verify`, `organization.*.get`) |
 | `telemetry` | `backend/telemetry/` (por crear) | Todo el dominio `attendance`: ingesta de fichadas, correcciones, jornadas, alertas en tiempo real y Torre de Control | HTTP `/api/v1/telemetry`; WebSocket (Socket.IO) de la Torre de Control |
 
 Un proxy inverso publica ambos servicios bajo el mismo origen y enruta por path (`/api` hacia `core`; `/api/v1/telemetry` y `/ws` hacia `telemetry`), de modo que el frontend sigue viendo una sola API y nunca se conecta a NATS.
@@ -140,7 +139,7 @@ Hay 18 servicios: 16 de dominio y 2 transversales. Cada uno es dueño de sus dat
 
 ### 1. gateway
 
-- **MVP:** la capa HTTP de `core` (hoy el código existe en `backend/gateway` y se fusionará en `backend/core`; no hay un servicio gateway separado). El WebSocket de la Torre de Control lo atiende `telemetry`.
+- **MVP:** la capa HTTP de `core` (implementada en `backend/core/src/http`; no hay un servicio gateway separado). El WebSocket de la Torre de Control lo atiende `telemetry`.
 - **Rol:** el único punto de entrada HTTP y WebSocket para la app móvil y la web.
 - **Qué hace:** verifica el token de acceso llamando a `auth.token.verify` por NATS, toma `tenantId`, `role` y `siteIds` del resultado verificado (nunca del body, el query ni los headers), aplica rate limiting y traduce cada solicitud HTTP a un mensaje NATS.
 - **API:** una única API REST bajo `/api/v1/...` para web y móvil; los endpoints específicos para móvil se agregan solo cuando hacen falta.
@@ -157,7 +156,7 @@ La revocación de sesiones vive en `auth` (tokens de refresco revocados en su ba
 
 ### 2. auth
 
-- **MVP:** módulo `auth` de `core` (hoy `backend/auth`, que se fusionará en `backend/core`).
+- **MVP:** módulo `auth` de `core` (implementado en `backend/core/src/auth`).
 
 > Fuente de verdad: [`backend/core/src/auth/AGENTS.md`](backend/core/src/auth/AGENTS.md). El diseño original (DNI + PIN, MFA, SSO, auth callout, RBAC detallado) se simplificó; lo que se quitó figura más abajo como trabajo futuro.
 

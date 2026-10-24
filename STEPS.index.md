@@ -89,4 +89,4 @@ Referenced, not reopened (rules §4). Source in parentheses.
 - One JetStream stream per owning module (`<MODULE>_EVENTS` on `t.*.<module>.>`), created by that module on startup; durable consumers named `<consumer>-<producer>` (`backend/STEPS.md` S1.2, Decisions 2026-10-09).
 - JetStream client: official `@nats-io/jetstream` v3 wrapped in a `JetStreamService` per service; `nats` v2 is not used (`backend/STEPS.md` S1.3).
 - E2E runs against `backend/docker-compose.test.yml` (own NATS + PostgreSQL, other ports, no volumes) (`backend/STEPS.md` S1.4).
-- Port clash: the HTTP API (gateway today, `core` later) and `next dev` both default to 3000; run the frontend on 3002 (`/AGENTS.md` § Project Overview).
+- Port clash: the HTTP API (`core`) and `next dev` both default to 3000; run the frontend on 3002 (`/AGENTS.md` § Project Overview).

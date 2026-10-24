@@ -19,9 +19,9 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ## Project Status (READ FIRST)
 
 - Data owners: the five `core` modules (`auth`, `organization`, `tasks`, `notifications`, `billing`) and `telemetry` (`attendance`). Each has its OWN Prisma schema, client, `prisma/migrations/` history and PostgreSQL schema and role in the shared `teamworkflow` database (`backend/STEPS.md` S1.1, `docs/architecture.md`). The HTTP layer of `core` (the former gateway) has no schema.
-- Today only `backend/auth` has Prisma (`prisma/schema.prisma`, `prisma.config.ts`, `prisma/migrations/20261012011100_init_auth/`, `migration_lock.toml`). It is merged into `backend/core` by task T6 of `odd/tasks/two-service-architecture.md`. `organization`, `tasks`, `notifications`, `billing` and `telemetry` have no Prisma project yet (docs only; to create). Setup is described in teamworkflow-nest ("Database Access"); ask the user before installing.
-- Where each `core` module's `prisma/` folder lives (`src/<module>/prisma/` vs a root `prisma/<module>/`) is decided in T6 (gap in `backend/core/AGENTS.md`). Until then, run every Prisma command from inside the folder that holds that owner's `prisma.config.ts` (today `cd backend/auth`; target `backend/core/...` or `backend/telemetry`).
-- Connection strings are per owner: `<OWNER>_DATABASE_URL` (`AUTH_`, `ORGANIZATION_`, `TASKS_`, `NOTIFICATIONS_`, `BILLING_`, `ATTENDANCE_DATABASE_URL`; `backend/STEPS.md` S2.4). `backend/auth` still reads `DATABASE_URL` until T6/T7, with `?schema=auth` in the compose URL and the schema also passed explicitly to the `@prisma/adapter-pg` adapter (`backend/auth/src/prisma/prisma.service.ts`); verify how Prisma 7 selects the schema against the Prisma docs, not assumed.
+- Today only the `auth` module of `backend/core` has Prisma (`src/auth/prisma/schema.prisma`, `prisma.auth.config.ts`, `src/auth/prisma/migrations/`, `migration_lock.toml`). `organization`, `tasks`, `notifications`, `billing` and `telemetry` have no Prisma project yet (docs only; to create). Setup is described in teamworkflow-nest ("Database Access"); ask the user before installing.
+- Where each `core` module's `prisma/` folder lives (`src/<module>/prisma/` vs a root `prisma/<module>/`) was decided in T6: `src/<module>/prisma/`, with one `prisma.<module>.config.ts` at the `backend/core` root and `pnpm prisma:<module>:*` scripts that pass `--config`. Run Prisma commands from `backend/core` (or `backend/telemetry` for `attendance`).
+- Connection strings are per owner: `<OWNER>_DATABASE_URL` (`AUTH_`, `ORGANIZATION_`, `TASKS_`, `NOTIFICATIONS_`, `BILLING_`, `ATTENDANCE_DATABASE_URL`; `backend/STEPS.md` S2.4). `core` reads `AUTH_DATABASE_URL`, with `?schema=auth` in the compose URL and the schema also passed explicitly to the `@prisma/adapter-pg` adapter (`backend/core/src/auth/prisma/prisma.service.ts`); verify how Prisma 7 selects the schema against the Prisma docs, not assumed.
 - Conventions here assume **Prisma ORM 7** (stable): connection URL in `prisma.config.ts`, `prisma-client` generator with explicit `output`, driver adapter in the client. Prisma 8 is a release candidate with renamed commands (`db migrate`) and a different client API; do not switch without asking. Verify the installed version: `pnpm list prisma`.
 - If an owner has `prisma/` already, read `schema.prisma`, `prisma.config.ts` and `prisma/migrations/` first. Adapt; do not rewrite silently.
 - NEVER edit or delete a migration that was already applied in a shared environment (staging, production, a teammate's DB). Create a new one.
@@ -76,8 +76,8 @@ If Context7 MCP is available, query Prisma docs for command flags before using u
 1. Change `prisma/schema.prisma` (teamworkflow-nest for conventions: `@@map`, `@map`, `@@index`).
 2. Generate a draft WITHOUT applying it:
 ```bash
-   cd backend/auth
-   pnpm exec prisma migrate dev --name create_users_table --create-only
+   cd backend/core
+   pnpm exec prisma migrate dev --config prisma.auth.config.ts --name create_users_table --create-only
 ```
 3. **Review and edit** `prisma/migrations/<timestamp>_create_users_table/migration.sql` (see "Reviewing Generated SQL").
 4. Apply it to the local dev database (also regenerates the client):
@@ -272,7 +272,7 @@ UPDATE "tasks" SET "status" = 'pending' WHERE "status" = 'new';
 The migration only changes the schema. The backfill is a separate, re-runnable script run AFTER the migration is applied.
 
 ```typescript
-// backend/auth/scripts/backfills/backfill-task-scores.ts (to create; run with ts-node)
+// backend/core/scripts/backfills/backfill-task-scores.ts (to create; run with ts-node)
 import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../../src/generated/prisma/client';

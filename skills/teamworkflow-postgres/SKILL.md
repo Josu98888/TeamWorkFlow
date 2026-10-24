@@ -18,7 +18,7 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 
 ## Project Status (READ FIRST)
 
-- Today only `backend/auth` has a Prisma project (`prisma/schema.prisma`, `PrismaService`, one init migration) and `backend/docker-compose.yml` has a `postgres` service (database `teamworkflow`, schemas and roles from `backend/postgres/init/`). `backend/auth` is merged into `backend/core` by task T6 of `odd/tasks/two-service-architecture.md`. The other owners (`organization`, `tasks`, `notifications`, `billing` in `core`; `attendance` in `telemetry`) have no Prisma project or tables yet. Everything below applies to each owner once it has tables (see teamworkflow-nest "Database Access").
+- Today only the `auth` module of `backend/core` has a Prisma project (`src/auth/prisma/schema.prisma`, `PrismaService`, `prisma.auth.config.ts`, one init migration) and `backend/docker-compose.yml` has a `postgres` service (database `teamworkflow`, schemas and roles from `backend/postgres/init/`). The other owners (`organization`, `tasks`, `notifications`, `billing` in `core`; `attendance` in `telemetry`) have no Prisma project or tables yet. Everything below applies to each owner once it has tables (see teamworkflow-nest "Database Access").
 - TeamWorkFlow is early stage: tables will be small. Sequential scans on small tables are NORMAL and often faster than index scans. Do not add indexes "just in case".
 - Each data owner has its own Prisma schema and tables: the five `core` modules and `telemetry` (`attendance`) share the `teamworkflow` database, each in its own PostgreSQL schema with its own role and no cross-schema foreign keys. Index analysis happens per owner, against THAT owner's tables. The HTTP layer of `core` (the former gateway) has no database.
 - Check the PostgreSQL version once (`SELECT version();`); some features below depend on it.
@@ -63,7 +63,7 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 
 ### How to run it
 
-Preferred: `psql` against the owner's schema (use the `<OWNER>_DATABASE_URL` of THAT owner, for example `ATTENDANCE_DATABASE_URL`; today `backend/auth` still uses `DATABASE_URL`; in docker-compose, `docker compose exec <postgres-service> psql -U <user> -d <db>`).
+Preferred: `psql` against the owner's schema (use the `<OWNER>_DATABASE_URL` of THAT owner, for example `ATTENDANCE_DATABASE_URL`; in docker-compose, `docker compose exec <postgres-service> psql -U <user> -d <db>`).
 
 If `psql` is not available, run EXPLAIN through Prisma from a throwaway script. Create it the first time it is needed, and do not commit it:
 
@@ -100,7 +100,7 @@ void main();
 Enable query logging on the owner's client in development (never commit with `query` logging on in production):
 
 ```typescript
-// <owner>/prisma.service.ts (development variant; backend/auth/src/prisma/prisma.service.ts today)
+// <owner>/prisma.service.ts (development variant; backend/core/src/auth/prisma/prisma.service.ts today)
 super({
   adapter: new PrismaPg({ connectionString: envs.databaseUrl }),
   log: [

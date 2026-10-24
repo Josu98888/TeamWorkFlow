@@ -117,7 +117,7 @@ Ask before installing any dependency.
 
 ## Current Status (READ FIRST)
 
-`backend/core` does not exist yet (task T6 of `odd/tasks/two-service-architecture.md` creates it from `backend/gateway` + `backend/auth`). This folder contains only this `AGENTS.md`: there is no `TasksModule`, no Prisma schema, no controllers, no MinIO container in `backend/docker-compose.yml`.
+`backend/core` exists (scaffold, HTTP layer and `auth` module) but this module is not built. This folder contains only this `AGENTS.md`: there is no `TasksModule`, no Prisma schema, no controllers, no MinIO container in `backend/docker-compose.yml`.
 
 First tasks, in order (ask before each install):
 

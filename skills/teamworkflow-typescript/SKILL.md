@@ -61,7 +61,7 @@ Types used outside the domain are exported through the domain's `index.ts` (`exp
 
 ## Mirroring Backend DTOs (REQUIRED)
 
-Before writing a domain type, Grep `backend/core/src/<module>/dto/` (or `backend/telemetry/src/<module>/dto/`; until T6 `backend/gateway/src/<domain>/` and `backend/auth/src/`) for the response DTO and mirror it (see teamworkflow-nest). If it does not exist yet, agree the contract first; never invent fields.
+Before writing a domain type, Grep `backend/core/src/<module>/dto/` (or `backend/telemetry/src/<module>/dto/`) for the response DTO and mirror it (see teamworkflow-nest). If it does not exist yet, agree the contract first; never invent fields.
 
 | NestJS / Prisma (JSON) | TypeScript |
 |------------------------|------------|

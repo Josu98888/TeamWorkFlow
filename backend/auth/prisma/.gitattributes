@@ -1,2 +1,0 @@
-# Prisma checksums migration files byte for byte: keep LF even with core.autocrlf=true
-migrations/** text eol=lf

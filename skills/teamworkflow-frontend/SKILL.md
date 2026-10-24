@@ -25,7 +25,7 @@ allowed-tools: Read, Edit, Write, Glob, Grep, Bash, WebFetch, WebSearch, Task
 
 ## Project Status (READ FIRST)
 
-The frontend is a fresh Next.js scaffold. The NestJS backend already exists in `backend/` (target: `core`, a modular monolith with the public HTTP API, plus `telemetry` for attendance, behind one origin; today the HTTP layer is still `backend/gateway`; see teamworkflow-nest).
+The frontend is a fresh Next.js scaffold. The NestJS backend already exists in `backend/` (`core`, a modular monolith with the public HTTP API, plus `telemetry` for attendance, behind one origin; `telemetry` has no code yet; see teamworkflow-nest).
 Most folders, libraries and tooling in this skill **do not exist yet**.
 
 - Before importing any module or library, check it exists: Glob/Grep for files, `frontend/package.json` for dependencies.

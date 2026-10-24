@@ -2,7 +2,7 @@
 
 Modelo de datos del MVP, que tiene dos servicios: `core` (monolito modular con los módulos `auth`, `organization`, `tasks`, `notifications` y `billing`) y `telemetry` (todo el dominio `attendance`). Cada sección muestra un diagrama entidad-relación (Mermaid, renderizado por GitHub) construido a partir de la sección `Data Model` del `AGENTS.md` de ese módulo o de telemetry, además de las reglas clave. El diseño previo al MVP (identificadores en español, SQL) se conserva al final solo como referencia.
 
-> Estado: todavía no se creó ningún módulo ni servicio con datos. Todo lo que sigue es el **modelo del MVP por crear** con Prisma. Hoy solo existen `backend/gateway`, `backend/auth` (esqueleto, que pasa a ser el módulo `auth` de `core`) y `frontend/`. Ver el [README](../README.md), [AGENTS.md](../AGENTS.md) y la decisión de arquitectura en [`architecture.md`](architecture.md).
+> Estado: todavía no se creó ningún módulo ni servicio con datos. Todo lo que sigue es el **modelo del MVP por crear** con Prisma. Hoy solo existen `backend/core` (con el módulo `auth` y la capa HTTP) y `frontend/`. Ver el [README](../README.md), [AGENTS.md](../AGENTS.md) y la decisión de arquitectura en [`architecture.md`](architecture.md).
 
 > Fuente de verdad: `backend/core/src/<module>/AGENTS.md` y `backend/telemetry/AGENTS.md` (sección `Data Model`). Si este documento y un `AGENTS.md` no coinciden, prevalece el `AGENTS.md`.
 

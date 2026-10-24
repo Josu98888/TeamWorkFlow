@@ -4,7 +4,7 @@ Follow /STEPS.rules.md. Order: /STEPS.index.md. Backend conventions: /backend/ST
 
 **Status:** last verified: 2026-10-13 (S7.5) · next: S8.1 · in progress: S2.4 (automated check waits for S10.1), S6.1 (`.env.example` grep pending: the file is not readable by the agent) · blocked: S9.1, S9.2
 
-Source of truth: `backend/core/src/auth/AGENTS.md` (moved from `backend/auth/AGENTS.md` by the 2026-10-24 architecture change; its heading "Request-reply (`@MessagePattern`)" is now "Operations (module facade) and NATS responders"; the code still lives in `backend/auth` until task T6 moves it to `backend/core`). Placeholders (`<lint>`, `<test>`, `<EXCL>`…) are defined in the backend template, run from `backend/auth/`.
+Source of truth: `backend/core/src/auth/AGENTS.md` (moved from `backend/auth/AGENTS.md` by the 2026-10-24 architecture change; its heading "Request-reply (`@MessagePattern`)" is now "Operations (module facade) and NATS responders"; the code moved to `backend/core` in task T6 and the legacy `backend/auth` app was removed in T7). Placeholders (`<lint>`, `<test>`, `<EXCL>`…) are defined in the backend template, run from `backend/auth/`.
 
 ---
 

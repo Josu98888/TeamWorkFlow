@@ -3,7 +3,7 @@
 ## How to Use This Guide
 
 - Start here for cross-project norms. TeamWorkFlow is a monorepo with a NestJS backend (a modular monolith plus a telemetry service) and a Next.js frontend. The architecture decision is in [`docs/architecture.md`](docs/architecture.md).
-- Components may have their own `AGENTS.md` with specific guidelines: `frontend/AGENTS.md` (Next.js agent rules written by `next dev`), `backend/core/AGENTS.md` (core-wide rules and route map), one per core module (`backend/core/src/auth/AGENTS.md`, `backend/core/src/organization/AGENTS.md`, `backend/core/src/tasks/AGENTS.md`, `backend/core/src/notifications/AGENTS.md`, `backend/core/src/billing/AGENTS.md`) and `backend/telemetry/AGENTS.md` (the whole `attendance` domain). `backend/gateway/AGENTS.md` and `backend/auth/AGENTS.md` are stubs: that code is being merged into `backend/core` (task T6 of `odd/tasks/two-service-architecture.md`).
+- Components may have their own `AGENTS.md` with specific guidelines: `frontend/AGENTS.md` (Next.js agent rules written by `next dev`), `backend/core/AGENTS.md` (core-wide rules and route map), one per core module (`backend/core/src/auth/AGENTS.md`, `backend/core/src/organization/AGENTS.md`, `backend/core/src/tasks/AGENTS.md`, `backend/core/src/notifications/AGENTS.md`, `backend/core/src/billing/AGENTS.md`) and `backend/telemetry/AGENTS.md` (the whole `attendance` domain).
 - Component docs override this file when guidance conflicts.
 - The project is at an early stage: many files referenced by the skills do not exist yet. Check before importing or assuming (each skill has a "Project Status" section).
 
@@ -83,10 +83,8 @@ TeamWorkFlow is a multitenant SaaS for managing and monitoring field staff acros
 
 | Component | Location | Tech Stack | Port |
 |-----------|----------|------------|------|
-| Core (modular monolith) | `backend/core/` (docs only until T6; see migration note below) | NestJS 12, modules `auth`, `organization`, `tasks`, `notifications`, `billing`, public HTTP API (former gateway), NATS (request/reply + JetStream), Prisma 7 | 3000 (HTTP, prefix `/api`) |
+| Core (modular monolith) | `backend/core/` (`auth` module and HTTP layer are real code; the other modules are docs only) | NestJS 12, modules `auth`, `organization`, `tasks`, `notifications`, `billing`, public HTTP API (former gateway), NATS (request/reply + JetStream), Prisma 7 | 3000 (HTTP, prefix `/api`) |
 | Telemetry | `backend/telemetry/` (docs only, code not created yet) | NestJS 12, whole `attendance` domain (clock-ins, corrections, workdays, alerts, Torre de Control), Socket.IO, NATS, Prisma 7 | 3003 (HTTP `/api/v1/telemetry` + WebSocket `/ws`) |
-| Gateway (current code) | `backend/gateway/` | NestJS 12, `@nestjs/microservices` (NATS client), joi. Becomes the HTTP layer of `core` | 3000 (HTTP, prefix `/api`) |
-| Auth (current code) | `backend/auth/` | NestJS 12, NATS transport, Prisma 7. Becomes the `auth` module of `core` | 3001 |
 | Message broker | `backend/docker-compose.yml` (`nats-server`) | NATS with JetStream | 4222 (client), 8222 (monitoring) |
 | Frontend | `frontend/` | Next.js 16, React 19, Tailwind 4, TypeScript 5 | 3000 by default (see note below) |
 | Database | not set up yet | PostgreSQL + Prisma 7 (one shared database `teamworkflow`; one PostgreSQL schema, role, Prisma client and migration history per core module and for telemetry) | — |
@@ -98,11 +96,10 @@ The MVP backend is exactly 2 services (see [`docs/architecture.md`](docs/archite
 
 A reverse proxy publishes both under one origin, routing by path (`/api` to `core`; `/api/v1/telemetry` and `/ws` to `telemetry`), so the frontend still sees one API.
 
-> **Migration in progress.** `backend/core` and `backend/telemetry` do not exist yet. Today the code lives in `backend/gateway` and `backend/auth` as separate apps; task T6 of `odd/tasks/two-service-architecture.md` merges them into `backend/core`. The other modules (`organization`, `tasks`, `notifications`, `billing`) and `telemetry` are documented but not built. Their design docs already live in `backend/core/src/<module>/AGENTS.md` and `backend/telemetry/AGENTS.md`.
-
+> **Status.** `backend/core` is real code for the `auth` module and the HTTP layer (the legacy `gateway` and `auth` apps were merged into it and removed in task T6/T7 of `odd/tasks/two-service-architecture.md`). The other modules (`organization`, `tasks`, `notifications`, `billing`) and `backend/telemetry` are documented but not built. Their design docs already live in `backend/core/src/<module>/AGENTS.md` and `backend/telemetry/AGENTS.md`.
 Naming is English everywhere in the MVP (folders, NATS patterns `<module>.<resource>.<action>`, events `t.<tenant>.<module>.<event>`, error codes, data model); the Spanish names in the root `README.md` belong to the 16-service target architecture, which stays as the long-term reference (each core module is a natural extraction candidate).
 
-> Port clash: the gateway and `next dev` both default to 3000. Run the frontend on another port (`pnpm dev -p 3002`) until this is fixed in config.
+> Port clash: `core` and `next dev` both default to 3000. Run the frontend on another port (`pnpm dev -p 3002`) until this is fixed in config.
 
 ### Architecture Rules
 
@@ -121,16 +118,16 @@ Naming is English everywhere in the MVP (folders, NATS patterns `<module>.<resou
 Package manager: **pnpm** (each app has its own `package.json`; there is no root workspace yet).
 
 ```bash
-# Whole backend with Docker (today: NATS + auth + gateway, hot reload)
-# Target after task T7: NATS + PostgreSQL + core (+ telemetry once it exists)
+# Whole backend with Docker (NATS + PostgreSQL + core, hot reload; telemetry joins once it exists)
 cd backend
 docker compose up --build
+# Migrations do not run on start; first run and after schema changes:
+docker compose exec core pnpm prisma:auth:migrate:deploy
 
 # A single backend app locally
-cd backend/gateway        # or backend/auth (today)
+cd backend/core
 pnpm install
 pnpm start:dev
-# Target after task T6: cd backend/core, same commands
 
 # Frontend
 cd frontend
@@ -158,7 +155,7 @@ Follow Conventional Commits: `<type>(<scope>): <description>`
 
 **Types:** `feat`, `fix`, `docs`, `chore`, `perf`, `refactor`, `style`, `test`
 
-**Scopes:** `core` (backend/core infrastructure), module scopes (`auth`, `organization`, `tasks`, `notifications`, `billing`), `telemetry`, `gateway` (until it is merged into `core`), `frontend`, `prisma`, `docker`, `architecture` (for `docs/architecture.md` and cross-service docs), `skills`, plus domain scopes (see `teamworkflow-commits`).
+**Scopes:** `core` (backend/core infrastructure), module scopes (`auth`, `organization`, `tasks`, `notifications`, `billing`), `telemetry`, `frontend`, `prisma`, `docker`, `architecture` (for `docs/architecture.md` and cross-service docs), `skills`, plus domain scopes (see `teamworkflow-commits`).
 
 Rules for AI agents:
 
