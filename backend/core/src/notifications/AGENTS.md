@@ -1,26 +1,26 @@
-# AGENTS.md — `notifications` microservice
+# AGENTS.md — `notifications` module (`backend/core`)
 
-Guide for coding agents working on this service. Read it fully before making changes. It overrides the root `AGENTS.md` when they conflict. Code patterns live in `skills/teamworkflow-nest`; migrations in `skills/teamworkflow-prisma-migrations`.
+Guide for coding agents working on the `notifications` module of `backend/core`. Read `backend/core/AGENTS.md` (core-wide rules: module boundaries, HTTP layer, event bus) and then this file fully before making changes. This file overrides the root `AGENTS.md` and `backend/core/AGENTS.md` for the `notifications` domain rules when they conflict. Code patterns live in `skills/teamworkflow-nest`; migrations in `skills/teamworkflow-prisma-migrations`.
 
-## What this service is
+## What this module is
 
 `notifications` delivers messages to people: a push notification to the mobile app (FCM) and an in-app notification stored and listed for the web. It has NO business logic beyond routing: it decides who receives what, renders a template, stores it, sends it and logs the result.
 
-It is one NestJS 12 app with internal modules `push-tokens`, `routing` and `delivery`. In the 16-service target architecture of the root README it may be split later.
+It is a module of the `backend/core` modular monolith (`src/notifications/`, `NotificationsModule`) with internal sub-modules `push-tokens`, `routing` and `delivery`. Other core modules reach it only through its exported facade service or its events; it can be extracted to its own service later without changing its event consumers (`docs/architecture.md`).
 
 Responsibilities:
 
 - Register and unregister the device push tokens of the mobile app.
-- Accept sends from any service through the generic event `t.<tenant>.notifications.send`.
-- Route domain events from other services to their recipients.
+- Accept sends from any module or service through the generic event `t.<tenant>.notifications.send`.
+- Route domain events from other modules and from `telemetry` to their recipients.
 - Store in-app notifications and expose list, unread count and mark-as-read for the web.
 - Deliver push notifications through FCM, log every send and retry failures up to 3 times.
 
 Out of scope (do NOT implement here):
 
 - Email, SMS and WhatsApp. Future work. This is consistent with `auth`: invitation and reset links are copied by the admin, never sent.
-- Business rules of any domain (what is late, what is overdue): owned by the producing service. This service only maps "event X goes to recipients Y with template Z".
-- User, role and site data: owned by `auth` and `organization`. This service never reads their tables.
+- Business rules of any domain (what is late, what is overdue): owned by the producing module or service. This module only maps "event X goes to recipients Y with template Z".
+- User, role and site data: owned by `auth` and `organization`. This module never reads their tables.
 - User notification preferences, quiet hours, digests, complex backoff or dead-letter processing. Future work; ask before adding.
 
 ## Business Rules
@@ -33,10 +33,10 @@ Out of scope (do NOT implement here):
 
 ### Generic send
 
-`t.<tenant>.notifications.send` is the way any service asks for a notification:
+`t.<tenant>.notifications.send` is the way any module or service asks for a notification:
 
 - Payload: `eventId`, `tenantId`, `recipientUserIds` (list), `templateCode`, `data` (key-value used by the template), `occurredAt`.
-- Examples of producers: `billing` sending its payment notices (see below), or any service with a one-off message.
+- Examples of producers: `billing` sending its payment notices (see below), or any module with a one-off message.
 - An unknown `templateCode` is logged and acknowledged without sending (never retried forever).
 - Idempotent per `eventId`. Producers that re-run jobs (like `billing`) use a deterministic `eventId` per notice so a re-run never sends twice.
 
@@ -50,7 +50,7 @@ Out of scope (do NOT implement here):
 | `billing_suspended` | Day 7 of delay, the subscription is suspended | `invoiceId` |
 | `billing_data_deletion_warning` | 7 days before the data of a cancelled tenant is deleted | `deletionDate` |
 
-These are plain generic sends: there is no domain-event route for them in this service. Amounts in `data` are decimal strings.
+These are plain generic sends: there is no domain-event route for them in this module. Amounts in `data` are decimal strings.
 
 ### Templates and language
 
@@ -61,7 +61,7 @@ These are plain generic sends: there is no domain-event route for them in this s
 
 ### Routing from domain events
 
-The service consumes events of other services and maps them to recipients and a template code:
+The module consumes events of other modules and of `telemetry` (the `attendance` domain) and maps them to recipients and a template code:
 
 | Event | Recipients | Template code |
 |-------|------------|---------------|
@@ -71,18 +71,18 @@ The service consumes events of other services and maps them to recipients and a 
 
 Adding a route is a code change in the `routing` module with its test; routes are not configurable by tenants.
 
-Plan gating: alert routing is a `pro` feature. The service keeps a local copy of the tenant's `features` (`TenantFeatures`), fed by `t.<tenant>.billing.subscription_created` and `t.<tenant>.billing.plan_changed` (idempotent; an event older than the stored `effectiveAt`, or `occurredAt` for `subscription_created`, is ignored; no copy yet means no pro features). The `attendance_alert_opened` route is acknowledged and dropped for a tenant without `features.alerts`. The gateway still blocks the routes; this only stops the automatic work. Task and billing sends are not affected by the copy (`task_assigned` is only emitted by `tasks` for tenants that have the feature).
+Plan gating: alert routing is a `pro` feature. The module keeps a local copy of the tenant's `features` (`TenantFeatures`), fed by `t.<tenant>.billing.subscription_created` and `t.<tenant>.billing.plan_changed` (idempotent; an event older than the stored `effectiveAt`, or `occurredAt` for `subscription_created`, is ignored; no copy yet means no pro features). The `attendance_alert_opened` route is acknowledged and dropped for a tenant without `features.alerts`. The HTTP layer of `core` still blocks the routes; this only stops the automatic work. Task and billing sends are not affected by the copy (`task_assigned` is only emitted by `tasks` for tenants that have the feature).
 
 ### Recipient resolution (decision)
 
-The service does not own users, roles or site scope, so it asks the owner at the time it routes:
+The module does not own users, roles or site scope, so it asks the owning module's facade at the time it routes:
 
-- **Supervisors of a site and owners/admins of a tenant:** request `auth.user.list-recipients` (internal service call, see NATS Contract) with `tenantId`, `roles` and optional `siteId`. `auth` owns roles and the `User.siteIds` assignments.
-- **An employee as recipient:** the event carries `employeeId`; request `organization.employee.get` by `employeeId` to obtain the `userId`.
+- **Supervisors of a site and owners/admins of a tenant:** call `auth.user.list-recipients` (in-process facade call of the `auth` module, see NATS Contract) with `tenantId`, `roles` and optional `siteId`. `auth` owns roles and the `User.siteIds` assignments.
+- **An employee as recipient:** the event carries `employeeId`; call the `organization` facade `organization.employee.get` by `employeeId` to obtain the `userId`.
 - Nothing is cached beyond the processing of one event: assignments and roles change without events, so a stale copy would notify the wrong people. Revisit only if the request volume proves to be a problem.
-- If the owner service does not answer, the event is NOT acknowledged and is redelivered by JetStream; processing is idempotent so redelivery is safe.
+- If the owner module's facade call fails, the event is NOT acknowledged and is redelivered by JetStream; processing is idempotent so redelivery is safe.
 
-`auth.user.list-recipients` is part of the `auth` contract (internal services only, never the gateway); it must exist in `auth` before the routing of `alert_opened` can work.
+`auth.user.list-recipients` is part of the `auth` contract (internal to `core` modules only, never exposed by the HTTP layer of `core` nor as a NATS responder); it must exist in `auth` before the routing of `alert_opened` can work.
 
 ### Delivery log and retries
 
@@ -107,69 +107,71 @@ Consume `t.<tenant>.auth.tenant_suspended` / `tenant_cancelled` / `tenant_reacti
 
 ### Tenant data purge
 
-Consume `t.<tenant>.billing.data_retention_expired` (emitted 90 days after the tenant was cancelled). It permanently deletes ALL the tenant's data in this service: device tokens, notifications, deliveries, tenant state, features copy and processed events. It is idempotent (a second delivery finds nothing and is a no-op) and emits nothing.
+Consume `t.<tenant>.billing.data_retention_expired` (emitted 90 days after the tenant was cancelled). It permanently deletes ALL the tenant's data in this module: device tokens, notifications, deliveries, tenant state, features copy and processed events. It is idempotent (a second delivery finds nothing and is a no-op) and emits nothing.
 
 ## Stack
 
-- NestJS 12 microservice over NATS (`@nestjs/microservices`).
-- PostgreSQL + Prisma 7 with its own `prisma/schema.prisma` in the `notifications` schema of the shared `teamworkflow` database, accessed with its own `notifications_svc` role that cannot read other schemas (see `backend/STEPS.md` S1.1). Not installed yet.
+- NestJS 12 module inside `backend/core`; HTTP controllers for this module's endpoints live in `src/notifications/` (see `backend/core/AGENTS.md`). NATS is used for JetStream events only: this module answers no NATS requests.
+- PostgreSQL + Prisma 7 with its own `prisma/schema.prisma` in the `notifications` schema of the shared `teamworkflow` database, accessed through its own Prisma client with its own `notifications_svc` role that cannot read other schemas (see `backend/STEPS.md` S1.1). Not installed yet.
 - FCM through the Firebase Admin SDK (`firebase-admin`). Not installed yet.
-- `class-validator` + `class-transformer` with a global `ValidationPipe` throwing `RpcException`. Not installed yet.
+- `class-validator` + `class-transformer` with the global `ValidationPipe` of `core` (422 `validation_error`). Not installed yet.
 - Scheduling for the retry job (for example `@nestjs/schedule`). Not installed yet.
-- Env validation with joi in `src/config/envs.ts`, same pattern as the gateway.
+- Env validation with joi in `src/config/envs.ts`, same pattern as the rest of `core`.
 - Jest for tests.
 
 Ask before installing any dependency.
 
 ## Current Status (READ FIRST)
 
-The folder contains only this `AGENTS.md` and the `README.md`. There is no Nest app yet: no `package.json`, no `src/`, no Prisma, no Dockerfile, no entry in `backend/docker-compose.yml`.
+`backend/core` does not exist yet (task T6 of `odd/tasks/two-service-architecture.md` creates it from `backend/gateway` + `backend/auth`). This folder contains only this `AGENTS.md`: there is no `NotificationsModule`, no Prisma schema, no controllers.
 
 First tasks, in order (ask before each install):
 
-- [ ] Scaffold the Nest app (microservice bootstrap with `Transport.NATS`, `src/config/envs.ts`, `.env.example`).
+- [ ] Create `NotificationsModule` in `backend/core/src/notifications/` (needs `backend/core` from T6), its config in `src/config/envs.ts` and `.env.example`.
 - [ ] Prisma schema and first migration (`DeviceToken`, `Notification`, `NotificationDelivery`).
-- [ ] Device token and in-app notification request-reply handlers.
+- [ ] Device token and in-app notification facade operations and HTTP controllers.
 - [ ] Generic send consumer and routing for the three events above.
 - [ ] FCM integration and the retry job.
-- [ ] Make sure `auth.user.list-recipients` is implemented in `auth` (it is already in the `auth` contract).
-- [ ] Add the service to `backend/docker-compose.yml` and the gateway routes.
+- [ ] Make sure `auth.user.list-recipients` is implemented in the `auth` module facade (it is already in the `auth` contract).
+- [ ] Expose the module routes through its HTTP controllers in `core` (no separate service, no extra compose entry).
 
 ## NATS Contract
 
-Request-reply patterns follow `notifications.<resource>.<action>` and carry NO tenant in the subject: the tenant comes from the actor. Domain events follow `t.<tenant>.<service>.<event>` (JetStream, snake_case names). Keep the pattern names in constants files (to create: `src/<module>/<module>.patterns.ts`) and keep the gateway side in sync.
+Operation names follow `notifications.<resource>.<action>` and carry NO tenant: the tenant comes from the actor. Domain events follow `t.<tenant>.<module>.<event>` (JetStream, snake_case names).
 
-### Request-reply (`@MessagePattern`)
+In `core` every operation below is an **in-process call** to the module's facade service (invoked by the module's HTTP controllers); the pattern string is kept as the operation's stable name. `telemetry` does not need anything from this module, so there are **no NATS request-reply responders** here. Keep the names in a constants file (to create: `src/notifications/notifications.patterns.ts`).
+
+### Operations (module facade) and NATS responders
 
 "actor" = `{ userId, tenantId, role, siteIds }` from `auth.token.verify`. Lists return `{ items, total }`.
 
-| Pattern | Caller | Payload | Returns |
+| Operation | Caller | Payload | Returns |
 |---------|--------|---------|---------|
-| `notifications.push-token.register` | gateway (mobile app) | actor, `token`, `platform` (`android` \| `ios`) | `{ ok: true }` |
-| `notifications.push-token.unregister` | gateway (mobile app) | actor, `token` | `{ ok: true }` |
-| `notifications.notification.list` | gateway (web) | actor, `unreadOnly`, `page`, `pageSize` | the actor's notifications |
-| `notifications.notification.unread-count` | gateway (web) | actor | `{ count }` |
-| `notifications.notification.mark-read` | gateway (web) | actor, `notificationId` or `all: true` | `{ ok: true }` |
+| `notifications.push-token.register` | HTTP controller (mobile app) | actor, `token`, `platform` (`android` \| `ios`) | `{ ok: true }` |
+| `notifications.push-token.unregister` | HTTP controller (mobile app) | actor, `token` | `{ ok: true }` |
+| `notifications.notification.list` | HTTP controller (web) | actor, `unreadOnly`, `page`, `pageSize` | the actor's notifications |
+| `notifications.notification.unread-count` | HTTP controller (web) | actor | `{ count }` |
+| `notifications.notification.mark-read` | HTTP controller (web) | actor, `notificationId` or `all: true` | `{ ok: true }` |
 
-### Requests this service makes to other services
+### Calls this module makes to other modules
 
-| Pattern | Owner | Payload | Returns |
+| Operation (facade of the owner) | Owner | Payload | Returns |
 |---------|-------|---------|---------|
 | `auth.user.list-recipients` | `auth` | `tenantId`, `roles`, optional `siteId` | `{ userIds }` of active users; for supervisors only those assigned to `siteId` |
 | `organization.employee.get` | `organization` | `tenantId`, `employeeId` | employee with `userId` |
 
-These are service-to-service calls without a user actor, so they carry an explicit `tenantId` taken from the subject of the consumed event, never from a client.
+These are module-to-module facade calls (in-process, no NATS) without a user actor, so they carry an explicit `tenantId` taken from the subject of the consumed event, never from a client.
 
 ### Events emitted
 
-None. Delivery results are logged in the database. Add events only when another service needs them.
+None. Delivery results are logged in the database. Add events only when another module or service needs them.
 
 ### Events consumed (JetStream, durable consumer, explicit ack)
 
 | Event subject | Producer | Handling |
 |---------------|----------|----------|
-| `t.<tenant>.notifications.send` | any service (for example `billing`) | Generic send (see Business Rules). |
-| `t.<tenant>.attendance.alert_opened` | `attendance` | Notify supervisors of the site. |
+| `t.<tenant>.notifications.send` | any module or service (for example `billing`) | Generic send (see Business Rules). |
+| `t.<tenant>.attendance.alert_opened` | `attendance` (published by `telemetry`) | Notify supervisors of the site. |
 | `t.<tenant>.tasks.task_assigned` | `tasks` | Notify the assigned employee. |
 | `t.<tenant>.auth.tenant_suspended` / `tenant_cancelled` / `tenant_reactivated` | `auth` | Pause or resume sends for the tenant. |
 | `t.<tenant>.billing.subscription_created` / `plan_changed` | `billing` | Store the tenant's `features` (idempotent, ignore stale events). |
@@ -179,7 +181,7 @@ The tenant of a consumed event comes from the subject and is checked against the
 
 ### Errors
 
-Throw `RpcException` with `{ status, code, message }` (see `teamworkflow-nest`). The gateway maps it to HTTP `{ detail, code }`.
+Throw `RpcException` with `{ status, code, message }` (see `teamworkflow-nest`). The HTTP exception filter of `core` maps it to HTTP `{ detail, code }`.
 
 | code | status | When |
 |------|--------|------|
@@ -204,12 +206,12 @@ Templates live in code (`src/templates`), keyed by `(templateCode, locale)`, eac
 
 | Variable | Description |
 |----------|-------------|
-| `NATS_SERVER` | Comma-separated NATS URLs |
-| `DATABASE_URL` | PostgreSQL connection string for this service |
+| `NATS_SERVER` | Comma-separated NATS URLs (shared by all of `core`) |
+| `DATABASE_URL` | PostgreSQL connection string for this module (its own role and schema) |
 | `FCM_PROJECT_ID` | Firebase project id |
 | `FCM_CREDENTIALS` | Service account credentials (path or base64 JSON; never committed) |
 
-Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Never commit `.env` or credentials.
+Variable names are provisional until the shared `core` config exists (T4/T6): in `core` each module has its own database URL for its own role. Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Never commit `.env` or credentials.
 
 ## Security Rules (non-negotiable)
 
@@ -218,11 +220,11 @@ Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Ne
 3. A user only lists, counts and marks as read their own notifications, and only manages their own tokens.
 4. Never log push tokens, FCM credentials or notification bodies with personal data.
 5. A token is never returned by any endpoint.
-6. Never read another service's tables; ask over NATS.
+6. Never read another module's tables or use its Prisma client; call its exported facade service or consume its events.
 
 ## Tests
 
-- Unit tests for every use case with Prisma, `ClientProxy` and the FCM client mocked (`pnpm test`).
+- Unit tests for every use case with Prisma, the facades of other modules and the FCM client mocked (`pnpm test`).
 - Always covered: tenant isolation; a user cannot see or mark another user's notifications; token register (reassign and reactivate) and unregister; generic send with recipients and unknown template; each route resolving recipients correctly (supervisors of the site only, assigned employee, owner and admins); in-app row created without tokens; delivery log `pending`/`sent`/`failed`; retry up to 3 attempts and then stop; invalid FCM token deactivated; suspended and cancelled tenant sends dropped and retries paused; plan gating (alert routing dropped for a tenant without `features.alerts`, working with it; `subscription_created`/`plan_changed` idempotent and stale events ignored); tenant data purge (`data_retention_expired` deletes every row of the tenant, leaves other tenants untouched and is idempotent); idempotent handling of every consumed event (no duplicate notification); each `billing_*` template (including `billing_data_deletion_warning`) rendering in Spanish with its `data`; templates rendered with the `es` locale stored on the notification and the fallback to `DEFAULT_LOCALE`; `billing_*` sends delivered while the tenant is suspended or cancelled.
 
 - E2E tests (to create in `test/`) once the transport and the database are set up, against a dedicated test database.
@@ -231,5 +233,5 @@ Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Ne
 
 - [ ] `pnpm lint`, `pnpm test` and `pnpm build` pass.
 - [ ] Schema changes come with a reviewed Prisma migration.
-- [ ] If you changed a pattern, event or payload, you updated this file, the gateway and the producing services' docs, and called it out in the PR description.
+- [ ] If you changed a pattern, event or payload, you updated this file, `backend/core/AGENTS.md` and the producing modules' and services' docs, and called it out in the PR description.
 - [ ] No tokens, credentials or personal data in logs, tests or fixtures.
