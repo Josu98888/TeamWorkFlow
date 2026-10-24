@@ -40,11 +40,11 @@ describe('App (e2e)', () => {
 
   beforeEach(() => jest.resetAllMocks());
 
-  it('returns 404 { detail, code } for an unknown route under /api', async () => {
+  it('returns 404 { detail, code } for an unknown route under /api/v1', async () => {
     auth.verify.mockResolvedValue({ userId: 'u' });
 
     const response = await request(app.getHttpServer())
-      .get('/api/unknown')
+      .get('/api/v1/unknown')
       .set('Authorization', 'Bearer t')
       .expect(404);
 
@@ -54,12 +54,21 @@ describe('App (e2e)', () => {
     });
   });
 
+  it('does not register /api/v1/telemetry (owned by the telemetry service)', async () => {
+    auth.verify.mockResolvedValue({ userId: 'u' });
+
+    await request(app.getHttpServer())
+      .get('/api/v1/telemetry/ping')
+      .set('Authorization', 'Bearer t')
+      .expect(404);
+  });
+
   it('serves the public login route without a token', async () => {
     const pair = { accessToken: 'a', refreshToken: 'r', expiresIn: 900 };
     auth.login.mockResolvedValue(pair);
 
     const response = await request(app.getHttpServer())
-      .post('/api/auth/login')
+      .post('/api/v1/auth/login')
       .send({ email: 'Ana@Acme.test', password: 'secret' })
       .expect(201);
 
@@ -72,7 +81,7 @@ describe('App (e2e)', () => {
 
   it('answers 422 validation_error for an invalid or extra body field', async () => {
     const response = await request(app.getHttpServer())
-      .post('/api/auth/login')
+      .post('/api/v1/auth/login')
       .send({
         email: 'ana@acme.test',
         password: 'secret',
@@ -86,7 +95,7 @@ describe('App (e2e)', () => {
 
   it('answers 401 invalid_token on a guarded route without a token', async () => {
     const response = await request(app.getHttpServer())
-      .post('/api/auth/logout')
+      .post('/api/v1/auth/logout')
       .send({ refreshToken: 'r' })
       .expect(401);
 
@@ -98,7 +107,7 @@ describe('App (e2e)', () => {
     auth.verify.mockRejectedValue(new InvalidTokenException());
 
     await request(app.getHttpServer())
-      .post('/api/auth/logout')
+      .post('/api/v1/auth/logout')
       .set('Authorization', 'Bearer bad')
       .send({ refreshToken: 'r' })
       .expect(401);
@@ -109,7 +118,7 @@ describe('App (e2e)', () => {
     auth.logout.mockResolvedValue({ ok: true });
 
     const response = await request(app.getHttpServer())
-      .post('/api/auth/logout')
+      .post('/api/v1/auth/logout')
       .set('Authorization', 'Bearer good')
       .send({ refreshToken: 'r' })
       .expect(201);

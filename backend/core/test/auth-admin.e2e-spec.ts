@@ -86,13 +86,13 @@ describe('Auth admin routes (e2e)', () => {
   });
 
   it.each([
-    ['post', '/api/auth/invitations'],
-    ['get', '/api/auth/invitations'],
-    ['post', `/api/auth/invitations/${INVITATION_ID}/regenerate`],
-    ['patch', `/api/auth/users/${USER_ID}/role`],
-    ['put', `/api/auth/users/${USER_ID}/sites`],
-    ['post', `/api/auth/users/${USER_ID}/deactivate`],
-    ['post', `/api/auth/users/${USER_ID}/password-reset`],
+    ['post', '/api/v1/auth/invitations'],
+    ['get', '/api/v1/auth/invitations'],
+    ['post', `/api/v1/auth/invitations/${INVITATION_ID}/regenerate`],
+    ['patch', `/api/v1/auth/users/${USER_ID}/role`],
+    ['put', `/api/v1/auth/users/${USER_ID}/sites`],
+    ['post', `/api/v1/auth/users/${USER_ID}/deactivate`],
+    ['post', `/api/v1/auth/users/${USER_ID}/password-reset`],
   ] as const)(
     'answers 401 on guarded %s %s without a token',
     async (verb, path) => {
@@ -108,7 +108,7 @@ describe('Auth admin routes (e2e)', () => {
     invitations.create.mockResolvedValue({ invitationId: 'i' });
 
     await request(app.getHttpServer())
-      .post('/api/auth/invitations')
+      .post('/api/v1/auth/invitations')
       .set('Authorization', 'Bearer good')
       .send({ email: 'Eva@Acme.test', role: 'employee' })
       .expect(201);
@@ -122,7 +122,7 @@ describe('Auth admin routes (e2e)', () => {
 
   it('rejects an actor or tenantId in the body with 422', async () => {
     const response = await request(app.getHttpServer())
-      .post('/api/auth/invitations')
+      .post('/api/v1/auth/invitations')
       .set('Authorization', 'Bearer good')
       .send({
         email: 'eva@acme.test',
@@ -138,7 +138,7 @@ describe('Auth admin routes (e2e)', () => {
 
   it('rejects a non-uuid path param with 422', async () => {
     await request(app.getHttpServer())
-      .post('/api/auth/users/not-a-uuid/deactivate')
+      .post('/api/v1/auth/users/not-a-uuid/deactivate')
       .set('Authorization', 'Bearer good')
       .expect(422);
 
@@ -149,7 +149,7 @@ describe('Auth admin routes (e2e)', () => {
     changeRole.changeRole.mockResolvedValue({ ok: true });
 
     const response = await request(app.getHttpServer())
-      .patch(`/api/auth/users/${USER_ID}/role`)
+      .patch(`/api/v1/auth/users/${USER_ID}/role`)
       .set('Authorization', 'Bearer good')
       .send({ role: 'supervisor' })
       .expect(200);
@@ -166,7 +166,7 @@ describe('Auth admin routes (e2e)', () => {
     assignSites.assignSites.mockResolvedValue({ ok: true });
 
     await request(app.getHttpServer())
-      .put(`/api/auth/users/${USER_ID}/sites`)
+      .put(`/api/v1/auth/users/${USER_ID}/sites`)
       .set('Authorization', 'Bearer good')
       .send({ siteIds: [SITE_ID] })
       .expect(200);
@@ -183,11 +183,11 @@ describe('Auth admin routes (e2e)', () => {
     resetConfirm.confirm.mockResolvedValue({ ok: true });
 
     await request(app.getHttpServer())
-      .post('/api/auth/invitations/accept')
+      .post('/api/v1/auth/invitations/accept')
       .send({ token: 't', name: 'Eva', password: 'password-1' })
       .expect(201);
     await request(app.getHttpServer())
-      .post('/api/auth/password-reset/confirm')
+      .post('/api/v1/auth/password-reset/confirm')
       .send({ token: 't', password: 'password-2' })
       .expect(201);
 
@@ -201,7 +201,7 @@ describe('Auth admin routes (e2e)', () => {
 
   it('does not route list-recipients', async () => {
     await request(app.getHttpServer())
-      .post('/api/auth/users/list-recipients')
+      .post('/api/v1/auth/users/list-recipients')
       .set('Authorization', 'Bearer good')
       .send({ tenantId: ACTOR.tenantId, roles: ['employee'] })
       .expect(404);
