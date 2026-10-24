@@ -84,7 +84,7 @@ TeamWorkFlow is a multitenant SaaS for managing and monitoring field staff acros
 | Component | Location | Tech Stack | Port |
 |-----------|----------|------------|------|
 | Core (modular monolith) | `backend/core/` (docs only until T6; see migration note below) | NestJS 12, modules `auth`, `organization`, `tasks`, `notifications`, `billing`, public HTTP API (former gateway), NATS (request/reply + JetStream), Prisma 7 | 3000 (HTTP, prefix `/api`) |
-| Telemetry | `backend/telemetry/` (docs only, code not created yet) | NestJS 12, whole `attendance` domain (clock-ins, corrections, workdays, alerts, Torre de Control), Socket.IO, NATS, Prisma 7 | to be defined (HTTP `/api/telemetry` + WebSocket `/ws`) |
+| Telemetry | `backend/telemetry/` (docs only, code not created yet) | NestJS 12, whole `attendance` domain (clock-ins, corrections, workdays, alerts, Torre de Control), Socket.IO, NATS, Prisma 7 | to be defined (HTTP `/api/v1/telemetry` + WebSocket `/ws`) |
 | Gateway (current code) | `backend/gateway/` | NestJS 12, `@nestjs/microservices` (NATS client), joi. Becomes the HTTP layer of `core` | 3000 (HTTP, prefix `/api`) |
 | Auth (current code) | `backend/auth/` | NestJS 12, NATS transport, Prisma 7. Becomes the `auth` module of `core` | 3001 |
 | Message broker | `backend/docker-compose.yml` (`nats-server`) | NATS with JetStream | 4222 (client), 8222 (monitoring) |
@@ -94,11 +94,11 @@ TeamWorkFlow is a multitenant SaaS for managing and monitoring field staff acros
 The MVP backend is exactly 2 services (see [`docs/architecture.md`](docs/architecture.md)):
 
 - `core`: a NestJS modular monolith with the modules `auth`, `organization`, `tasks`, `notifications` and `billing`, plus the public HTTP API (the former `gateway`; there is no separate gateway service). It answers NATS requests from telemetry (`auth.token.verify`, `organization.*.get`).
-- `telemetry`: the whole `attendance` domain (clock-in ingestion, corrections, workdays, real-time alerts) and the Torre de Control Socket.IO WebSocket. It exposes HTTP `/api/telemetry` and the WebSocket.
+- `telemetry`: the whole `attendance` domain (clock-in ingestion, corrections, workdays, real-time alerts) and the Torre de Control Socket.IO WebSocket. It exposes HTTP `/api/v1/telemetry` and the WebSocket.
 
-A reverse proxy publishes both under one origin, routing by path (`/api` to `core`; `/api/telemetry` and `/ws` to `telemetry`), so the frontend still sees one API.
+A reverse proxy publishes both under one origin, routing by path (`/api` to `core`; `/api/v1/telemetry` and `/ws` to `telemetry`), so the frontend still sees one API.
 
-> **Migration in progress.** `backend/core` and `backend/telemetry` do not exist yet. Today the code lives in `backend/gateway` and `backend/auth` as separate apps; task T6 of `odd/tasks/two-service-architecture.md` merges them into `backend/core`. The other modules (`organization`, `tasks`, `notifications`, `billing`) and `telemetry` are documented but not built. The folders `backend/organization`, `backend/attendance`, `backend/tasks`, `backend/notifications` and `backend/billing` hold design docs only; they will be folded into `backend/core` and `backend/telemetry` by task T3.
+> **Migration in progress.** `backend/core` and `backend/telemetry` do not exist yet. Today the code lives in `backend/gateway` and `backend/auth` as separate apps; task T6 of `odd/tasks/two-service-architecture.md` merges them into `backend/core`. The other modules (`organization`, `tasks`, `notifications`, `billing`) and `telemetry` are documented but not built. Their design docs already live in `backend/core/src/<module>/AGENTS.md` and `backend/telemetry/AGENTS.md`.
 
 Naming is English everywhere in the MVP (folders, NATS patterns `<module>.<resource>.<action>`, events `t.<tenant>.<module>.<event>`, error codes, data model); the Spanish names in the root `README.md` belong to the 16-service target architecture, which stays as the long-term reference (each core module is a natural extraction candidate).
 
@@ -106,7 +106,7 @@ Naming is English everywhere in the MVP (folders, NATS patterns `<module>.<resou
 
 ### Architecture Rules
 
-- The frontend talks ONLY to the public HTTP API: `core` under `/api/...`, `telemetry` under `/api/telemetry`, and, for the Torre de Control, a Socket.IO WebSocket on `/ws` (telemetry). Both are behind one origin (reverse proxy by path). It never calls NATS directly.
+- The frontend talks ONLY to the public HTTP API: `core` under `/api/...`, `telemetry` under `/api/v1/telemetry`, and, for the Torre de Control, a Socket.IO WebSocket on `/ws` (telemetry). Both are behind one origin (reverse proxy by path). It never calls NATS directly.
 - The HTTP layer of `core` (the former gateway) has no business logic: it validates input, calls the owning module's exported service (facade) and maps errors to HTTP with the `{ detail, code }` shape (see `teamworkflow-nest`). `telemetry` verifies tokens with the NATS request `auth.token.verify`, which the `auth` module answers.
 - Module boundaries inside `core`: each module lives in `backend/core/src/<module>/` and exposes only one public service (facade). A module never imports another module's repositories, Prisma client or internal classes. Cross-domain reactions go through events; synchronous facade calls are reserved for reads needed inside a request.
 - NATS JetStream is the ONLY domain event bus, between core modules and between `core` and `telemetry`. Subjects `t.<tenant>.<module>.<event>`, one stream `<MODULE>_EVENTS` per module, durable consumers with explicit ack, `ProcessedEvent` dedup in the same transaction as the handler. Request/reply patterns are `<module>.<resource>.<action>`.
