@@ -2,7 +2,7 @@
 name: teamworkflow-test-ui
 description: >
   Playwright E2E testing for the TeamWorkFlow frontend: setup, MCP exploration workflow, Page Objects,
-  selectors, wait strategies, test data via the NestJS gateway, tags/IDs, scope detection and
+  selectors, wait strategies, test data via the public HTTP API of the NestJS backend, tags/IDs, scope detection and
   test documentation.
   Trigger: When setting up Playwright, writing or modifying E2E tests under frontend/tests/,
   or working with Page Objects and test helpers.
@@ -28,7 +28,7 @@ The frontend is a fresh Next.js scaffold. **Playwright is not installed and no t
 - Check `frontend/package.json` for `@playwright/test`. If missing, do NOT write tests yet: ask the user to set up Playwright (see "Setup").
 - Before creating a Page Object or helper, search `frontend/tests/` for an existing one.
 - Auth is not implemented yet. Tests that need a logged-in user wait for it (`// TODO(auth):`).
-- Test data comes from the NestJS gateway (`backend/gateway`, global prefix `/api`, port 3000). NEVER run E2E tests against a production or shared database.
+- Test data comes from the public HTTP API of the NestJS backend (`core`: global prefix `/api`, port 3000; `telemetry` routes under `/api/v1/telemetry`, port 3003; today `core` is still `backend/gateway`). NEVER run E2E tests against a production or shared database.
 
 ---
 
@@ -96,7 +96,7 @@ export default defineConfig({
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
   },
-  // TODO(e2e-backend): add a second webServer entry for the gateway once the backend
+  // TODO(e2e-backend): add a second webServer entry for the backend (`core`, plus `telemetry` for attendance flows) once the backend
   // start command (or `docker compose up` in backend/) and a TEST database are confirmed.
 });
 ```
@@ -104,7 +104,7 @@ export default defineConfig({
 ```bash
 # frontend/.env.example — add
 E2E_BASE_URL=http://localhost:3000
-E2E_BACKEND_URL=http://localhost:3000/api/   # gateway; keep the trailing slash
+E2E_BACKEND_URL=http://localhost:3000/api/   # core public API; keep the trailing slash
 ```
 
 Recommended scripts (ask before adding):
@@ -131,7 +131,7 @@ Add to `.gitignore`: `test-results/`, `playwright-report/`, `playwright/.auth/`.
 frontend/tests/
 ├── base-page.ts                 # Parent class for ALL Page Objects
 ├── helpers/
-│   ├── backend.ts               # API context + seeding/cleanup helpers (NestJS gateway)
+│   ├── backend.ts               # API context + seeding/cleanup helpers (NestJS backend)
 │   └── data.ts                  # uniqueName(), uniqueEmail(), test data builders
 └── <feature>/                   # one folder per feature: projects, tasks, teams, auth
     ├── <feature>-page.ts        # Page Object
@@ -369,9 +369,9 @@ If the same code appears in two Page Objects, move it to `BasePage` (if every pa
 
 ---
 
-## Test Data (NestJS gateway)
+## Test Data (NestJS backend)
 
-E2E tests run against a TEST database. Seed and clean up through the gateway HTTP API (never talk to NATS or a microservice from tests).
+E2E tests run against a TEST database. Seed and clean up through the public HTTP API (never talk to NATS or an internal service from tests).
 
 ```ts
 // frontend/tests/helpers/data.ts
@@ -395,7 +395,7 @@ export async function backendContext(): Promise<APIRequestContext> {
   });
 }
 
-// TODO(e2e-backend): confirm endpoints and DTO payloads in backend/gateway controllers before using (they may not exist yet).
+// TODO(e2e-backend): confirm endpoints and DTO payloads in the `core` controllers (route map in `backend/core/AGENTS.md`) before using (they may not exist yet).
 export async function seedTeam(api: APIRequestContext, data: { name: string }) {
   const res = await api.post("teams", { data });
   if (!res.ok()) throw new Error(`Seed team failed: ${res.status()} ${await res.text()}`);
@@ -408,7 +408,7 @@ export async function deleteTeam(api: APIRequestContext, id: string) {
 }
 ```
 
-- Field names and endpoints mirror the gateway controllers and DTOs (camelCase). Check `backend/gateway/src/` before writing a helper. Failed requests return `{ detail, code }` (teamworkflow-nest): include both in the thrown error.
+- Field names and endpoints mirror the backend controllers and DTOs (camelCase). Check `backend/core/src/` (or `backend/telemetry/src/`; until T6 `backend/gateway/src/`) before writing a helper. Failed requests return `{ detail, code }` (teamworkflow-nest): include both in the thrown error.
 - Clean up what each test creates (`afterEach` / `afterAll`), or rely on a test DB reset if the backend provides one.
 - NEVER hardcode IDs of existing records.
 
