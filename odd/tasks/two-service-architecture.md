@@ -48,7 +48,9 @@ Seven services mean seven deploys, pipelines and databases to operate, plus dist
   - [x] T6.6 e2e over HTTP + NATS (delegated writer; branch `feat/backend/core-e2e` → PR base `feat/backend/core-auth-events`; commits dbf172e..b450377; `lint` clean, `tsc --noEmit` clean incl. `test/`, `test:smoke` 20/20; `test:e2e --listTests` finds 3 specs). Scripts: `test:e2e` (full, `test/e2e/`, globalSetup migrates via `prisma.auth.config.ts`, ports 5433/4223) and `test:smoke` (DB-free). All legacy scenarios kept; verified actors come from NATS `auth.token.verify`. NOT RUN (Docker down). Risks: app boot while JetStream consumers face missing streams; assumed 201 for POST, 200 for PATCH/PUT.
   - Prisma layout (user, 2026-10-24): colocated per module, `backend/core/src/<module>/prisma/` (schema, migrations, generated client, gitignored); one Prisma config per module schema (verify `--config` path resolution in T6.3).
   - Known: gateway e2e is the stale Nest scaffold and gateway has no unit specs; 36 throw sites, 53 `.getError()` spec assertions.
-- [ ] T7 (delegated writer): compose runs `core` (+ nats, postgres) locally; smoke-test login through `/api`.
+- [ ] T7 (delegated writer; branch `feat/backend/core-compose` → PR base `feat/backend/core-e2e`; commits 3113c28..feb96f5 + 13 total; compose runs `core` (PORT 3000, `AUTH_DATABASE_URL`, `JWT_SECRET` required, TTL defaults), legacy `backend/gateway` and `backend/auth` removed from git (254515a, 1dfb5f8), docs and skills swept, `gateway` commit scope retired; `compose config -q` passes with all vars set (fails only on missing `JWT_SECRET`), test compose OK, `lint` clean, `test:smoke` 20/20; migrations run manually: `docker compose exec core pnpm prisma:auth:migrate:deploy`): compose runs `core` (+ nats, postgres) locally; smoke-test login through `/api/v1`.
+  - Incident 2026-10-24: the T7 writer ran `rm -rf backend/auth backend/gateway` to clear ignored leftovers and deleted the untracked `backend/auth/.env` (not recoverable from git). The parent killed the process; `backend/gateway/.env` survived. Untracked leftovers (`node_modules`, `dist`) remain for the user to clean.
+  - Pending: Docker run (`up --build`, migrate, login smoke), core prefix `/api/v1` (user decision).
   - Known bug: `backend/docker-compose.yml` does not pass `JWT_SECRET` to the auth container, but `backend/auth/src/config/env.schema.ts` requires it (min 32 chars); pass it from `backend/.env` when compose switches to `core`. Also update the nest skill Dockerfile/compose notes.
 
 ## Acceptance criteria
@@ -63,6 +65,7 @@ Seven services mean seven deploys, pipelines and databases to operate, plus dist
 ## Delivery
 - Strategy: `ask-on-risk`. Docs tasks T1–T5 are large but passive; code tasks T6–T7 likely exceed ~400 lines (mostly moves).
 - Execution (user, 2026-10-24): finish all remaining slices first (T6.3 through T7), one stacked branch per slice; Docker-dependent checks (test-DB migrate, `test:e2e` needing DB/NATS, compose up, login smoke) and pushes/PRs are batched at the end.
+- 2026-10-24 (user): core public HTTP routes live under `/api/v1` (not `/api`), matching the core route map; telemetry stays `/api/v1/telemetry`.
 - Per-slice checks (user, 2026-10-24, from T6.4b on): only `pnpm lint` plus the specs of touched files (`pnpm test -- <paths>`); no `test:e2e`, no full `test`, no `build` per slice. One full `test`, `test:e2e` and `build` at the end.
 - Chain strategy (user, 2026-10-24): `feature-branch-chain`. Slice PRs chain onto `feat/backend/auth`; the whole branch merges into `develop` at the end, never into `main`.
 
