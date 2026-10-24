@@ -1,6 +1,6 @@
 ---
 name: teamworkflow-postgres
-description: "Trigger: PostgreSQL indexes, @@index in schema.prisma, slow queries, EXPLAIN, query plans, unused/invalid indexes, VACUUM/ANALYZE. Index design and query performance for Prisma + PostgreSQL per microservice."
+description: "Trigger: PostgreSQL indexes, @@index in schema.prisma, slow queries, EXPLAIN, query plans, unused/invalid indexes, VACUUM/ANALYZE. Index design and query performance for Prisma + PostgreSQL per data owner (core modules and telemetry)."
 license: Apache-2.0
 metadata:
   author: teamworkflow-team
@@ -18,9 +18,9 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 
 ## Project Status (READ FIRST)
 
-- Prisma and PostgreSQL are NOT set up yet: no `schema.prisma`, no database container in `backend/docker-compose.yml`, no `PrismaService` (all to create; see teamworkflow-nest "Database Access"). Everything below applies once a microservice owns a database.
+- Today only `backend/auth` has a Prisma project (`prisma/schema.prisma`, `PrismaService`, one init migration) and `backend/docker-compose.yml` has a `postgres` service (database `teamworkflow`, schemas and roles from `backend/postgres/init/`). `backend/auth` is merged into `backend/core` by task T6 of `odd/tasks/two-service-architecture.md`. The other owners (`organization`, `tasks`, `notifications`, `billing` in `core`; `attendance` in `telemetry`) have no Prisma project or tables yet. Everything below applies to each owner once it has tables (see teamworkflow-nest "Database Access").
 - TeamWorkFlow is early stage: tables will be small. Sequential scans on small tables are NORMAL and often faster than index scans. Do not add indexes "just in case".
-- Each data-owning microservice has its own Prisma schema and tables (all services share the `teamworkflow` database, each in its own PostgreSQL schema with its own role). Index analysis happens per service, against THAT service's tables. The gateway has no database.
+- Each data owner has its own Prisma schema and tables: the five `core` modules and `telemetry` (`attendance`) share the `teamworkflow` database, each in its own PostgreSQL schema with its own role and no cross-schema foreign keys. Index analysis happens per owner, against THAT owner's tables. The HTTP layer of `core` (the former gateway) has no database.
 - Check the PostgreSQL version once (`SELECT version();`); some features below depend on it.
 - There are no partitioned tables. Do not introduce partitioning without asking the user.
 - Conventions assume **Prisma ORM 7** (stable). Verify the installed version before copying schema syntax (`pnpm list prisma`).
@@ -63,12 +63,12 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 
 ### How to run it
 
-Preferred: `psql` against the service's database (use the `DATABASE_URL` of THAT service; in docker-compose, `docker compose exec <postgres-service> psql -U <user> -d <db>`).
+Preferred: `psql` against the owner's schema (use the `<OWNER>_DATABASE_URL` of THAT owner, for example `ATTENDANCE_DATABASE_URL`; today `backend/auth` still uses `DATABASE_URL`; in docker-compose, `docker compose exec <postgres-service> psql -U <user> -d <db>`).
 
 If `psql` is not available, run EXPLAIN through Prisma from a throwaway script. Create it the first time it is needed, and do not commit it:
 
 ```typescript
-// backend/<service>/scripts/db/explain.ts (to create, read-only helper)
+// <owner app folder>/scripts/db/explain.ts (to create, read-only helper)
 import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../../src/generated/prisma/client';
@@ -97,10 +97,10 @@ void main();
 
 ### Getting the SQL that Prisma runs
 
-Enable query logging on the service's client in development (never commit with `query` logging on in production):
+Enable query logging on the owner's client in development (never commit with `query` logging on in production):
 
 ```typescript
-// <service>/src/prisma/prisma.service.ts (development variant)
+// <owner>/prisma.service.ts (development variant; backend/auth/src/prisma/prisma.service.ts today)
 super({
   adapter: new PrismaPg({ connectionString: envs.databaseUrl }),
   log: [
@@ -198,7 +198,7 @@ Prisma maps index attributes to PostgreSQL. What it supports natively vs what ne
 | CHECK constraint | - | No: raw SQL in the migration |
 
 ```prisma
-// <service>/prisma/schema.prisma
+// <owner>/prisma/schema.prisma
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -255,7 +255,7 @@ Important consequences of hand-written indexes:
 - A `lower(email)` expression index is only used by queries written in raw SQL or Prisma `mode: 'insensitive'` when the generated SQL matches it (`ILIKE` or `lower()`); verify with EXPLAIN. Often simpler: store emails already lowercased and use a plain unique index.
 - Trigram indexes need the `pg_trgm` extension: a migration with `CREATE EXTENSION IF NOT EXISTS pg_trgm;` (may require DB owner privileges: ask the user). They help `ILIKE '%term%'` with 3+ characters.
 - Prefix search (`startsWith`) or exact match does NOT need trigram: use a B-tree (an expression index on `lower(col)` with `text_pattern_ops` for case-insensitive prefix, as raw SQL).
-- Explicit names: `ix_<table>_<columns>`, `uq_<table>_<columns>[_<condition>]` via `map:`. If you keep Prisma's defaults (`<Table>_<cols>_idx`), do it consistently across the service.
+- Explicit names: `ix_<table>_<columns>`, `uq_<table>_<columns>[_<condition>]` via `map:`. If you keep Prisma's defaults (`<Table>_<cols>_idx`), do it consistently across the owner's schema.
 
 ### Other index types
 
@@ -361,7 +361,7 @@ this.prisma.task.findMany({
 
 ## Monitoring
 
-All queries below run in `psql` or through a read-only `$queryRaw` helper, per service database.
+All queries below run in `psql` or through a read-only `$queryRaw` helper, per data owner (schema).
 
 ### Indexes per table (for redundancy review)
 
@@ -432,7 +432,7 @@ ORDER BY pg_total_relation_size(relid) DESC;
 
 Two levels:
 
-1. **Application level (cheap, start here):** Prisma `query` event with a duration threshold (see "Getting the SQL that Prisma runs"). Identifies which service call is slow.
+1. **Application level (cheap, start here):** Prisma `query` event with a duration threshold (see "Getting the SQL that Prisma runs"). Identifies which module or service call is slow.
 2. **Server level:** `pg_stat_statements` (extension, requires `shared_preload_libraries`) ranks queries by total time across all clients. Propose enabling it when performance work becomes regular; it is a server config change, ask first. Optionally `log_min_duration_statement` in the PostgreSQL config for the same purpose.
 
 ---
