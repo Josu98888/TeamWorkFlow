@@ -1,16 +1,20 @@
-# attendance — Fichadas, jornadas y alertas
+# telemetry — Fichadas, jornadas y alertas (dominio `attendance`)
 
-`attendance` sabe **quién está presente en cada sede** y avisa cuando algo falla: registra las fichadas, calcula las horas trabajadas, detecta tardanzas y puestos sin cubrir, y alimenta en tiempo real la Torre de Control.
+`telemetry` es el servicio independiente que contiene todo el dominio `attendance`: sabe **quién está presente en cada sede** y avisa cuando algo falla. Registra las fichadas (ingesta de alta frecuencia), calcula las horas trabajadas, detecta tardanzas y puestos sin cubrir, y atiende en tiempo real la Torre de Control. Está separado de [`core`](../core/README.md) porque su carga (muchas fichadas y conexiones WebSocket abiertas) escala distinto del resto de la API.
 
-> **Estado:** todavía no existe la aplicación Nest; la carpeta solo contiene documentación. Este documento describe el diseño objetivo. Ver [Estado actual](#estado-actual).
+> **Nombre:** el servicio se llama `telemetry`, pero el dominio, el schema de PostgreSQL (`attendance`), el rol (`attendance_svc`), los subjects de eventos (`t.<tenant>.attendance.<evento>`), el stream (`ATTENDANCE_EVENTS`) y los nombres de operación (`attendance.<recurso>.<accion>`) conservan el nombre `attendance`.
+
+> **Estado:** todavía no existe la aplicación Nest; la carpeta solo contiene documentación. Puerto: por definir. Este documento describe el diseño objetivo. Ver [Estado actual](#estado-actual).
 >
-> Documentos relacionados: [AGENTS.md](AGENTS.md) (reglas detalladas para agentes, fuente de verdad) · [README general](../../README.md) · [organization](../organization/README.md).
+> Documentos relacionados: [AGENTS.md](AGENTS.md) (reglas detalladas para agentes, fuente de verdad) · [README general](../../README.md) · [Decisión de arquitectura](../../docs/architecture.md) · [core](../core/README.md).
 
 ## En una mirada
 
 | Tema | Decisión |
 |------|----------|
-| Forma | Una app NestJS 12 con cuatro módulos internos: `clock-ins`, `workdays`, `alerts`, `tower`. |
+| Forma | Un servicio NestJS 12 independiente con cuatro módulos internos: `clock-ins`, `workdays`, `alerts`, `tower`. |
+| Entradas públicas | HTTP en `/api/telemetry` y WebSocket Socket.IO en `/ws`, bajo el mismo origen que `core` mediante un proxy inverso. |
+| Autenticación | Verifica cada request y cada conexión WebSocket con la petición NATS `auth.token.verify`, que responde el módulo `auth` de `core`. |
 | Fichadas | `in`, `out`, `break_start`, `break_end`, por `gps`, `qr` o `manual` (manual lo crea un supervisor con motivo). |
 | Ventana de entrada | Una entrada se acepta desde 60 min antes del inicio del turno hasta el fin del turno. Fuera de esa ventana: `no_matching_shift`, y un supervisor puede cargar una fichada manual. |
 | Salida faltante | Si pasan 2 h desde el fin del turno sin salida, la jornada queda como `missing_clock_out` con 0 minutos computados y se alerta al supervisor, que carga una salida manual con motivo. Una salida del empleado que llega después (dentro de las 24 h offline) también se acepta: cierra la jornada y resuelve la alerta. |
@@ -19,10 +23,10 @@
 | Correcciones | Siempre con motivo, conservando el antes y el después. |
 | Jornada | Por turno: minutos trabajados, horas extra y minutos de tardanza. Sin horas nocturnas ni feriados todavía. |
 | Alertas | Tardanza (10 min), puesto sin cubrir (15 min), fuera de geocerca y salida faltante. Estados: abierta, reconocida, resuelta. |
-| Torre de Control | Un evento de resumen por sede en cada cambio; el gateway lo reenvía por Socket.IO. |
-| Plan | Fichadas y jornadas son del plan `basic`. **Alertas y Torre de Control son del plan `pro`**: el gateway bloquea esas rutas (403 `feature_not_in_plan`) con los datos de `auth.token.verify`, y este servicio guarda además una copia local de las funcionalidades del tenant (con `billing.subscription_created` y `billing.plan_changed`) para no detectar alertas ni emitir resúmenes en tenants `basic`. |
-| Datos de turnos | Copia local alimentada por los eventos de `organization`, con consulta de respaldo. |
-| Datos | PostgreSQL con Prisma 7 y su propio `schema.prisma`. |
+| Torre de Control | Un evento de resumen por sede en cada cambio; este mismo servicio lo reenvía por Socket.IO a la sala de la sede. |
+| Plan | Fichadas y jornadas son del plan `basic`. **Alertas y Torre de Control son del plan `pro`**: la capa HTTP de este servicio bloquea esas rutas (403 `feature_not_in_plan`) con los datos de `auth.token.verify`, y el dominio guarda además una copia local de las funcionalidades del tenant (con `billing.subscription_created` y `billing.plan_changed`) para no detectar alertas ni emitir resúmenes en tenants `basic`. |
+| Datos de turnos | Copia local alimentada por los eventos de `organization` (en `core`), con consulta de respaldo por NATS. |
+| Datos | PostgreSQL con Prisma 7 y su propio `schema.prisma` (schema `attendance`). |
 
 ## Qué hace y qué no
 
@@ -32,15 +36,17 @@
 - Permite a supervisores corregir o crear fichadas manuales con auditoría.
 - Calcula la jornada de cada turno.
 - Detecta tardanzas, puestos sin cubrir, fichadas fuera de geocerca y salidas faltantes, y administra el ciclo de vida de las alertas.
-- Publica los resúmenes por sede y responde la foto inicial de la Torre de Control.
+- Publica los resúmenes por sede, responde la foto inicial y atiende la conexión Socket.IO de la Torre de Control.
+- Aplica en sus propias rutas el guard de autenticación, los controles de rol, plan y estado del tenant, el rate limit y la traducción de errores a `{ detail, code }`.
 
 **No hace**
 
 | Qué | Dónde vive |
 |-----|-----------|
-| Sedes, empleados y turnos | `organization` |
-| Envío de notificaciones (push, notificaciones en la app) | `notifications` |
-| Conexión Socket.IO con el navegador | `gateway` |
+| Sedes, empleados y turnos | Módulo `organization` de `core` |
+| Usuarios, tokens y estado del tenant | Módulo `auth` de `core` |
+| Envío de notificaciones (push, notificaciones en la app) | Módulo `notifications` de `core` |
+| Rutas de los demás dominios | `core`, bajo `/api` |
 | Selfie al fichar, GPS continuo, umbrales configurables, horas nocturnas, feriados, cierre de períodos | Trabajo futuro |
 
 ## Permisos
@@ -53,7 +59,7 @@
 | Ver la Torre de Control (plan `pro`) | ✅ todas las sedes | ✅ solo sus sedes | ❌ |
 | Ver fichadas y jornadas | ✅ todas | ✅ solo sus sedes | las propias |
 
-El actor lo toma el gateway del resultado de `auth.token.verify`; nunca de headers ni del body.
+El actor se toma del resultado de `auth.token.verify`; nunca de headers ni del body.
 
 ## Flujos
 
@@ -105,27 +111,28 @@ Si el empleado fichó la entrada y no la salida, hasta 2 h después del fin del 
 ```mermaid
 sequenceDiagram
   participant App as App móvil
-  participant G as gateway
-  participant AT as attendance
+  participant T as telemetry
+  participant C as core
   participant Web as Navegador
-  App->>G: fichada
-  G->>AT: attendance.clock-event.create
-  AT--)G: t.{tenant}.attendance.site_summary_updated
-  G--)Web: Socket.IO (sala de la sede)
-  Web->>G: abre la Torre de Control
-  G->>AT: attendance.tower.snapshot
-  AT-->>G: estado inicial de las sedes del actor
+  App->>T: POST /api/telemetry/clock-events
+  T->>C: auth.token.verify (NATS)
+  C-->>T: actor
+  T--)T: t.{tenant}.attendance.site_summary_updated
+  T--)Web: Socket.IO (sala de la sede)
+  Web->>T: abre la Torre de Control (/ws)
+  T->>C: auth.token.verify (NATS)
+  T-->>Web: estado inicial de las sedes del actor (snapshot)
 ```
 
 El resumen contiene `expected` (esperados), `present` (presentes) y `openAlerts` (alertas abiertas). NATS nunca se expone al navegador.
 
 ### Datos de turnos
 
-`attendance` mantiene una copia local de los turnos, actualizada con los eventos de `organization` (cada evento trae el turno completo). Si falta un turno, lo pide con `organization.shift.get`. La geocerca y el QR se consultan con `organization.site.get` y se guardan un tiempo corto en memoria.
+`telemetry` mantiene una copia local de los turnos, actualizada con los eventos de `organization` (cada evento trae el turno completo). Si falta un turno, lo pide a `core` con la petición NATS `organization.shift.get`. La geocerca y el QR se consultan con `organization.site.get` y se guardan un tiempo corto en memoria.
 
-### Funcionalidades del plan dentro del servicio
+### Funcionalidades del plan dentro del dominio
 
-Los tenants `basic` no tienen alertas ni Torre de Control. Con la copia local de funcionalidades, sin `alerts` no se detectan alertas (ni la revisión periódica ni la de eventos) y sin `tower` no se emite `site_summary_updated`. Las fichadas y las jornadas siguen funcionando. Si el tenant baja de plan, las alertas existentes se conservan y no se abren nuevas. Sin copia todavía se asume que no hay funcionalidades `pro`.
+Los tenants `basic` no tienen alertas ni Torre de Control. La capa HTTP bloquea las rutas y, además, con la copia local de funcionalidades, sin `alerts` no se detectan alertas (ni la revisión periódica ni la de eventos) y sin `tower` no se emite `site_summary_updated`. Las fichadas y las jornadas siguen funcionando. Si el tenant baja de plan, las alertas existentes se conservan y no se abren nuevas. Sin copia todavía se asume que no hay funcionalidades `pro`.
 
 ### Suspensión y cancelación del tenant
 
@@ -137,26 +144,28 @@ Con `t.{tenant}.billing.data_retention_expired` (90 días después de la cancela
 
 ## Contrato NATS
 
-Los pedidos con respuesta usan `attendance.<recurso>.<accion>` y no llevan tenant en el subject. Los eventos usan `t.<tenant>.attendance.<evento>` (JetStream). El detalle de payloads está en [AGENTS.md](AGENTS.md#nats-contract).
+Las operaciones se llaman `attendance.<recurso>.<accion>` y no llevan tenant. Los eventos usan `t.<tenant>.attendance.<evento>` (JetStream, stream `ATTENDANCE_EVENTS`). El detalle de payloads está en [AGENTS.md](AGENTS.md#nats-contract).
 
-**Request-reply**
+**Operaciones (expuestas por HTTP bajo `/api/telemetry`; las rutas son una propuesta, ver [AGENTS.md](AGENTS.md#route-map-proposed-shape-under-apitelemetry))**
 
-| Subject | Quién lo llama | Para qué |
+| Operación | Quién la usa | Para qué |
 |---------|----------------|----------|
 | `attendance.clock-event.create` | empleado | Fichar |
 | `attendance.clock-event.create-manual` | supervisor / admin | Fichada manual con motivo |
 | `attendance.clock-event.correct` | supervisor / admin | Corregir con motivo |
-| `attendance.clock-event.list` | gateway | Listar fichadas |
-| `attendance.workday.get` / `list` | gateway | Consultar jornadas |
-| `attendance.alert.list` | gateway | Listar alertas |
+| `attendance.clock-event.list` | cualquier rol autenticado | Listar fichadas |
+| `attendance.workday.get` / `list` | cualquier rol autenticado | Consultar jornadas |
+| `attendance.alert.list` | cualquier rol autenticado | Listar alertas |
 | `attendance.alert.acknowledge` / `resolve` | supervisor / admin | Reconocer o resolver |
 | `attendance.tower.snapshot` | supervisor / admin | Foto inicial de la Torre de Control |
 
-**Eventos que publica:** `clock_event_recorded`, `clock_event_corrected`, `alert_opened`, `alert_acknowledged`, `alert_resolved`, `site_summary_updated`.
+**Peticiones NATS que `telemetry` hace a `core`** (las responde `core`): `auth.token.verify`, `organization.employee.get`, `organization.site.get`, `organization.shift.get`. `telemetry` no responde peticiones NATS.
 
-**Eventos que consume:** `organization.shift_created`, `shift_updated`, `shift_cancelled`, `shift_starting`, `shift_started`, `shift_ended`, `site_updated`, `auth.tenant_suspended` / `tenant_cancelled` / `tenant_reactivated`, `billing.subscription_created` / `plan_changed` y `billing.data_retention_expired`. Todos los handlers son idempotentes.
+**Eventos que publica:** `clock_event_recorded`, `clock_event_corrected`, `workday_closed`, `alert_opened`, `alert_acknowledged`, `alert_resolved`, `site_summary_updated` (este último lo consume solo `telemetry`, para la Torre de Control).
 
-**Errores** (el gateway los traduce a HTTP `{ detail, code }`)
+**Eventos que consume** (los publica `core`): `organization.shift_created`, `shift_updated`, `shift_cancelled`, `shift_starting`, `shift_started`, `shift_ended`, `site_updated`, `auth.tenant_suspended` / `tenant_cancelled` / `tenant_reactivated`, `billing.subscription_created` / `plan_changed` y `billing.data_retention_expired`. Todos los handlers son idempotentes.
+
+**Errores** (la capa HTTP de este servicio los traduce a `{ detail, code }`; además usa `feature_not_in_plan`, `rate_limited`, `csrf_invalid`, `invalid_token`, `tenant_suspended`, `tenant_cancelled`, `upstream_timeout` y `upstream_unavailable`)
 
 | code | HTTP | Cuándo |
 |------|------|--------|
@@ -169,14 +178,18 @@ Los pedidos con respuesta usan `attendance.<recurso>.<accion>` y no llevan tenan
 
 ## Modelo de datos
 
-Modelos de Prisma: `ShiftSnapshot`, `ClockEvent`, `ClockEventCorrection`, `Workday`, `Alert`, `TenantState`, `TenantFeatures` y `ProcessedEvent`. Todos llevan `tenantId` y toda consulta lo filtra; hay tests que prueban el aislamiento entre tenants. El servicio tiene su propio `prisma/schema.prisma` y sus tablas viven en el schema `attendance` de la base compartida `teamworkflow`, con un usuario de Postgres propio (`attendance_svc`) que no puede leer los schemas de otros servicios.
+Modelos de Prisma: `ShiftSnapshot`, `ClockEvent`, `ClockEventCorrection`, `Workday`, `Alert`, `TenantState`, `TenantFeatures` y `ProcessedEvent`. Todos llevan `tenantId` y toda consulta lo filtra; hay tests que prueban el aislamiento entre tenants. El servicio tiene su propio `prisma/schema.prisma` y sus tablas viven en el schema `attendance` de la base compartida `teamworkflow`, con un usuario de Postgres propio (`attendance_svc`) que no puede leer los schemas de `core`.
 
 ## Configuración
 
 | Variable | Descripción |
 |----------|-------------|
 | `NATS_SERVER` | URLs de NATS separadas por coma |
-| `DATABASE_URL` | Conexión a PostgreSQL |
+| `DATABASE_URL` | Conexión a PostgreSQL (schema `attendance`, rol `attendance_svc`) |
+| `PORT` | Puerto HTTP y WebSocket. Por definir |
+| `WEB_ORIGIN` | Origen web permitido (CORS y Socket.IO) |
+| `NATS_TIMEOUT_MS` | Timeout de las peticiones a `core`. Valor inicial: `5000` |
+| `RATE_LIMIT_AUTH_TTL_MS`, `RATE_LIMIT_AUTH_LIMIT` | Rate limit por usuario. Valores por definir según el tráfico de fichadas |
 
 Los umbrales (10 min, 15 min, 24 h, 60 min antes del turno para fichar la entrada y 2 h después del fin del turno para la salida faltante) son constantes en el código por ahora. El archivo `.env` nunca se commitea; las variables se documentan en `.env.example` (todavía no existe).
 
@@ -185,7 +198,7 @@ Los umbrales (10 min, 15 min, 24 h, 60 min antes del turno para fichar la entrad
 Todavía no hay aplicación que ejecutar. Cuando exista:
 
 ```bash
-cd backend/attendance
+cd backend/telemetry
 pnpm install
 pnpm start:dev
 
@@ -199,10 +212,11 @@ pnpm build
 
 La carpeta contiene solo documentación (`AGENTS.md` y este `README.md`). Falta, entre otras cosas:
 
-- [ ] Crear la app Nest como microservicio NATS (`NestFactory.createMicroservice`).
+- [ ] Crear la app Nest (HTTP + WebSocket + cliente NATS) y definir el puerto.
 - [ ] Agregar `src/config/envs.ts` y `.env.example`.
 - [ ] Instalar y configurar Prisma, `class-validator` y el scheduler de la revisión periódica.
 - [ ] Implementar los módulos `clock-ins`, `workdays`, `alerts` y `tower`.
-- [ ] Implementar los consumidores de eventos de `organization` y `auth`.
-- [ ] Sumar el servicio a `backend/docker-compose.yml` y las rutas del gateway.
+- [ ] Implementar la capa HTTP (guard con `auth.token.verify`, roles, plan, estado del tenant) y la Torre de Control por Socket.IO.
+- [ ] Implementar los consumidores de eventos de `organization`, `auth` y `billing`.
+- [ ] Sumar el servicio a `backend/docker-compose.yml` y las rutas del proxy inverso (`/api/telemetry`, `/ws`).
 - [ ] Crear los tests unitarios y la carpeta `test/` para e2e.
