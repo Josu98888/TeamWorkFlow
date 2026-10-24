@@ -10,7 +10,7 @@ The other backend service is `telemetry` (`backend/telemetry/AGENTS.md`): the wh
 
 ### Current status (READ FIRST)
 
-`backend/core` has no code yet. Task T6 of `odd/tasks/two-service-architecture.md` creates it by merging `backend/gateway` (HTTP layer) and `backend/auth` (the `auth` module, implemented through the steps in [src/auth/STEPS.md](src/auth/STEPS.md)); those two folders keep their code until then and hold short stubs for their docs. The other modules (`organization`, `tasks`, `notifications`, `billing`) are documented but not built. Everything below is the target design; check what exists before importing or assuming.
+`backend/core` is a scaffold only (slice T6.1: configs, `main.ts`, joi `PORT`/`NATS_SERVER`, empty `AppModule`); no domain code yet. Task T6 of `odd/tasks/two-service-architecture.md` creates it by merging `backend/gateway` (HTTP layer) and `backend/auth` (the `auth` module, implemented through the steps in [src/auth/STEPS.md](src/auth/STEPS.md)); those two folders keep their code until then and hold short stubs for their docs. The other modules (`organization`, `tasks`, `notifications`, `billing`) are documented but not built. Everything below is the target design; check what exists before importing or assuming.
 
 ### Modules
 
