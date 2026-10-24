@@ -1,6 +1,6 @@
 ---
 name: teamworkflow-prisma-migrations
-description: "Trigger: Prisma migrations, schema.prisma changes, migrate dev/deploy, migration.sql review, adding indexes/columns/constraints, renames, backfills. Safe Prisma Migrate + PostgreSQL rules per microservice."
+description: "Trigger: Prisma migrations, schema.prisma changes, migrate dev/deploy, migration.sql review, adding indexes/columns/constraints, renames, backfills. Safe Prisma Migrate + PostgreSQL rules per data owner (core modules and telemetry)."
 license: Apache-2.0
 metadata:
   author: teamworkflow-team
@@ -8,7 +8,7 @@ metadata:
   scope: [root, backend]
   auto_invoke:
     - "Creating or reviewing Prisma migrations"
-    - "Changing schema.prisma in any microservice"
+    - "Changing schema.prisma in any core module or in telemetry"
     - "Adding indexes or constraints to database tables"
     - "Writing data backfill or data migration"
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
@@ -18,16 +18,18 @@ allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 
 ## Project Status (READ FIRST)
 
-- Prisma is NOT installed yet and no microservice has `prisma/schema.prisma`, `prisma.config.ts` or `prisma/migrations/` (to create). Setup and installation are described in teamworkflow-nest ("Database Access"); ask the user before installing.
-- Each data-owning microservice (e.g. `backend/auth`) has its OWN schema and its OWN `prisma/migrations/` history. All services share the `teamworkflow` database, each mapped to its own PostgreSQL schema with its own role (`backend/STEPS.md` S1.1); how Prisma 7 + `@prisma/adapter-pg` selects the schema (`?schema=auth` vs the adapter option) is verified against the Prisma docs, not assumed. The gateway has none. Run every Prisma command from inside the service folder (`cd backend/<service>`).
+- Data owners: the five `core` modules (`auth`, `organization`, `tasks`, `notifications`, `billing`) and `telemetry` (`attendance`). Each has its OWN Prisma schema, client, `prisma/migrations/` history and PostgreSQL schema and role in the shared `teamworkflow` database (`backend/STEPS.md` S1.1, `docs/architecture.md`). The HTTP layer of `core` (the former gateway) has no schema.
+- Today only `backend/auth` has Prisma (`prisma/schema.prisma`, `prisma.config.ts`, `prisma/migrations/20261012011100_init_auth/`, `migration_lock.toml`). It is merged into `backend/core` by task T6 of `odd/tasks/two-service-architecture.md`. `organization`, `tasks`, `notifications`, `billing` and `telemetry` have no Prisma project yet (docs only; to create). Setup is described in teamworkflow-nest ("Database Access"); ask the user before installing.
+- Where each `core` module's `prisma/` folder lives (`src/<module>/prisma/` vs a root `prisma/<module>/`) is decided in T6 (gap in `backend/core/AGENTS.md`). Until then, run every Prisma command from inside the folder that holds that owner's `prisma.config.ts` (today `cd backend/auth`; target `backend/core/...` or `backend/telemetry`).
+- Connection strings are per owner: `<OWNER>_DATABASE_URL` (`AUTH_`, `ORGANIZATION_`, `TASKS_`, `NOTIFICATIONS_`, `BILLING_`, `ATTENDANCE_DATABASE_URL`; `backend/STEPS.md` S2.4). `backend/auth` still reads `DATABASE_URL` until T6/T7, with `?schema=auth` in the compose URL and the schema also passed explicitly to the `@prisma/adapter-pg` adapter (`backend/auth/src/prisma/prisma.service.ts`); verify how Prisma 7 selects the schema against the Prisma docs, not assumed.
 - Conventions here assume **Prisma ORM 7** (stable): connection URL in `prisma.config.ts`, `prisma-client` generator with explicit `output`, driver adapter in the client. Prisma 8 is a release candidate with renamed commands (`db migrate`) and a different client API; do not switch without asking. Verify the installed version: `pnpm list prisma`.
-- If a service has `prisma/` already, read `schema.prisma`, `prisma.config.ts` and `prisma/migrations/` first. Adapt; do not rewrite silently.
+- If an owner has `prisma/` already, read `schema.prisma`, `prisma.config.ts` and `prisma/migrations/` first. Adapt; do not rewrite silently.
 - NEVER edit or delete a migration that was already applied in a shared environment (staging, production, a teammate's DB). Create a new one.
 - Backend patterns (PrismaService, DTOs): teamworkflow-nest. Index design and `EXPLAIN`: teamworkflow-postgres.
 
 ## Why this matters
 
-A bad migration can lock a table and block reads/writes, silently drop data (Prisma generates drop + add for some renames), or leave a service's history diverged from its database. Prisma Migrate has NO automatic down migrations: recovery is a forward fix.
+A bad migration can lock a table and block reads/writes, silently drop data (Prisma generates drop + add for some renames), or leave an owner's history diverged from its database. Prisma Migrate has NO automatic down migrations: recovery is a forward fix.
 
 ---
 
@@ -44,7 +46,7 @@ A bad migration can lock a table and block reads/writes, silently drop data (Pri
 - NEVER `prisma db push` against shared or production databases, and never mix `db push` and `migrate` on the same database.
 - `prisma migrate dev` ONLY on local/disposable databases. Staging and production use `prisma migrate deploy` ONLY.
 - NEVER run `prisma migrate reset` against anything but a disposable local database, and only after the user agrees.
-- One migrations folder per microservice. Never copy migrations between services, never let two services migrate the same tables (with a shared database, each service only migrates its own PostgreSQL schema).
+- One migrations folder per data owner (per `core` module and for `telemetry`). Never copy migrations between owners, never let two owners migrate the same tables (with a shared database, each owner only migrates its own PostgreSQL schema).
 - Commit `schema.prisma`, `migration.sql` files and `migration_lock.toml` together. Never `.gitignore` migrations.
 
 ---
@@ -87,7 +89,7 @@ If Context7 MCP is available, query Prisma docs for command flags before using u
    pnpm exec prisma migrate status
 ```
 6. Commit `schema.prisma` + the migration folder in the same change as the code that uses it.
-7. Deploy: CI/staging/production run `pnpm exec prisma migrate deploy` BEFORE starting the new service version.
+7. Deploy: CI/staging/production run `pnpm exec prisma migrate deploy` BEFORE starting the new `core` or `telemetry` version.
 
 Names: lowercase snake_case, imperative, name the table - `create_tasks_table`, `add_status_index_to_tasks`, `add_score_to_matches`.
 
@@ -154,7 +156,7 @@ model Task {
 }
 ```
 
-A foreign key to a table owned by ANOTHER service does not exist: cross-service references are plain UUID columns (no FK), validated through NATS in the service layer.
+A foreign key to a table owned by ANOTHER owner (another `core` module or `telemetry`) does not exist: cross-schema references are plain UUID columns (no FK), validated in the service layer through the other module's facade (or, from `telemetry`, a NATS request to `core`), or kept as a local copy fed by events.
 
 ### Indexes on existing tables
 
@@ -196,7 +198,7 @@ ALTER TABLE "tasks" ADD COLUMN "is_archived" BOOLEAN NOT NULL DEFAULT false;
 
 Three-step: migration 1 `ALTER TABLE ... ADD COLUMN "score" INTEGER;` (schema `Int?`), then backfill, then migration 3 `ALTER TABLE ... ALTER COLUMN "score" SET NOT NULL;` (schema `Int`). Deploy the code that writes the column BEFORE step 3.
 
-### Foreign key on an existing large table (same service)
+### Foreign key on an existing large table (same schema)
 
 ```sql
 -- Migration 1: add without scanning existing rows
@@ -319,7 +321,7 @@ Rules for backfill scripts:
 5. **Log totals at start and end**, not per batch.
 6. **Per-item failures:** if rows are processed individually in code, catch, log, count and skip; never let one bad row kill the run.
 7. Tagged template `$queryRaw` / `$executeRaw` only (parameters are bound). Never `Unsafe` variants with interpolated input.
-8. Location: `backend/<service>/scripts/backfills/<name>.ts`, using ONLY that service's database. Document the run order in the PR: migrate -> run script -> (next migration, e.g. set NOT NULL).
+8. Location: `backend/<service>/scripts/backfills/<name>.ts`, using ONLY that owner's schema and role. Document the run order in the PR: migrate -> run script -> (next migration, e.g. set NOT NULL).
 9. Run first on a copy or local database; production only with the user's explicit approval.
 
 ---
@@ -348,7 +350,7 @@ Drift = the real database differs from what the migration history produces (manu
 
 ### Existing database without migrations (baselining)
 
-If a service's DB was created with `db push` or by hand:
+If an owner's schema was created with `db push` or by hand:
 
 1. Ask the user first.
 2. Introspect or confirm `schema.prisma` matches the DB, then generate a baseline migration of the CURRENT schema:
@@ -371,12 +373,12 @@ If a service's DB was created with `db push` or by hand:
 
 ---
 
-## Per-service operations
+## Per-owner operations
 
-- Each microservice has its own `DATABASE_URL`, `prisma.config.ts`, `prisma/migrations/` and `migration_lock.toml`. Migrate each independently; there is no global migration order between services.
-- In `docker-compose.yml` (to change) one `postgres` service hosts the `teamworkflow` database with one schema and one role per data-owning service. Apply migrations as a separate step (a one-shot command or init container running `pnpm exec prisma migrate deploy`), NOT in the service's `start` command when multiple replicas may start at once. `migrate deploy` serializes runs with an advisory lock, but a failing migration should block the release, not crash-loop the app.
+- Each data owner has its own `<OWNER>_DATABASE_URL`, `prisma.config.ts`, `prisma/migrations/` and `migration_lock.toml`. Migrate each independently; there is no global migration order between owners (inside `core`, deploy runs one `migrate deploy` per module, each with that module's role).
+- In `docker-compose.yml` one `postgres` service hosts the `teamworkflow` database with one schema and one role per data owner (`backend/postgres/init/`). Apply migrations as a separate step (a one-shot command or init container running `pnpm exec prisma migrate deploy`), NOT in the service's `start` command when multiple replicas may start at once. `migrate deploy` serializes runs with an advisory lock, but a failing migration should block the release, not crash-loop the app.
 - The Docker build must run `pnpm exec prisma generate` before `nest build`.
-- Changing a cross-service contract is NOT a migration problem: version the NATS pattern/payload (teamworkflow-nest) and keep both sides compatible during the rollout.
+- Changing a cross-module or cross-service contract is NOT a migration problem: version the event or NATS request payload (teamworkflow-nest) and keep producers and consumers compatible during the rollout.
 
 ---
 
@@ -396,7 +398,7 @@ Existing table:
 │   ├── nullable -> ADD COLUMN
 │   ├── NOT NULL with constant default -> ADD COLUMN ... DEFAULT <constant>
 │   └── NOT NULL computed -> add nullable -> backfill -> SET NOT NULL (3 migrations)
-├── New FK (same service only)
+├── New FK (same schema only)
 │   ├── small table -> plain ADD CONSTRAINT
 │   └── large table -> NOT VALID, then VALIDATE (2 migrations)
 ├── Rename -> RENAME COLUMN / RENAME TO, or @map in the schema (never drop + add)
@@ -438,6 +440,6 @@ If the migration passes all checks, say so.
 - [ ] No down migration expected; forward-fix or expand/contract plan documented for risky changes
 - [ ] `migrate dev` only locally; `migrate deploy` for shared environments; no `db push` on shared DBs
 - [ ] `prisma migrate status` clean; schema and history agree
-- [ ] Migration belongs to the correct microservice and only touches that service's own tables/schema
+- [ ] Migration belongs to the correct data owner (module or telemetry) and only touches that owner's own tables/schema
 - [ ] Applied migrations never edited
 - [ ] `schema.prisma`, migration folder and `migration_lock.toml` committed together
