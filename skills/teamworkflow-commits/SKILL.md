@@ -62,7 +62,7 @@ If there are unrelated changes that you did not make (the user's work in progres
 
 - **Max 3 files** per commit.
 - **Large file → its own commit.** A file is large when it has **more than 200 changed lines** (`added + removed` in `git diff --numstat`) or is a **new file with more than 300 lines**.
-- If one logical change spans more than 3 files, split it into consecutive commits that each keep the code working (e.g. microservice first, then gateway, then frontend).
+- If one logical change spans more than 3 files, split it into consecutive commits that each keep the code working (e.g. module service and facade first, then the HTTP controller, then frontend).
 
 ### Exceptions (count as one unit, never "large")
 
@@ -70,19 +70,19 @@ If there are unrelated changes that you did not make (the user's work in progres
 |-------|-----------------|
 | `package.json` + lockfile | `chore(deps): …` |
 | Generated shadcn primitive (`shared/components/shadcn/<name>.tsx`) | alone or with `components.json` |
-| Prisma model change + its generated migration (same service) | `schema.prisma` + `migrations/<timestamp>_<name>/migration.sql` (2 files) |
+| Prisma model change + its generated migration (same data owner) | `schema.prisma` + `migrations/<timestamp>_<name>/migration.sql` (2 files) |
 
 ### Splitting a feature: example
 
-"List projects" end to end, in order (all paths below are to create unless they already exist):
+"List projects" end to end, in order. `projects` is an illustrative domain (the real `core` modules are `auth`, `organization`, `tasks`, `notifications`, `billing`); all paths below are to create unless they already exist:
 
 ```text
-1. feat(projects): add project model and migration               projects-ms/prisma/schema.prisma, migrations/<timestamp>_create_projects/migration.sql
-2. feat(projects): add project dtos and pagination               projects-ms/src/projects/dto/*.ts
-3. feat(projects): add projects service and nats handlers        projects.service.ts, projects.controller.ts, projects.module.ts
-4. feat(gateway): add list and get project endpoints             gateway/src/projects/projects.controller.ts, dto/*.ts, projects.module.ts
+1. feat(projects): add project model and migration               core/src/projects/prisma/schema.prisma, migrations/<timestamp>_create_projects/migration.sql
+2. feat(projects): add project dtos and pagination               core/src/projects/dto/*.ts
+3. feat(projects): add projects service and facade                projects.service.ts, projects.facade.ts, projects.module.ts
+4. feat(projects): add list and get project endpoints             core/src/projects/projects.controller.ts, projects.module.ts
 5. test(projects): add service tests for list and get            projects.service.spec.ts
-6. feat(projects): add frontend types and gateway calls          frontend/domains/projects/types.ts, api.ts, server.ts
+6. feat(projects): add frontend types and api calls              frontend/domains/projects/types.ts, api.ts, server.ts
 7. feat(projects): add projects list page                        ProjectsList.tsx, index.ts, app/(teamworkflow)/projects/page.tsx
 ```
 
@@ -123,7 +123,9 @@ type(scope): description
 Business domains (same names in frontend and backend):
 
 ```text
-projects, tasks, teams, users, auth, …   ← use the domain folder name
+auth, organization, tasks, notifications, billing   ← core modules (module folder name)
+attendance                                         ← telemetry domain
+projects, teams, users, …                          ← other domains (use the domain folder name)
 ```
 
 Non-domain areas:
@@ -133,8 +135,10 @@ Non-domain areas:
 | `frontend` | Frontend-wide changes not tied to one domain (scaffold, layout, providers) |
 | `ui` | Design system: shadcn primitives, tokens in `globals.css`, shared components |
 | `shared` | Agnostic shared code (`shared/lib`, `shared/hooks`, `app/shared`) |
-| `gateway` | HTTP gateway (`backend/gateway`): controllers, filters, config, NATS transport; not tied to one domain |
-| `core` | Backend infrastructure shared across a service (config, errors, security) |
+| `core` | `backend/core` infrastructure shared across modules: config, the shared HTTP layer (guard, filters, rate limiting), event bus and NATS responders; not tied to one module |
+| `telemetry` | `backend/telemetry` infrastructure not tied to one of its modules (`clock-ins`, `workdays`, `alerts`, `tower`): config, HTTP/WebSocket layer, NATS client |
+| `gateway` | Legacy `backend/gateway` code, only until it is merged into `core` (task T6) |
+| `architecture` | `docs/architecture.md` and cross-service documentation |
 | `prisma` | Prisma schema, migrations and client setup not tied to one domain |
 | `db` | DB-wide changes not tied to one domain (naming convention, extensions) |
 | `docker` | `backend/docker-compose.yml`, Dockerfiles, container config |
@@ -162,7 +166,7 @@ Use it when the why isn't obvious, or to list notable details. Wrap at ~72 chara
 
 ### Breaking changes
 
-Changes to the frontend-gateway contract (removed/renamed fields, changed response shape, changed error `code` values in `{ detail, code }`, changed NATS message patterns) are breaking:
+Changes to the frontend-backend contract (removed/renamed fields, changed response shape, changed error `code` values in `{ detail, code }`) or to the core-telemetry contract (changed NATS request patterns, changed JetStream event subjects or payloads) are breaking:
 
 ```text
 feat(projects)!: return paginated envelope from list endpoint
@@ -184,10 +188,12 @@ chore(deps): add zod and server-only
 chore(config): enable react compiler
 feat(ui): add badge primitive
 docs(skills): update nest skill pagination section
-feat(gateway): add nats client module
-chore(docker): expose gateway port in compose
+feat(core): add nats responder for token verification
+feat(telemetry): add clock-in ingestion endpoint
+chore(docker): expose core port in compose
+docs(architecture): record the core and telemetry split
 feat(prisma): add team model and migration
-fix(auth): validate login payload in microservice
+fix(auth): validate login payload in the auth module
 ```
 
 ---
