@@ -1,0 +1,93 @@
+export type AppErrorCode =
+  | 'invalid_credentials'
+  | 'invalid_token'
+  | 'forbidden'
+  | 'tenant_suspended'
+  | 'tenant_cancelled'
+  | 'email_taken'
+  | 'validation_error';
+
+export interface ValidationErrorItem {
+  field: string;
+  constraints: string[];
+}
+
+// Transport-agnostic error body. The HTTP filter maps it to `{ detail, code }`
+// and the NATS filter sends it as-is to the caller.
+export interface AppErrorBody {
+  status: number;
+  code: AppErrorCode;
+  message: string;
+  errors?: ValidationErrorItem[];
+}
+
+// Domain code throws this; it knows nothing about HTTP or NATS. It does not
+// extend RpcException or HttpException on purpose.
+export class AppException extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: AppErrorCode,
+    message: string,
+    public readonly errors?: ValidationErrorItem[],
+  ) {
+    super(message);
+    this.name = new.target.name;
+  }
+
+  getError(): AppErrorBody {
+    const body: AppErrorBody = {
+      status: this.status,
+      code: this.code,
+      message: this.message,
+    };
+    if (this.errors) {
+      body.errors = this.errors;
+    }
+    return body;
+  }
+}
+
+// Messages are fixed and generic: they are shown to end users and must not
+// reveal whether an email exists, why a login failed, or any internal detail.
+
+export class InvalidCredentialsException extends AppException {
+  constructor() {
+    super(401, 'invalid_credentials', 'Invalid credentials');
+  }
+}
+
+export class InvalidTokenException extends AppException {
+  constructor() {
+    super(401, 'invalid_token', 'Invalid or expired token');
+  }
+}
+
+export class ForbiddenException extends AppException {
+  constructor() {
+    super(403, 'forbidden', 'You are not allowed to perform this action');
+  }
+}
+
+export class TenantSuspendedException extends AppException {
+  constructor() {
+    super(403, 'tenant_suspended', 'The organization account is suspended');
+  }
+}
+
+export class TenantCancelledException extends AppException {
+  constructor() {
+    super(403, 'tenant_cancelled', 'The organization account is cancelled');
+  }
+}
+
+export class EmailTakenException extends AppException {
+  constructor() {
+    super(409, 'email_taken', 'Email is already in use');
+  }
+}
+
+export class ValidationException extends AppException {
+  constructor(errors: ValidationErrorItem[]) {
+    super(422, 'validation_error', 'Validation failed', errors);
+  }
+}

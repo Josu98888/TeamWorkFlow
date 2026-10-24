@@ -42,7 +42,7 @@ A reverse proxy publishes both under one origin. Verify against the real files b
 
 - Any code under `backend/core` and `backend/telemetry`; the module facades; the shared HTTP layer of core (`src/http/`: guard, actor, roles, plan gating, tenant status, CSRF, throttling, error filter); the NATS responders for telemetry.
 - The `organization`, `tasks`, `notifications` and `billing` modules, and the `attendance` domain. Only their design docs exist.
-- Decisions deferred to T6 (listed as gaps in `backend/core/AGENTS.md`): the error class modules throw inside `core` (`RpcException` vs `HttpException`; the HTTP body stays `{ detail, code }` either way) and the Prisma folder layout per module.
+- Decided in T6: modules in `core` throw transport-agnostic `AppException` subclasses (`backend/core/src/common/exceptions/app.exceptions.ts`); the HTTP body stays `{ detail, code }`. Prisma folders are colocated per module in `backend/core/src/<module>/prisma/`.
 - In `backend/gateway`: no DTO classes (bodies are `any`), no pagination DTOs, the `AUTH_SERVICE` token is unused. Do not copy the `any` bodies into new code.
 - Pagination DTOs and a shared library between apps do not exist (each app duplicates its own constants).
 
@@ -91,7 +91,7 @@ A reverse proxy publishes both under one origin. Verify against the real files b
 - Each `core` module exports ONLY a public facade service. A module never imports another module's repositories, Prisma client, DTO internals or any other class. Cross-domain reactions go through events; synchronous facade calls are reserved for reads needed inside a request.
 - Each data owner (`auth`, `organization`, `tasks`, `notifications`, `billing`, `attendance`) has its OWN PostgreSQL schema, role, Prisma client and migrations in the shared `teamworkflow` database (`backend/STEPS.md` S1.1). Never read another owner's tables.
 - Layers inside a module: **controller -> facade/service -> (repository) -> PrismaService**. Never skip or invert layers.
-- Services hold business logic and own transactions. They throw domain errors carrying `{ status, code, message }` (today `AppRpcException`, see "Errors"), NEVER raw `HttpException` from services.
+- Services hold business logic and own transactions. They throw domain errors carrying `{ status, code, message }` (`AppException`, see "Errors"), NEVER raw `HttpException` from services.
 - Only the HTTP layer of each service turns errors into HTTP responses (global exception filter, body `{ detail, code }`).
 - Every NATS payload and every HTTP body is a DTO class with `class-validator` decorators. Never pass `any` or a raw `Request` body downstream.
 - Never return Prisma models containing secrets (password hashes, tokens). Map to a response DTO / use `select`.
@@ -298,7 +298,7 @@ export const AUTH_PATTERNS = {
 - Responders are thin: a `@MessagePattern` handler takes the `@Payload()` DTO and calls the module facade. No extra logic. Never expose `auth.user.list-recipients` or any internal-only operation as a responder or an HTTP route.
 - `@MessagePattern(...)` = request/response. `@EventPattern(...)` = fire-and-forget for NATS-core messages; errors never reach the producer, so handle and log them inside the handler.
 - Never rename a pattern on one side only. Payloads are DTO classes; responses are plain serializable objects (NATS serializes JSON, so dates arrive as ISO strings).
-- Errors cross NATS as `RpcException` with the object shape `{ status, code, message }` (optionally `errors`).
+- Errors cross NATS as the object `{ status, code, message }` (optionally `errors`), produced by `NatsErrorFilter` (`backend/core/src/common/filters/nats-exception.filter.ts`) from an `AppException`.
 
 ### JetStream events
 
@@ -327,7 +327,7 @@ await app.listen(envs.port);
 ```
 
 - Global pipes/filters of the HTTP app do not reach a connected microservice unless `inheritAppConfig: true`. Verify the behavior against the installed Nest version.
-- The legacy bootstrap of `backend/auth/src/main.ts` (`createMicroservice` with `Transport.NATS`, no HTTP port) keeps working until T6 merges it. The `ValidationPipe` for NATS payloads must throw an `RpcException`, not a `BadRequestException` (see `createValidationPipe` in `backend/auth/src/common/pipes/validation.pipe.ts`).
+- The legacy bootstrap of `backend/auth/src/main.ts` (`createMicroservice` with `Transport.NATS`, no HTTP port) keeps working until T6 merges it. The validation pipe must throw a `ValidationException` (an `AppException`), not a `BadRequestException` (see `backend/core/src/common/pipes/validation.pipe.ts`; the legacy `backend/auth` pipe throws `RpcException`).
 
 ---
 
@@ -515,57 +515,61 @@ Validation errors add the field list:
 - Messages are generic and safe to show: no stack traces, SQL, Prisma messages or internal ids.
 - Resources the user may not see -> 404 (not 403), to prevent enumeration.
 
-### Domain errors: `{ status, code, message }` (shape of `backend/auth/src/common/exceptions/app.exceptions.ts`)
+### Domain errors: `AppException` (`backend/core/src/common/exceptions/app.exceptions.ts`)
 
 ```typescript
-import { RpcException } from '@nestjs/microservices';
+export type AppErrorCode = 'invalid_credentials' | 'email_taken' | 'validation_error' /* ... */;
 
-export class AppRpcException extends RpcException {
+export interface AppErrorBody {
+  status: number;
+  code: AppErrorCode;
+  message: string;
+  errors?: ValidationErrorItem[];
+}
+
+// Transport-agnostic: extends Error, NOT RpcException or HttpException
+export class AppException extends Error {
   constructor(
     public readonly status: number,
-    public readonly code: string,
+    public readonly code: AppErrorCode,
     message: string,
+    public readonly errors?: ValidationErrorItem[],
   ) {
-    // Passing an OBJECT to RpcException sends it as-is to the caller
-    super({ status, code, message });
+    super(message);
+    this.name = new.target.name;
+  }
+
+  getError(): AppErrorBody {
+    const body: AppErrorBody = { status: this.status, code: this.code, message: this.message };
+    if (this.errors) body.errors = this.errors;
+    return body;
   }
 }
 
-export class EmailTakenException extends AppRpcException {
+export class EmailTakenException extends AppException {
   constructor() {
-    super(409, 'email_taken', 'Email already registered');
-  }
-}
-
-export class InvalidCredentialsException extends AppRpcException {
-  constructor() {
-    super(401, 'invalid_credentials', 'Invalid credentials');
+    super(409, 'email_taken', 'Email is already in use');
   }
 }
 ```
 
-- The existing hierarchy has one class per known error (`InvalidCredentialsException`, `InvalidTokenException`, `ForbiddenException`, `TenantSuspendedException`, `TenantCancelledException`, `EmailTakenException`, `ValidationException`); its `code` is a closed union (`AppErrorCode`), so extend the union when you add a code. New modules follow the same pattern.
-- Services throw these. The shape `{ status, code, message }` is kept for NATS request/reply (`core` -> `telemetry` responders) and is what the HTTP filter maps. Open decision (T6): whether `core` keeps `RpcException` or switches to its own domain errors / `HttpException`; the HTTP body stays `{ detail, code }` either way.
+- The hierarchy has one class per known error (`InvalidCredentialsException`, `InvalidTokenException`, `ForbiddenException`, `TenantSuspendedException`, `TenantCancelledException`, `EmailTakenException`, `ValidationException`). `AppErrorCode` is a closed union: extend it when you add a code.
+- Services throw these. Domain code NEVER throws `RpcException` or `HttpException`; each edge translates: `HttpErrorFilter` (HTTP) maps to `{ detail, code }` (plus `errors` only for `validation_error`), `NatsErrorFilter` (NATS responders) sends `{ status, code, message }`. `configureApp` (`backend/core/src/app.config.ts`) registers the global pipe and filter.
+- Messages are fixed and generic (they reach end users): never reveal whether an email exists or why a login failed.
 - Prisma errors are translated INSIDE the service/repository, not leaked (see "Prisma errors").
 - An `@EventPattern` handler or a JetStream consumer has no response stream: errors there never reach the producer. Catch and log them in the handler.
-- Optional microservice-side filter (`@Catch()` returning `throwError(() => ...)`) normalizes unknown errors to `{ status: 500, code: 'internal_error' }` and logs the original. A filter's `catch()` MUST return an Observable.
+- `RpcException` only appears on the client side (see the `catchError` guidance for telemetry -> core calls); domain code never throws it.
 
-### HTTP exception filter (to create in `core/src/http/filters/` and `telemetry/src/http/filters/`)
+### HTTP exception filter (`backend/core/src/http/filters/http-exception.filter.ts`)
 
-The legacy `backend/gateway/src/common/filters/rpc-exception.filter.ts` only catches `RpcException`; the version below is the target and also covers HTTP and timeout errors.
+`core` implements `HttpErrorFilter` with three branches: `AppException` -> `getError()` mapped to `{ detail, code }` (plus `errors` when present); `HttpException` (unknown route, bad JSON, parse pipes) -> its status with `code` taken from a status map and `http_error` as default; anything else -> logged, then 500 `{ detail: "Internal server error", code: "internal_error" }` without leaking the message or stack.
 
 ```typescript
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger } from '@nestjs/common';
-import { RpcException } from '@nestjs/microservices';
-import { Response } from 'express';
-import { TimeoutError } from 'rxjs';
-
-interface RpcErrorBody {
-  status?: number;
-  code?: string;
-  message?: string;
-  errors?: unknown;
-}
+const HTTP_STATUS_CODES: Record<number, string> = {
+  400: 'bad_request', 401: 'unauthorized', 403: 'forbidden', 404: 'not_found',
+  405: 'method_not_allowed', 409: 'conflict', 413: 'payload_too_large',
+  415: 'unsupported_media_type', 422: 'unprocessable_entity', 429: 'rate_limited',
+};
 
 @Catch()
 export class HttpErrorFilter implements ExceptionFilter {
@@ -574,42 +578,33 @@ export class HttpErrorFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const response = host.switchToHttp().getResponse<Response>();
 
+    if (exception instanceof AppException) {
+      const { status, code, message, errors } = exception.getError();
+      return response.status(status).json({ detail: message, code, ...(errors ? { errors } : {}) });
+    }
+
     if (exception instanceof HttpException) {
-      // HTTP-layer errors (ValidationPipe 422, ParseUUIDPipe, 404 routes)
+      const status = exception.getStatus();
       const body = exception.getResponse();
-      const detail = typeof body === 'string' ? body : ((body as { message?: unknown }).message ?? exception.message);
-      return response.status(exception.getStatus()).json({
-        detail: Array.isArray(detail) ? 'Validation failed' : detail,
-        code: Array.isArray(detail) ? 'validation_error' : 'http_error',
-        ...(Array.isArray(detail) ? { errors: detail } : {}),
-      });
+      const message =
+        typeof body === 'object' && 'message' in body && typeof body.message === 'string'
+          ? body.message
+          : exception.message;
+      return response.status(status).json({ detail: message, code: HTTP_STATUS_CODES[status] ?? 'http_error' });
     }
 
-    if (exception instanceof TimeoutError) {
-      return response.status(504).json({ detail: 'Service timeout', code: 'upstream_timeout' });
-    }
-
-    if (exception instanceof RpcException) {
-      const error = exception.getError();
-      if (typeof error === 'object' && error !== null && 'status' in error) {
-        const { status, code, message, errors } = error as RpcErrorBody;
-        const httpStatus = Number.isInteger(status) ? (status as number) : 500;
-        return response.status(httpStatus).json({
-          detail: message ?? 'Internal server error',
-          code: code ?? 'internal_error',
-          ...(errors ? { errors } : {}),
-        });
-      }
-    }
-
-    this.logger.error(exception);
+    this.logger.error(
+      exception instanceof Error ? exception.message : 'Unknown error',
+      exception instanceof Error ? exception.stack : undefined,
+    );
     return response.status(500).json({ detail: 'Internal server error', code: 'internal_error' });
   }
 }
 ```
 
+- Telemetry guidance (its filter in `telemetry/src/http/filters/`, not built yet): add a `TimeoutError` (rxjs) branch answering 504 `{ detail: "Service timeout", code: "upstream_timeout" }`, and map an `RpcException` coming back from `core` (`{ status, code, message, errors? }`) to the same `{ detail, code }` body.
 - When the NATS server or `core` is unreachable (telemetry side), the error arrives as an `Empty response` / connection message, not an `RpcException` with `status`. Map it to 503 `upstream_unavailable` with its own branch (verify the real error text first).
-- Register with `app.useGlobalFilters(...)` in `main.ts`.
+- In `core`, `configureApp` registers the global pipe and filter; do not repeat `app.useGlobalFilters(...)` in `main.ts`.
 - Codes owned by the HTTP layer (`feature_not_in_plan`, `rate_limited`, `csrf_invalid`, `invalid_token`, `tenant_suspended`, `tenant_cancelled`) are listed in `backend/core/AGENTS.md` and `backend/telemetry/AGENTS.md`.
 
 ---
@@ -792,8 +787,8 @@ try {
 } catch (error) {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     if (error.code === 'P2002') throw new EmailTakenException(); // unique violation
-    if (error.code === 'P2025') throw new AppRpcException(404, 'user_not_found', 'User not found'); // record not found on update/delete
-    if (error.code === 'P2003') throw new AppRpcException(409, 'invalid_reference', 'Referenced resource does not exist'); // FK violation
+    if (error.code === 'P2025') throw new AppException(404, 'user_not_found', 'User not found'); // record not found on update/delete (add the code to AppErrorCode first)
+    if (error.code === 'P2003') throw new AppException(409, 'invalid_reference', 'Referenced resource does not exist'); // FK violation (add the code to AppErrorCode first)
   }
   throw error; // unknown errors are logged by the filter and become 500
 }
@@ -1051,7 +1046,7 @@ If Context7 MCP is available, query it for up-to-date NestJS, Prisma and class-v
 - [ ] Module exports only its facade; no import of another module's repository, Prisma client or internals
 - [ ] Cross-domain reactions through JetStream events (`t.<tenant>.<module>.<event>`, `ProcessedEvent` dedup, emit after commit)
 - [ ] Request/reply pattern or event changed on the producer, every consumer and the docs of both services in the same change (core responders table, `docs/architecture.md`)
-- [ ] Telemetry calls to core wrapped with `timeout` and `catchError -> RpcException`
+- [ ] Telemetry calls to core wrapped with `timeout` and `catchError -> RpcException` (client side only; domain code never throws it)
 - [ ] DTO classes with validators on every property; `whitelist` + `forbidNonWhitelisted`; no `any` payloads; actor never read from the client
 - [ ] Services throw `{ status, code, message }` domain errors; the HTTP filter maps them to `{ detail, code }` with the right status
 - [ ] Prisma errors translated (`P2002`, `P2025`, `P2003`); no raw Prisma messages leaked
