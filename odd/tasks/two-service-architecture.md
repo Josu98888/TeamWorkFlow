@@ -25,8 +25,8 @@ Seven services mean seven deploys, pipelines and databases to operate, plus dist
 - Do not break the existing auth test suites: unit and e2e specs move with the code and stay green.
 
 ## Tasks
-- [x] T1 (inline; evidence: docs/architecture.md written, decisions confirmed by user 2026-10-24): architecture decision record `docs/architecture.md` (context, decision, consequences, module boundaries, event bus, DB, public entrypoints).
-- [ ] T2 (delegated writer): root docs — `AGENTS.md`, `README.md`, `STEPS.index.md` (rows and "7 MVP services" decision).
+- [x] T1 (inline; evidence: docs/architecture.md written, decisions confirmed by user 2026-10-24; commit 45f473c): architecture decision record `docs/architecture.md` (context, decision, consequences, module boundaries, event bus, DB, public entrypoints).
+- [x] T2 (delegated writer; evidence: commit 0b97cfd; `rg` for 7-service wording leaves only the README replaced-design sentence and the superseded STEPS.index entry; `rg backend/core|telemetry` hits in all 3 files): root docs — `AGENTS.md`, `README.md`, `STEPS.index.md` (rows and "7 MVP services" decision).
 - [ ] T3 (delegated writer): service docs — `backend/core/` and `backend/telemetry/` `AGENTS.md`/`README.md` built from the 7 existing pairs; old folders' docs removed or moved into `backend/core/src/<module>/`.
 - [ ] T4 (delegated writer): DB and infra docs/config — `backend/STEPS.md`, `docs/database.md`, compose files, `.env.example`, postgres init.
 - [ ] T5 (delegated writer): skills — `teamworkflow-nest` and the other skills that mention services; keep the root `AGENTS.md` skill table in sync.
@@ -46,4 +46,4 @@ Seven services mean seven deploys, pipelines and databases to operate, plus dist
 - Strategy: `ask-on-risk`. Docs tasks T1–T5 are large but passive; code tasks T6–T7 likely exceed ~400 lines (mostly moves).
 
 ## Progress
-- Created 2026-10-24. T1 done. Next: T2.
+- Created 2026-10-24. T2 done. Next: T3.
