@@ -1,35 +1,37 @@
-# AGENTS.md — `auth` microservice
+# AGENTS.md — `auth` module (`backend/core`)
 
-Guide for coding agents working on this service. Read it fully before making changes. It overrides the root `AGENTS.md` when they conflict. Code patterns live in `skills/teamworkflow-nest`; migrations in `skills/teamworkflow-prisma-migrations`.
+Guide for coding agents working on the `auth` module of `backend/core`. Read `backend/core/AGENTS.md` (core-wide rules: module boundaries, HTTP layer, event bus) and then this file fully before making changes. This file overrides the root `AGENTS.md` and `backend/core/AGENTS.md` for the `auth` domain rules when they conflict. Code patterns live in `skills/teamworkflow-nest`; migrations in `skills/teamworkflow-prisma-migrations`.
 
-## What this service is
+## What this module is
 
-`auth` is the identity service of TeamWorkFlow, a multitenant SaaS for managing field staff across many sites. Each tenant is an organization; every user belongs to exactly one tenant. If this service has a bug, every tenant is exposed: treat every change as security-sensitive.
+`auth` is the identity module of TeamWorkFlow, a multitenant SaaS for managing field staff across many sites. Each tenant is an organization; every user belongs to exactly one tenant. If this module has a bug, every tenant is exposed: treat every change as security-sensitive.
+
+`auth` is a module of the `backend/core` modular monolith (`src/auth/`, `AuthModule`). Other core modules reach it only through its exported facade service or its events; `telemetry` (a separate service) verifies tokens through the NATS request `auth.token.verify`, which this module answers. It can be extracted to its own service later without changing its event consumers (`docs/architecture.md`).
 
 Responsibilities:
 
 - Registration: a new user creates a new tenant and becomes its `owner`.
 - Login with email + password (the same flow for every role, employees included).
 - Session tokens: short-lived access JWT + rotating, revocable refresh token.
-- Token verification for the gateway (`auth.token.verify`).
-- Invitations: `owner`/`admin` invite people to their tenant through a single-use link. Employee invitations are also created automatically from the `organization` service (see Invitations).
+- Token verification for the HTTP layer of `core` (in-process facade call `auth.token.verify`) and for `telemetry` (the same operation answered as a NATS request).
+- Invitations: `owner`/`admin` invite people to their tenant through a single-use link. Employee invitations are also created automatically from the `organization` module's events (see Invitations).
 - Roles inside a tenant: `owner`, `admin`, `supervisor`, `employee` (fixed, not configurable), plus the platform role `platform_admin`, which belongs to no tenant.
 - Site scope of supervisors (`User.siteIds`): which sites (owned by `organization`) each supervisor can see.
 - Tenant access status (`active` | `past_due` | `suspended` | `cancelled` | `deleted`), driven by `billing` events (see Tenant status).
-- The tenant's current plan and features (`plan`, `features`), kept from `billing` events and returned by `auth.token.verify` so the gateway can gate routes.
+- The tenant's current plan and features (`plan`, `features`), kept from `billing` events and returned by `auth.token.verify` so the HTTP layer of `core` can gate routes.
 - Admin-generated password reset links.
 - Deactivating users.
 
 Out of scope (do NOT implement here):
 
-- User profile data (name, phone, avatar) and the employee record (legajo): owned by the employees module of the `organization` microservice. There is no `users` service. `auth` only receives the name at registration or invitation acceptance and forwards it in the `t.<tenant>.auth.user_created` event; `organization` creates or links the profile.
+- User profile data (name, phone, avatar) and the employee record (legajo): owned by the employees sub-module of the `organization` module. There is no `users` module. `auth` only receives the name at registration or invitation acceptance and forwards it in the `t.<tenant>.auth.user_created` event; `organization` creates or links the profile.
 - Sending emails. There is no email provider yet: invitation and reset links are returned to the caller, who shares them.
 - Self-service "forgot password" by email, MFA, social login/SSO. Future work; ask before adding.
-- Sites, shifts, attendance, tasks and any other business domain: owned by their own services.
+- Sites, shifts, attendance, tasks and any other business domain: owned by their own modules (or by `telemetry`, for attendance).
 - Payments, invoices, plans and prices: owned by `billing`. `auth` only reacts to its events to change the tenant status, to store the tenant's current plan and features and to purge the tenant's identity data when retention expires.
 - A backoffice and creating tenants by a platform admin (future). Today a tenant is created only through `auth.register`; the only platform-level user is `platform_admin`, created by seed/CLI.
 - The employee record (legajo): owned by `organization`. `auth` only keeps the login identity.
-- Real-time Torre de Control connections: the gateway handles the WebSocket; `auth` only verifies tokens and provides `siteIds`.
+- Real-time Torre de Control connections: the `telemetry` service handles the WebSocket; `auth` only verifies tokens (answering `auth.token.verify` over NATS) and provides `siteIds`.
 
 ## Business Rules
 
@@ -42,10 +44,10 @@ Out of scope (do NOT implement here):
 
 ### Roles
 
-- `platform_admin`: platform operator. Belongs to NO tenant (`tenantId` is null). Created ONLY by a seed or a CLI command, never through registration or invitations, and it cannot be created, promoted or demoted by any request. Logs in with email + password like everybody else. It can only use platform routes (`billing.admin.*`, routed by the gateway); every tenant route refuses it. It is not affected by any tenant status.
+- `platform_admin`: platform operator. Belongs to NO tenant (`tenantId` is null). Created ONLY by a seed or a CLI command, never through registration or invitations, and it cannot be created, promoted or demoted by any request. Logs in with email + password like everybody else. It can only use platform routes (`billing.admin.*`, routed by the HTTP layer of `core`); every tenant route refuses it. It is not affected by any tenant status.
 - `owner`: everything in the tenant. Only one per tenant.
 - `admin`: manages supervisors and employees (invite, deactivate, reset link, change role between `supervisor` and `employee`, assign sites to supervisors). Only the `owner` manages admins.
-- `supervisor`: scoped to its assigned sites: sees the Torre de Control of those sites, handles alerts and corrects attendance (business actions of other services). Cannot manage users.
+- `supervisor`: scoped to its assigned sites: sees the Torre de Control of those sites, handles alerts and corrects attendance (business actions of other modules and `telemetry`). Cannot manage users.
 - `employee`: operational staff, uses the mobile app: clock in/out, own shifts, tasks, forms and emergency offers. Cannot manage users.
 
 | Action | owner | admin | supervisor | employee |
@@ -70,9 +72,9 @@ Out of scope (do NOT implement here):
 
 ### Supervisor site scope (`User.siteIds`)
 
-- `User.siteIds` (`String[]`, column `site_ids`, default `[]`) stores the site ids of a supervisor (references to sites of `organization`, no foreign key across services). There is no separate table.
+- `User.siteIds` (`String[]`, column `site_ids`, default `[]`) stores the site ids of a supervisor (references to sites of `organization`, no foreign key across schemas). There is no separate table.
 - Only users with role `supervisor` can have a non-empty `siteIds`; every other role has `[]`. `auth.user.assign-sites` replaces the full array of one supervisor (site ids are deduplicated in the application before saving). It is allowed for `owner` and `admin`, within the same tenant.
-- `auth` does not validate that a `siteId` exists in `organization` (that data is not ours). The caller (gateway/frontend) is responsible for sending real site ids of the tenant.
+- `auth` does not validate that a `siteId` exists in `organization` (that data is not ours). The caller (the frontend, through the HTTP layer of `core`) is responsible for sending real site ids of the tenant.
 - When a supervisor changes role, its `siteIds` is set to `[]`.
 - `owner` and `admin` see every site of the tenant: their `siteIds` is `[]` and it is not returned for them.
 - Site ids are NOT put in the JWT: they change without re-login and could make the token large. They come from `auth.token.verify`.
@@ -95,8 +97,8 @@ Out of scope (do NOT implement here):
 - `auth.token.refresh` rotates: the used refresh token is revoked and a new pair is issued.
 - `auth.logout` revokes the current refresh token. The access token stays valid until it expires (max 15 minutes); this is accepted for the token itself, but `auth.token.verify` rechecks the user and the tenant on every call (below), so deactivation and suspension take effect immediately.
 - Revoked tokens stay in `auth`: revocation means refresh tokens revoked in the `auth` database. There is no revocation list in NATS KV.
-- `auth.token.verify` (called by the gateway on every authenticated request and on every WebSocket connection) checks signature, expiry, that the user still exists and is active, and that the tenant status allows access (see Tenant status). It returns `{ userId, tenantId, role, siteIds, tenantStatus, plan, features }`. `siteIds` is returned only for `supervisor`. For `platform_admin`, `tenantId`, `tenantStatus`, `plan` and `features` are `null` (it has no tenant and is never blocked by a tenant status). `plan` and `features` are the tenant's current ones (see Plan and features); they are `null` until the first `subscription_created` arrives.
-- The gateway MUST take `tenantId`, `role`, `siteIds`, `plan` and `features` from the verified result, never from the request body, query or headers. It blocks routes whose feature the plan lacks with 403 `feature_not_in_plan`, and routes `billing.admin.*` only to `platform_admin`.
+- `auth.token.verify` (called by the HTTP layer of `core` on every authenticated request and on every WebSocket connection) checks signature, expiry, that the user still exists and is active, and that the tenant status allows access (see Tenant status). It returns `{ userId, tenantId, role, siteIds, tenantStatus, plan, features }`. `siteIds` is returned only for `supervisor`. For `platform_admin`, `tenantId`, `tenantStatus`, `plan` and `features` are `null` (it has no tenant and is never blocked by a tenant status). `plan` and `features` are the tenant's current ones (see Plan and features); they are `null` until the first `subscription_created` arrives.
+- The HTTP layer of `core` MUST take `tenantId`, `role`, `siteIds`, `plan` and `features` from the verified result, never from the request body, query or headers. It blocks routes whose feature the plan lacks with 403 `feature_not_in_plan`, and routes `billing.admin.*` only to `platform_admin`.
 
 ### Tenant status (past due, suspension, cancellation)
 
@@ -114,9 +116,9 @@ Out of scope (do NOT implement here):
 - While `past_due`: no restriction. The frontend shows a banner to `owner`/`admin` reading `tenantStatus` from verify. Billing sends the warning notifications on days 1, 4 and 6 through `t.<tenant>.notifications.send`; `auth` does not send them.
 - While `suspended`:
   - `supervisor` and `employee` cannot log in, refresh or pass `auth.token.verify`: they get `tenant_suspended` (403). On login this code is returned ONLY after the password is correct, so it leaks nothing to someone guessing credentials.
-  - `owner` and `admin` can log in. `verify` succeeds and returns `tenantStatus: "suspended"`; the gateway only allows billing (pay) and data export routes and answers 403 `tenant_suspended` to everything else.
-  - Other services pause automatic processes for the tenant when they consume `tenant_suspended`, and resume on `tenant_reactivated`. Data is never deleted while suspended.
-- While `cancelled`: exactly the same access rules as `suspended`. `supervisor` and `employee` get `tenant_cancelled` (403) on login (after a correct password), refresh and verify, and their refresh tokens were revoked when the status changed. `owner` and `admin` can log in; `verify` returns `tenantStatus: "cancelled"` and the gateway only allows the billing routes (plan, invoices and `billing.subscription.resubscribe`) and data export, and answers 403 `tenant_cancelled` to everything else. Other services pause automatic processes when they consume `tenant_cancelled` exactly as with `tenant_suspended`, and resume on `tenant_reactivated`.
+  - `owner` and `admin` can log in. `verify` succeeds and returns `tenantStatus: "suspended"`; the HTTP layer of `core` only allows billing (pay) and data export routes and answers 403 `tenant_suspended` to everything else.
+  - Other modules and `telemetry` pause automatic processes for the tenant when they consume `tenant_suspended`, and resume on `tenant_reactivated`. Data is never deleted while suspended.
+- While `cancelled`: exactly the same access rules as `suspended`. `supervisor` and `employee` get `tenant_cancelled` (403) on login (after a correct password), refresh and verify, and their refresh tokens were revoked when the status changed. `owner` and `admin` can log in; `verify` returns `tenantStatus: "cancelled"` and the HTTP layer of `core` only allows the billing routes (plan, invoices and `billing.subscription.resubscribe`) and data export, and answers 403 `tenant_cancelled` to everything else. Other modules and `telemetry` pause automatic processes when they consume `tenant_cancelled` exactly as with `tenant_suspended`, and resume on `tenant_reactivated`.
 - Reactivation of a `cancelled` tenant happens ONLY through `subscription_reactivated` (the owner/admin resubscribed, see `billing`). A `payment_received` that arrives while the tenant is `cancelled` (for example the last invoice paid after cancelling) is a no-op: paying does not reactivate access.
 - Event handling is idempotent: the same event twice, or an event that does not change the state (for example `payment_overdue` when already `past_due`, `payment_received` when already `active`), is a no-op and emits nothing new (also `subscription_cancelled` when already `cancelled`). A `subscription_expired` received while `active` also suspends, and `subscription_cancelled` is accepted from any state except `deleted`. `payment_overdue` and `subscription_expired` received while `cancelled` are ignored.
 - After reactivation the revoked refresh tokens stay revoked; users simply log in again.
@@ -134,7 +136,7 @@ Out of scope (do NOT implement here):
 
 - `Tenant` stores `plan` (`basic` | `pro`) and `features` (an object such as `{ tasks, alerts, tower }`), both nullable until the first plan event arrives.
 - They are updated from the consumed `t.<tenant>.billing.subscription_created` and `t.<tenant>.billing.plan_changed` events, which carry `plan` and `features`. Handling is idempotent (same `eventId` twice is a no-op) and a stale event must not overwrite a newer one (compare `occurredAt`, or `effectiveAt` for `plan_changed`).
-- `auth` does NOT decide what a plan includes: it stores what `billing` sends and returns it from `auth.token.verify`. The gateway enforces it.
+- `auth` does NOT decide what a plan includes: it stores what `billing` sends and returns it from `auth.token.verify`. The HTTP layer of `core` enforces it.
 - `auth` does not expose plan-changing patterns; only `billing` events change them.
 
 ### Password reset (admin-generated)
@@ -150,56 +152,55 @@ Out of scope (do NOT implement here):
 ### Deactivation
 
 - Deactivating sets `isActive = false`, revokes all the user's refresh tokens and emits `t.<tenant>.auth.user_deactivated`.
-- Users are never hard-deleted while their tenant exists: other services keep referencing their id. The only deletion is the tenant data purge.
+- Users are never hard-deleted while their tenant exists: other modules and `telemetry` keep referencing their id. The only deletion is the tenant data purge.
 - Deactivated users cannot log in, refresh, or pass `auth.token.verify`.
 
 ## Stack
 
-- NestJS 12 microservice over NATS (`@nestjs/microservices`).
-- PostgreSQL + Prisma 7 (own `prisma/schema.prisma`, in the `auth` schema of the shared `teamworkflow` database, accessed with the `auth_svc` role that cannot read other schemas; see `backend/STEPS.md` S1.1). Not installed yet.
+- NestJS 12 module inside `backend/core`; HTTP controllers for this module's endpoints live in `src/auth/` (see `backend/core/AGENTS.md`). NATS is used for JetStream events and for the one request responder `telemetry` needs (`auth.token.verify`).
+- PostgreSQL + Prisma 7 (own `prisma/schema.prisma` and Prisma client, in the `auth` schema of the shared `teamworkflow` database, accessed with the `auth_svc` role that cannot read other schemas; see `backend/STEPS.md` S1.1). Not installed yet.
 - Password hashing: Argon2id (`argon2` package). Not installed yet.
 - JWT: `@nestjs/jwt`. Not installed yet.
-- Validation: `class-validator` + `class-transformer` with a global `ValidationPipe` throwing `RpcException`. Not installed yet.
-- Env validation with joi in `src/config/envs.ts`, same pattern as the gateway.
+- Validation: `class-validator` + `class-transformer` with the global `ValidationPipe` of `core` (422 `validation_error`). Not installed yet.
+- Env validation with joi in `src/config/envs.ts`, same pattern as the rest of `core`.
 
 Ask before installing any dependency.
 
 ## Current Status (READ FIRST)
 
-The code is still the Nest CLI scaffold:
+Until task T6 of `odd/tasks/two-service-architecture.md` runs, the auth code still lives in `backend/auth` (a NATS microservice with `@MessagePattern` handlers, implemented step by step; the status of each step is in [STEPS.md](STEPS.md)) and the HTTP layer in `backend/gateway`. T6 merges both into `backend/core`: this module's `@MessagePattern` handlers become HTTP controllers calling the same services, `auth.token.verify` is also kept as a NATS responder for `telemetry`, and the services, DTOs, events and tests move unchanged. The `backend/core` folder does not contain code yet.
 
-- `src/main.ts` uses `NestFactory.create` (HTTP). It must become `NestFactory.createMicroservice` with the NATS transport to receive messages.
-- `src/auth/auth.controller.ts` uses CRUD scaffold patterns (`createAuth`, `findAllAuth`, ...), and the gateway sends `{ cmd: 'login' }`. Both must move to the patterns below.
-- `src/auth/entities/auth.entity.ts` and the scaffold DTOs are placeholders.
-- No `.env.example`, no `src/config/`, no Prisma, no `test/` folder yet.
+NOTE (gap): the previous text of this section described the initial Nest CLI skeleton and "Not installed yet" dependencies, which no longer matches the code in `backend/auth`; it was replaced by this paragraph and the Stack list above is still the planned stack.
 
-Do not change these without the user asking for it.
+Do not change the code in `backend/auth` or `backend/gateway` for the merge without the user asking for it (T6).
 
 ## NATS Contract
 
-Request-reply patterns follow `<service>.<resource>.<action>` and carry NO tenant prefix: the tenant comes from the verified actor. Domain events follow the platform convention `t.<tenant>.<service>.<event>` (JetStream), so auth events are `t.<tenant>.auth.<event>` with snake_case event names. Keep the pattern names in a constants file shared by the handlers (to create: `src/auth/auth.patterns.ts`), and keep the gateway side in sync.
+Operation names follow `<module>.<resource>.<action>` and carry NO tenant prefix: the tenant comes from the verified actor. Domain events follow the platform convention `t.<tenant>.<module>.<event>` (JetStream), so auth events are `t.<tenant>.auth.<event>` with snake_case event names.
 
-### Request-reply (`@MessagePattern`)
+In `core` the operations below are **in-process calls** to the module's facade service (invoked by the module's HTTP controllers and by other core modules); the pattern string is kept as the operation's stable name. Only `auth.token.verify` is also a **NATS request-reply responder**, because `telemetry` (a separate service) needs it. Keep the names in a constants file (to create: `src/auth/auth.patterns.ts`).
 
-| Pattern | Caller | Payload | Returns |
+### Operations (module facade) and NATS responders
+
+| Operation | Caller | Payload | Returns |
 |---------|--------|---------|---------|
-| `auth.register` | gateway (public) | `tenantName`, `name`, `email`, `password` | token pair |
-| `auth.login` | gateway (public) | `email`, `password` | token pair |
-| `auth.token.refresh` | gateway (public) | `refreshToken` | token pair |
-| `auth.logout` | gateway | `refreshToken` | `{ ok: true }` |
-| `auth.token.verify` | gateway (HTTP guard and WebSocket connection) | `accessToken` | `{ userId, tenantId, role, siteIds, tenantStatus, plan, features }` |
-| `auth.invitation.create` | gateway (owner/admin) | actor, `email`, `role` | `{ invitationId, token, expiresAt }` |
-| `auth.invitation.list` | gateway (owner/admin) | actor | pending invitations (`invitationId`, `email`, `role`, `expiresAt`) |
-| `auth.invitation.regenerate` | gateway (owner/admin) | actor, `invitationId` | `{ invitationId, token, expiresAt }` |
-| `auth.invitation.accept` | gateway (public) | `token`, `name`, `password` | token pair |
-| `auth.user.change-role` | gateway (owner/admin, see role table) | actor, `userId`, `role` | `{ ok: true }` |
-| `auth.user.assign-sites` | gateway (owner/admin) | actor, `userId`, `siteIds` | `{ ok: true }` |
-| `auth.user.deactivate` | gateway (owner/admin) | actor, `userId` | `{ ok: true }` |
-| `auth.user.list-recipients` | internal services only (e.g. `notifications`), never the gateway | `tenantId`, `roles[]`, optional `siteId` | `{ userIds: string[] }`: ACTIVE users of that tenant with one of the roles; with `siteId`, supervisors only if assigned to that site (owner/admin always included when their role is requested) |
-| `auth.password-reset.create` | gateway (owner/admin) | actor, `userId` | `{ token, expiresAt }` |
-| `auth.password-reset.confirm` | gateway (public) | `token`, `password` | `{ ok: true }` |
+| `auth.register` | HTTP controller (public) | `tenantName`, `name`, `email`, `password` | token pair |
+| `auth.login` | HTTP controller (public) | `email`, `password` | token pair |
+| `auth.token.refresh` | HTTP controller (public) | `refreshToken` | token pair |
+| `auth.logout` | HTTP controller | `refreshToken` | `{ ok: true }` |
+| `auth.token.verify` | HTTP guard of `core` (facade call); `telemetry` for its HTTP guard and WebSocket connections (NATS responder) | `accessToken` | `{ userId, tenantId, role, siteIds, tenantStatus, plan, features }` |
+| `auth.invitation.create` | HTTP controller (owner/admin) | actor, `email`, `role` | `{ invitationId, token, expiresAt }` |
+| `auth.invitation.list` | HTTP controller (owner/admin) | actor | pending invitations (`invitationId`, `email`, `role`, `expiresAt`) |
+| `auth.invitation.regenerate` | HTTP controller (owner/admin) | actor, `invitationId` | `{ invitationId, token, expiresAt }` |
+| `auth.invitation.accept` | HTTP controller (public) | `token`, `name`, `password` | token pair |
+| `auth.user.change-role` | HTTP controller (owner/admin, see role table) | actor, `userId`, `role` | `{ ok: true }` |
+| `auth.user.assign-sites` | HTTP controller (owner/admin) | actor, `userId`, `siteIds` | `{ ok: true }` |
+| `auth.user.deactivate` | HTTP controller (owner/admin) | actor, `userId` | `{ ok: true }` |
+| `auth.user.list-recipients` | internal to `core` modules only (e.g. `notifications`, facade call); never exposed as an HTTP route or a NATS responder | `tenantId`, `roles[]`, optional `siteId` | `{ userIds: string[] }`: ACTIVE users of that tenant with one of the roles; with `siteId`, supervisors only if assigned to that site (owner/admin always included when their role is requested) |
+| `auth.password-reset.create` | HTTP controller (owner/admin) | actor, `userId` | `{ token, expiresAt }` |
+| `auth.password-reset.confirm` | HTTP controller (public) | `token`, `password` | `{ ok: true }` |
 
-"actor" = `{ userId, tenantId, role }` taken by the gateway from `auth.token.verify` (`tenantId` is null for `platform_admin`). Token pair = `{ accessToken, refreshToken, expiresIn }`. `siteIds` in the verify result is present only for `supervisor`. `auth.login`, `auth.token.refresh` and `auth.token.verify` also work for `platform_admin`; no `auth.*` pattern with a tenant actor accepts it.
+"actor" = `{ userId, tenantId, role }` taken by the HTTP layer of `core` from `auth.token.verify` (`tenantId` is null for `platform_admin`). Token pair = `{ accessToken, refreshToken, expiresIn }`. `siteIds` in the verify result is present only for `supervisor`. `auth.login`, `auth.token.refresh` and `auth.token.verify` also work for `platform_admin`; no `auth.*` pattern with a tenant actor accepts it.
 
 ### Events emitted
 
@@ -215,7 +216,7 @@ Request-reply patterns follow `<service>.<resource>.<action>` and carry NO tenan
 | `t.<tenant>.auth.tenant_reactivated` | `tenantId`, `occurredAt` |
 
 - `occurredAt` is ISO-8601 UTC. Every event carries a unique `eventId` so consumers can deduplicate.
-- Consumers (for example `organization`, `attendance`, `tasks`, `notifications`) must be idempotent: the same event can arrive twice.
+- Consumers (for example `organization`, `tasks`, `notifications` and `telemetry`) must be idempotent: the same event can arrive twice.
 - Emit events only after the database transaction commits.
 
 ### Events consumed (JetStream, durable consumer, explicit ack)
@@ -236,15 +237,15 @@ The tenant of a consumed event comes from the subject and is checked against the
 
 ### Errors
 
-Throw `RpcException` with `{ status, code, message }` (see `teamworkflow-nest`). The gateway maps it to HTTP `{ detail, code }`.
+Throw `RpcException` with `{ status, code, message }` (see `teamworkflow-nest`). The HTTP exception filter of `core` maps it to HTTP `{ detail, code }`.
 
 | code | status | When |
 |------|--------|------|
 | `invalid_credentials` | 401 | Any login failure (wrong email/password, locked, inactive) |
 | `invalid_token` | 401 | Bad, expired or revoked access/refresh/invitation/reset token |
 | `forbidden` | 403 | Role or tenant check failed |
-| `tenant_suspended` | 403 | Supervisor/employee of a suspended tenant on login (after a correct password), refresh or verify; also returned by the gateway to owner/admin on routes other than billing and data export |
-| `tenant_cancelled` | 403 | Same as `tenant_suspended`, for a cancelled tenant (the gateway also allows `billing.subscription.resubscribe`) |
+| `tenant_suspended` | 403 | Supervisor/employee of a suspended tenant on login (after a correct password), refresh or verify; also returned by the HTTP layer of `core` to owner/admin on routes other than billing and data export |
+| `tenant_cancelled` | 403 | Same as `tenant_suspended`, for a cancelled tenant (the HTTP layer of `core` also allows `billing.subscription.resubscribe`) |
 | `email_taken` | 409 | Registration or invitation for an existing email |
 | `validation_error` | 422 | DTO validation failed |
 
@@ -263,8 +264,8 @@ Every query on users, invitations and tokens filters by `tenantId` (or by a `use
 
 | Variable | Description |
 |----------|-------------|
-| `NATS_SERVER` | Comma-separated NATS URLs |
-| `DATABASE_URL` | PostgreSQL connection string for the `teamworkflow` database, `auth` schema, `auth_svc` role |
+| `NATS_SERVER` | Comma-separated NATS URLs (shared by all of `core`) |
+| `DATABASE_URL` | PostgreSQL connection string for the `teamworkflow` database, `auth` schema, `auth_svc` role (name provisional until the shared `core` config exists, T4/T6) |
 | `JWT_SECRET` | Access token signing secret (at least 32 random bytes) |
 | `ACCESS_TOKEN_TTL` | Default `15m` |
 | `REFRESH_TOKEN_TTL` | Default `7d` |
@@ -284,13 +285,13 @@ Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Ne
 
 ## Tests
 
-- Unit tests for every use case with Prisma and `ClientProxy` mocked (`pnpm test`).
+- Unit tests for every use case with Prisma and the facades of other modules mocked (`pnpm test`).
 - Always covered: tenant isolation (admin of tenant A acting on a user of tenant B), role table (including admin vs admin/owner and supervisor/employee being unable to manage users), lockout after 5 failures, generic login errors, refresh rotation (old token rejected), deactivated user rejected by login/refresh/verify, expired/used invitation and reset tokens, owner cannot be deactivated or demoted, `siteIds` returned only for supervisors and replaced by `auth.user.assign-sites`, suspended tenant blocks supervisor/employee (login after correct password, refresh, verify) while owner/admin can log in and get `tenantStatus: "suspended"`, reactivation restores access, a cancelled tenant behaving like a suspended one (supervisor/employee blocked and their refresh tokens revoked, owner/admin allowed with `tenantStatus: "cancelled"`), `payment_received` being a no-op while cancelled, `subscription_reactivated` restoring access, the tenant data purge (`data_retention_expired` deletes users, tokens and invitations of that tenant only, keeps the tombstone with status `deleted`, is ignored when the tenant is not `cancelled`, is idempotent, and leaves other tenants and `platform_admin` untouched), and idempotent handling of `employee_created`, `payment_overdue`, `subscription_expired`, `subscription_cancelled` and `payment_received` (duplicates produce no second invitation or event). Also covered: `platform_admin` can log in and pass `verify` with null `tenantId`, `tenantStatus`, `plan` and `features`, is never blocked by a tenant status, cannot be created by registration or invitation, cannot be acted on by the user-management actions and cannot use tenant actions; the database constraint rejecting a non-platform user without tenant; `subscription_created` and `plan_changed` storing `plan` and `features` idempotently and ignoring stale events; `verify` returning `plan` and `features`; and `auth.user.list-recipients` returning only active users of the requested roles (and supervisors of the site).
-- E2E tests (to create in `test/`) once the microservice transport and the database are set up.
+- E2E tests (to create in `test/`) once the HTTP layer, the NATS connection and the database are set up.
 
 ## Before Finishing a Task
 
 - [ ] `pnpm lint`, `pnpm test` and `pnpm build` pass.
 - [ ] Schema changes come with a reviewed Prisma migration.
-- [ ] If you changed a pattern, event or payload, you updated this file and the gateway, and called it out in the PR description (it affects other services).
+- [ ] If you changed a pattern, event or payload, you updated this file, `backend/core/AGENTS.md` and the HTTP layer of `core`, and called it out in the PR description (it affects other modules and `telemetry`).
 - [ ] No secrets, tokens or personal data in logs, tests or fixtures.
