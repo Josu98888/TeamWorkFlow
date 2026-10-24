@@ -2,17 +2,16 @@
 
 6 oct 2026 · @josu
 
-> Documentos relacionados: [AGENTS.md](AGENTS.md) (guía para agentes y convenciones del repositorio) · [docs/database.md](docs/database.md) (modelo de datos con diagramas) · [backend/auth/AGENTS.md](backend/auth/AGENTS.md) (fuente de verdad del servicio `auth`).
+> Documentos relacionados: [AGENTS.md](AGENTS.md) (guía para agentes y convenciones del repositorio) · [docs/architecture.md](docs/architecture.md) (decisión de arquitectura del MVP: monolito modular + telemetría) · [docs/database.md](docs/database.md) (modelo de datos con diagramas) · [backend/core/AGENTS.md](backend/core/AGENTS.md) (reglas del servicio `core` y de sus módulos; fuente de verdad del módulo `auth`: [backend/core/src/auth/AGENTS.md](backend/core/src/auth/AGENTS.md)).
 
 ## Estado actual del repositorio
 
 Hoy solo existen:
 
-- `backend/gateway`: punto de entrada HTTP.
-- `backend/auth`: esqueleto de NestJS, todavía sin la lógica descrita aquí.
+- `backend/core`: monolito modular con el módulo `auth` y la capa HTTP pública (guard de autenticación, filtro de excepciones, rutas de auth), ya implementados.
 - `frontend/`: esqueleto de Next.js.
 
-También hay documentación de diseño (sin código) de los servicios del MVP en `backend/organization`, `backend/attendance`, `backend/tasks`, `backend/notifications` y `backend/billing`. Todo lo demás (esos servicios, las bases de datos, la Torre de Control, etc.) está **planificado**; consulte la sección [MVP](#mvp) y, más abajo, la arquitectura objetivo.
+El MVP se rediseñó como **2 servicios** (`core` y `telemetry`; ver [MVP](#mvp) y [docs/architecture.md](docs/architecture.md)). `backend/core` ya contiene la capa HTTP y el módulo `auth` (las apps `backend/gateway` y `backend/auth` se fusionaron en él y se eliminaron). `backend/telemetry` no existe todavía. También hay documentación de diseño (sin código) de los módulos del MVP en `backend/organization`, `backend/attendance`, `backend/tasks`, `backend/notifications` y `backend/billing`; esa documentación se reorganizará en `backend/core` y `backend/telemetry`. Todo lo demás (esos módulos, las bases de datos, la Torre de Control, etc.) está **planificado**; consulte la sección [MVP](#mvp) y, más abajo, la arquitectura objetivo.
 
 ## Descripción de la aplicación
 
@@ -62,38 +61,51 @@ Monetización: suscripción mensual con un **precio fijo en pesos argentinos (AR
 
 ## MVP
 
-El MVP se construye con **7 servicios** (los nombres de carpetas, los patrones de NATS y los eventos están en inglés). Cada uno agrupa uno o más servicios de la arquitectura objetivo descrita más abajo, que sigue siendo un diseño futuro.
+El MVP se construye con **2 servicios de backend** (los nombres de carpetas, los patrones de NATS y los eventos están en inglés), según el registro de decisión [docs/architecture.md](docs/architecture.md). Reemplaza el diseño anterior de 7 microservicios. La arquitectura objetivo de 16 servicios descrita más abajo sigue siendo la referencia a largo plazo.
 
-| Servicio del MVP | Documentación | Agrupa (arquitectura objetivo) |
-|---|---|---|
-| `gateway` | [backend/gateway/README.md](backend/gateway/README.md) | [gateway](#1-gateway) |
-| `auth` | [backend/auth/README.md](backend/auth/README.md) | [auth](#2-auth) |
-| `organization` | [backend/organization/README.md](backend/organization/README.md) | [sites](#3-sites), [employees](#4-employees) y [shifts](#5-shifts) |
-| `attendance` | [backend/attendance/README.md](backend/attendance/README.md) | [attendance](#6-attendance), la parte de alertas de [rules](#11-rules) y [tower](#14-tower) |
-| `tasks` | [backend/tasks/README.md](backend/tasks/README.md) | [forms](#8-forms), [tasks](#9-tasks) y [media](#10-media) |
-| `notifications` | [backend/notifications/README.md](backend/notifications/README.md) | [notifications](#13-notifications) (solo push e in-app) |
-| `billing` | [backend/billing/README.md](backend/billing/README.md) | [billing](#16-billing) |
+| Servicio del MVP | Carpeta | Contiene | Expone |
+|---|---|---|---|
+| `core` (monolito modular) | `backend/core/` (`auth` y capa HTTP implementados; el resto de módulos por crear) | Módulos `auth`, `organization`, `tasks`, `notifications` y `billing`, y la API HTTP pública (el antiguo `gateway`) | HTTP `/api/v1`; responde las peticiones NATS de telemetría (`auth.token.verify`, `organization.*.get`) |
+| `telemetry` | `backend/telemetry/` (por crear) | Todo el dominio `attendance`: ingesta de fichadas, correcciones, jornadas, alertas en tiempo real y Torre de Control | HTTP `/api/v1/telemetry`; WebSocket (Socket.IO) de la Torre de Control |
+
+Un proxy inverso publica ambos servicios bajo el mismo origen y enruta por path (`/api/v1/telemetry` y `/ws` hacia `telemetry`, el resto de `/api/v1` hacia `core`; gana el prefijo más largo), de modo que el frontend sigue viendo una sola API y nunca se conecta a NATS.
+
+Qué grupo de la arquitectura objetivo implementa cada módulo del MVP:
+
+| Módulo del MVP | Servicio | Documentación de diseño | Agrupa (arquitectura objetivo) |
+|---|---|---|---|
+| capa HTTP (antes `gateway`) | `core` | [backend/core/README.md](backend/core/README.md) | [gateway](#1-gateway) (sin el WebSocket de la Torre, que pasa a `telemetry`) |
+| `auth` | `core` | [backend/core/src/auth/AGENTS.md](backend/core/src/auth/AGENTS.md) | [auth](#2-auth) |
+| `organization` | `core` | [backend/core/src/organization/AGENTS.md](backend/core/src/organization/AGENTS.md) | [sites](#3-sites), [employees](#4-employees) y [shifts](#5-shifts) |
+| `tasks` | `core` | [backend/core/src/tasks/AGENTS.md](backend/core/src/tasks/AGENTS.md) | [forms](#8-forms), [tasks](#9-tasks) y [media](#10-media) |
+| `notifications` | `core` | [backend/core/src/notifications/AGENTS.md](backend/core/src/notifications/AGENTS.md) | [notifications](#13-notifications) (solo push e in-app) |
+| `billing` | `core` | [backend/core/src/billing/AGENTS.md](backend/core/src/billing/AGENTS.md) | [billing](#16-billing) |
+| `attendance` | `telemetry` | [backend/telemetry/README.md](backend/telemetry/README.md) | [attendance](#6-attendance), la parte de alertas de [rules](#11-rules) y [tower](#14-tower) |
+
+La documentación de diseño de cada módulo vive junto a su código: `backend/core/src/<módulo>/AGENTS.md`; la de `telemetry` en `backend/telemetry/`.
 
 Decisiones comunes del MVP:
 
-- NestJS 12 sobre NATS, Prisma 7 con PostgreSQL (una sola base `teamworkflow`, con un schema y un usuario de Postgres por servicio), `class-validator` y Jest.
-- Los patrones de solicitud-respuesta siguen `<service>.<resource>.<action>` (por ejemplo `billing.invoice.list`); el actor siempre proviene de `auth.token.verify`, nunca de los headers. Los eventos siguen `t.<tenant>.<service>.<event>` en `snake_case` (por ejemplo `t.<tenant>.organization.shift_started`), llevan `eventId` y `occurredAt`, se emiten después del commit y se consumen de forma idempotente.
+- NestJS 12 sobre NATS, Prisma 7 con PostgreSQL (una sola base `teamworkflow`, con un schema, un usuario de Postgres, un cliente de Prisma y migraciones propias por módulo de `core` y para `telemetry`), `class-validator` y Jest.
+- NATS JetStream es el único bus de eventos de dominio, tanto entre módulos de `core` como entre `core` y `telemetry`. Un stream `<MODULE>_EVENTS` por módulo, consumidores durables y deduplicación con `ProcessedEvent`.
+- Fronteras entre módulos de `core`: un módulo solo expone un servicio público (fachada); nunca usa el cliente de Prisma ni las clases internas de otro módulo. Las reacciones entre dominios se hacen por eventos. Un módulo debe poder extraerse a su propio servicio sin cambiar a sus consumidores de eventos.
+- Los patrones de solicitud-respuesta siguen `<module>.<resource>.<action>` (por ejemplo `billing.invoice.list`); el actor siempre proviene de `auth.token.verify`, nunca de los headers. Los eventos siguen `t.<tenant>.<module>.<event>` en `snake_case` (por ejemplo `t.<tenant>.organization.shift_started`), llevan `eventId` y `occurredAt`, se emiten después del commit y se consumen de forma idempotente.
 - Sin buckets KV para datos de dominio, sin outbox obligatorio y sin Row Level Security obligatorio; toda consulta filtra por `tenantId`.
 - Sin correos ni SMS: los avisos salen a través de `notifications` (push e in-app).
-- Planes: `auth` guarda el plan y las funcionalidades del tenant (a partir de los eventos de `billing`) y el gateway bloquea con 403 `feature_not_in_plan` las rutas que el plan no incluye. Las alertas, la Torre de Control, las tareas y los formularios son funcionalidades Pro.
+- Planes: `auth` guarda el plan y las funcionalidades del tenant (a partir de los eventos de `billing`) y la capa HTTP de `core` bloquea con 403 `feature_not_in_plan` las rutas que el plan no incluye. Las alertas, la Torre de Control, las tareas y los formularios son funcionalidades Pro.
 - Rol `platform_admin`: no pertenece a ningún tenant, se crea mediante seed o CLI y solo opera las rutas de plataforma de `billing` (planes y precios, pagos manuales, anulaciones).
 
-El diseño de cada servicio y su contrato NATS están en su `README.md` y, con más detalle para los agentes, en su `AGENTS.md`.
+El diseño de cada módulo y su contrato (operaciones y eventos) están en el `AGENTS.md` de su carpeta (`backend/core/src/<módulo>/AGENTS.md` y `backend/telemetry/AGENTS.md`); el resumen de `core` está en [backend/core/README.md](backend/core/README.md).
 
 ## Arquitectura general
 
-> Las secciones siguientes describen la **arquitectura objetivo** de 16 servicios (con nombres en inglés). El MVP la implementa agrupada en los 7 servicios anteriores. Cada servicio indica a continuación dónde vive hoy.
+> Las secciones siguientes describen la **arquitectura objetivo** de 16 servicios (con nombres en inglés). El MVP la implementa agrupada en los 2 servicios anteriores (`core` y `telemetry`). Cada servicio indica a continuación dónde vive en el MVP.
 
-Todos los microservicios se comunican por NATS. HTTP solo existe en el borde: la app, la web y servicios externos como pagos y envío de push.
+En la arquitectura objetivo todos los microservicios se comunican por NATS; en el MVP, los módulos de `core` se comunican por eventos de JetStream (y por fachadas para lecturas dentro de una petición) y `telemetry` se comunica con `core` por NATS. HTTP solo existe en el borde: la app, la web y servicios externos como pagos y envío de push.
 
-La app y la web ingresan por el gateway. NATS nunca se expone a internet. La Torre de Control no se conecta a NATS desde el navegador: abre un WebSocket (Socket.IO) hacia el gateway, que valida el token con `auth`, se suscribe del lado del servidor a los eventos de las sedes permitidas y reenvía los mensajes (ver [tower](#14-tower) y [Inicio de sesión y acceso](#inicio-de-sesión-y-acceso)).
+La app y la web ingresan por la API HTTP pública (`core` en `/api/v1`, `telemetry` en `/api/v1/telemetry`, detrás de un proxy inverso). NATS nunca se expone a internet. La Torre de Control no se conecta a NATS desde el navegador: abre un WebSocket (Socket.IO) hacia `telemetry`, que valida el token con `auth.token.verify` (respondido por `core`), se suscribe del lado del servidor a los eventos de las sedes permitidas y reenvía los mensajes (ver [tower](#14-tower) y [Inicio de sesión y acceso](#inicio-de-sesión-y-acceso)).
 
-Compensación de este diseño: el gateway mantiene conexiones WebSocket abiertas. Si eso se convierte en un problema de carga, la conexión puede pasar a un servicio `tower` dedicado sin cambiar el frontend. Si algún día muchos clientes necesitaran conectarse directamente a NATS, un auth callout de NATS es una opción; hoy no se usa.
+Compensación de este diseño: `telemetry` mantiene conexiones WebSocket abiertas, pero separadas de la API de `core`. Si eso se convierte en un problema de carga, la conexión puede pasar a un servicio `tower` dedicado sin cambiar el frontend. Si algún día muchos clientes necesitaran conectarse directamente a NATS, un auth callout de NATS es una opción; hoy no se usa.
 
 ### Convención de subjects
 
@@ -106,11 +118,11 @@ Compensación de este diseño: el gateway mantiene conexiones WebSocket abiertas
 | Telemetría GPS (futuro) | `t.<tenant>.location.point.<employee>` | `t.acme.location.point.e123` | NATS Core |
 | Resumen de la Torre (futuro, servicio dedicado) | `t.<tenant>.tower.summary.<site>` | `t.acme.tower.summary.site42` | NATS Core |
 
-Las consultas y los comandos no llevan tenant en el subject: el tenant proviene del actor verificado y viaja en el payload (o en el header `Tenant-Id`) que arma el gateway. Los eventos siempre llevan el tenant en el subject y, en el payload, `tenantId`, `eventId` y `occurredAt`; el consumidor verifica que ambos tenants coincidan. Todos los servicios siguen esta convención (por ejemplo `t.acme.auth.user_created`, `t.acme.billing.payment_received`).
+Las consultas y los comandos no llevan tenant en el subject: el tenant proviene del actor verificado y viaja en el payload (o en el header `Tenant-Id`) que arma la capa HTTP de `core` (o `telemetry`). Los eventos siempre llevan el tenant en el subject y, en el payload, `tenantId`, `eventId` y `occurredAt`; el consumidor verifica que ambos tenants coincidan. Todos los servicios siguen esta convención (por ejemplo `t.acme.auth.user_created`, `t.acme.billing.payment_received`).
 
 ### JetStream y KV
 
-- **Streams:** uno por servicio publicador (por ejemplo `ATTENDANCE` con los subjects `t.*.attendance.>`), con 7 días de retención y 3 réplicas.
+- **Streams:** uno por servicio publicador (por ejemplo `ATTENDANCE_EVENTS` con los subjects `t.*.attendance.>`), con 7 días de retención y 3 réplicas.
 - **Consumers:** cada servicio que escucha crea su consumer durable con ack explícito, `MaxDeliver` de 5 y backoff. Los mensajes que agotan sus reintentos van a un stream DLQ para su revisión.
 - **Buckets KV (solo arquitectura objetivo, ninguno en el MVP):** `current_location`, `shifts_awaiting_clock_in`, `active_emergencies` y `tenant_config`.
 
@@ -123,11 +135,11 @@ Las consultas y los comandos no llevan tenant en el subject: el tenant proviene 
 
 ## Detalle de cada microservicio
 
-Hay 18 servicios: 16 de dominio y 2 transversales. Cada uno es dueño de sus datos y se comunica solo por NATS: los eventos pasan por JetStream con el prefijo `t.<tenant>.` y las consultas sincrónicas usan solicitud-respuesta con subjects `<service>.<resource>.<action>` (sin prefijo de tenant). En las consultas el tenant proviene del actor verificado: el gateway lo toma de `auth.token.verify`, nunca del cliente.
+Hay 18 servicios: 16 de dominio y 2 transversales. Cada uno es dueño de sus datos y se comunica solo por NATS: los eventos pasan por JetStream con el prefijo `t.<tenant>.` y las consultas sincrónicas usan solicitud-respuesta con subjects `<service>.<resource>.<action>` (sin prefijo de tenant). En las consultas el tenant proviene del actor verificado: la capa HTTP lo toma de `auth.token.verify`, nunca del cliente.
 
 ### 1. gateway
 
-- **MVP:** `gateway` (existe en `backend/gateway`).
+- **MVP:** la capa HTTP de `core` (implementada en `backend/core/src/http`; no hay un servicio gateway separado). El WebSocket de la Torre de Control lo atiende `telemetry`.
 - **Rol:** el único punto de entrada HTTP y WebSocket para la app móvil y la web.
 - **Qué hace:** verifica el token de acceso llamando a `auth.token.verify` por NATS, toma `tenantId`, `role` y `siteIds` del resultado verificado (nunca del body, el query ni los headers), aplica rate limiting y traduce cada solicitud HTTP a un mensaje NATS.
 - **API:** una única API REST bajo `/api/v1/...` para web y móvil; los endpoints específicos para móvil se agregan solo cuando hacen falta.
@@ -135,18 +147,18 @@ Hay 18 servicios: 16 de dominio y 2 transversales. Cada uno es dueño de sus dat
 - **Rate limiting:** `@nestjs/throttler` en memoria: las rutas públicas (login, registro, aceptar invitación, restablecer contraseña, webhooks) se limitan por IP; las rutas autenticadas se limitan por usuario. Pasa a un almacén compartido (Redis) cuando el gateway corre con más de una réplica.
 - **Restricción por plan:** toma `plan` y `features` del resultado verificado y responde 403 `feature_not_in_plan` en las rutas cuya funcionalidad el plan no incluye. Enruta `billing.admin.*` solo a `platform_admin`.
 - **Tenant en mora, suspendido o cancelado:** lee `tenantStatus` del resultado de `auth.token.verify`. Si el tenant está `suspended` o `cancelled`, solo deja pasar al `owner` y a los `admin` hacia las rutas de facturación (pagar o volver a suscribirse) y de exportación de datos; todo lo demás responde 403 `tenant_suspended` o `tenant_cancelled`.
-- **WebSocket de la Torre de Control:** con `@nestjs/websockets` (Socket.IO), el navegador se conecta al gateway enviando el token de acceso. El gateway lo valida con `auth.token.verify`, une el socket a una sala por cada sede permitida (supervisor: sus `siteIds`; `owner`/`admin`: todas las sedes del tenant), se suscribe del lado del servidor a `t.<tenant>.attendance.site_summary_updated` y reenvía cada mensaje a la sala de su `siteId`. El estado inicial se solicita por solicitud-respuesta con `attendance.tower.snapshot`. Esto significa que el gateway mantiene conexiones WebSocket abiertas; más adelante puede pasar a un servicio `tower` dedicado sin cambiar el frontend.
+- **WebSocket de la Torre de Control:** con `@nestjs/websockets` (Socket.IO), el navegador se conecta a `telemetry` (ruta `/ws` del mismo origen) enviando el token de acceso. `telemetry` lo valida con `auth.token.verify`, une el socket a una sala por cada sede permitida (supervisor: sus `siteIds`; `owner`/`admin`: todas las sedes del tenant), se suscribe del lado del servidor a `t.<tenant>.attendance.site_summary_updated` y reenvía cada mensaje a la sala de su `siteId`. El estado inicial se solicita por solicitud-respuesta con `attendance.tower.snapshot`. Esto significa que `telemetry` mantiene conexiones WebSocket abiertas; más adelante puede pasar a un servicio `tower` dedicado sin cambiar el frontend. (Diseño objetivo: en el MVP el gateway es la capa HTTP de `core`.)
 - **Webhooks:** expone la ruta pública del webhook de Mercado Pago y reenvía el cuerpo sin procesar a `billing.webhook.mercadopago`.
 - **BFF (futuro):** APIs separadas para móvil y web solo si una única API compartida deja de ser suficiente.
-- **Sin base de datos y sin NATS KV.**
+- **Sin base de datos propia y sin NATS KV** (la capa HTTP de `core` no tiene schema; usa los módulos).
 
 La revocación de sesiones vive en `auth` (tokens de refresco revocados en su base de datos) y `auth.token.verify` comprueba en cada solicitud que el usuario siga activo y que el estado del tenant permita el acceso; por eso no existe una lista de tokens revocados en NATS KV.
 
 ### 2. auth
 
-- **MVP:** `auth`.
+- **MVP:** módulo `auth` de `core` (implementado en `backend/core/src/auth`).
 
-> Fuente de verdad: [`backend/auth/AGENTS.md`](backend/auth/AGENTS.md). El diseño original (DNI + PIN, MFA, SSO, auth callout, RBAC detallado) se simplificó; lo que se quitó figura más abajo como trabajo futuro.
+> Fuente de verdad: [`backend/core/src/auth/AGENTS.md`](backend/core/src/auth/AGENTS.md). El diseño original (DNI + PIN, MFA, SSO, auth callout, RBAC detallado) se simplificó; lo que se quitó figura más abajo como trabajo futuro.
 
 - **Rol:** identidad, sesiones, alcance de sedes de los supervisores y estado de acceso del tenant.
 - **Registro:** `auth.register` crea el tenant y su primer usuario, que pasa a ser el `owner`, en una única transacción, y emite `tenant_created` (consumido por `billing`, que inicia la prueba). El correo es único en todo el sistema.
@@ -156,7 +168,7 @@ La revocación de sesiones vive en `auth` (tokens de refresco revocados en su ba
 - **Invitaciones:** `owner` y `admin` invitan a supervisores y empleados (solo el `owner` invita a administradores) con un enlace de un solo uso que vence en 7 días. El frontend muestra el enlace para copiarlo en el momento de la creación. Como los tokens se guardan solo con hash, `auth.invitation.list` lista las pendientes sin el enlace, y `auth.invitation.regenerate` emite un enlace nuevo (revocando el anterior) cuando el administrador lo necesita, por ejemplo para invitaciones creadas automáticamente desde `organization`. No se envían correos.
 - **Alta de empleados:** el administrador crea el registro del empleado en `organization` con su correo; `organization` emite `t.<tenant>.organization.employee_created` y `auth` lo consume (de forma idempotente) y crea una invitación con el rol `employee`. El administrador copia el enlace desde la interfaz.
 - **Tokens:** un token de acceso JWT de 15 minutos (claims `sub`, `tenantId`, `role`, `jti`, `iat`, `exp`, sin datos personales ni ids de sedes) y un token de refresco opaco, rotativo y revocable de 7 días (solo se guarda su hash SHA-256). La revocación vive en `auth`.
-- **Verificación:** el gateway valida cada solicitud con `auth.token.verify`, que comprueba la firma, el vencimiento, que el usuario siga activo y que el estado del tenant permita el acceso. Devuelve `{ userId, tenantId, role, siteIds, tenantStatus, plan, features }` (`plan` y `features` los mantiene `auth` a partir de los eventos de `billing`). Así, desactivar a un usuario o suspender un tenant surte efecto de inmediato.
+- **Verificación:** la capa HTTP de `core` y `telemetry` validan cada solicitud con `auth.token.verify`, que comprueba la firma, el vencimiento, que el usuario siga activo y que el estado del tenant permita el acceso. Devuelve `{ userId, tenantId, role, siteIds, tenantStatus, plan, features }` (`plan` y `features` los mantiene `auth` a partir de los eventos de `billing`). Así, desactivar a un usuario o suspender un tenant surte efecto de inmediato.
 - **Estado del tenant:** `active`, `past_due`, `suspended`, `cancelled` o `deleted` (con `pastDueSince`, `suspendedAt` y `cancelledAt`). `auth` es dueño del estado; `billing` es dueño de los pagos (ver [billing](#16-billing) y [Mora, suspensión y cancelación de un tenant](#mora-suspensión-y-cancelación-de-un-tenant)).
 - **Restablecimiento de contraseña:** un `owner` o `admin` genera un enlace de un solo uso (1 hora) para otro usuario, según la tabla de roles. No existe un "olvidé mi contraseña" por correo.
 - **Desactivación:** los usuarios nunca se eliminan; se desactivan, se revocan sus tokens de refresco y se emite `t.<tenant>.auth.user_deactivated`. La única eliminación definitiva es la purga de datos del tenant al vencer la retención.
@@ -178,7 +190,7 @@ Fuera del alcance por ahora (**trabajo futuro**):
 
 ### 3. sites
 
-- **MVP:** `organization` (módulo `sites`).
+- **MVP:** módulo `organization` de `core` (submódulo `sites`).
 - **Rol:** sedes, puestos dentro de cada sede y geocercas.
 - **Qué hace:** guarda la ubicación de cada sede, una geocerca como un punto más un radio en metros (los polígonos y PostGIS son trabajo futuro), su zona horaria, un código QR fijo por sede (rotable por un administrador) y los puestos (nombre, habilidades requeridas, mínimo de personas). Las sedes se desactivan, nunca se eliminan.
 - **Solicitud-respuesta:** `organization.site.create` / `update` / `get` / `list` / `rotate-qr` y `organization.post.create` / `update` / `list`. La verificación de geocerca la calcula `attendance` (haversine) a partir de los datos de `organization.site.get`.
@@ -186,7 +198,7 @@ Fuera del alcance por ahora (**trabajo futuro**):
 
 ### 4. employees
 
-- **MVP:** `organization` (módulo `employees`).
+- **MVP:** módulo `organization` de `core` (submódulo `employees`).
 - **Rol:** perfil de cada persona del tenant y registro operativo de los empleados.
 - **Perfil:** cada usuario de `auth` tiene aquí un perfil (nombre, apellido, correo, teléfono, id de media del avatar). Los owners, admins y supervisores no necesitan número de legajo ni DNI; los empleados operativos sí.
 - **Qué hace:** datos personales, habilidades, sedes habilitadas y un límite de horas semanales. Los empleados nunca se eliminan definitivamente.
@@ -198,7 +210,7 @@ Fuera del alcance por ahora (**trabajo futuro**):
 
 ### 5. shifts
 
-- **MVP:** `organization` (módulo `shifts`).
+- **MVP:** módulo `organization` de `core` (submódulo `shifts`).
 - **Rol:** planificación de qué puesto debe cubrirse, cuándo y por quién.
 - **Qué hace:** plantillas semanales con un generador diario para los próximos 14 días, creación manual, edición, cancelación y reasignación con bloqueo optimista (`version`), y validación: una superposición bloquea (`shift_overlap`), mientras que un descanso menor a 12 horas, las horas semanales por encima del límite, la falta de una habilidad y una sede no habilitada solo generan advertencias. Los intercambios de turnos entre empleados con aprobación y la publicación de la grilla son trabajo futuro.
 - **Job de ciclo de vida:** se ejecuta cada minuto, emite `shift_starting` 15 minutos antes del inicio, `shift_started` en el momento exacto y `shift_ended` al finalizar. Los tenants suspendidos y cancelados se omiten.
@@ -208,7 +220,7 @@ Fuera del alcance por ahora (**trabajo futuro**):
 
 ### 6. attendance
 
-- **MVP:** `attendance` (módulos `clock-ins` y `workdays`).
+- **MVP:** servicio `telemetry` (dominio `attendance`, submódulos `clock-ins` y `workdays`).
 - **Rol:** fichadas y horas trabajadas.
 - **Qué hace:** registra `in`, `out`, `break_start` y `break_end` por `gps`, `qr` o `manual`; asocia cada evento al turno del empleado; verifica la geocerca con los datos de `organization.site.get` y nunca rechaza por ubicación (fuera de la geocerca el evento se acepta, se marca y se abre una alerta); permite correcciones con un motivo obligatorio y una fila de auditoría (`ClockEventCorrection`).
 - **Sin conexión:** acepta fichadas tardías con la hora real del dispositivo (`deviceTime`, dentro de las 24 horas) y las deduplica por `clientEventId`.
@@ -229,7 +241,7 @@ Hoy attendance solo verifica la ubicación en el momento de la fichada (GPS o QR
 
 ### 8. forms
 
-- **MVP:** `tasks` (módulo `forms`).
+- **MVP:** módulo `tasks` de `core` (submódulo `forms`).
 - **Rol:** constructor de formularios dinámicos.
 - **Qué hace:** guarda definiciones de formularios con campos tipados (`text`, `number`, `yes_no`, `select`, `checklist`, `photo`, `qr`), una `key` estable, un `label` y un indicador `required`. La lógica condicional y los campos de firma son trabajo futuro.
 - **Versionado:** un formulario es un borrador mientras es editable; al publicarlo se congela una `FormVersion` inmutable. Las tareas y las respuestas apuntan a la versión que usaron.
@@ -237,7 +249,7 @@ Hoy attendance solo verifica la ubicación en el momento de la fichada (GPS o QR
 
 ### 9. tasks
 
-- **MVP:** `tasks`.
+- **MVP:** módulo `tasks` de `core`.
 - **Rol:** trabajo a realizar en cada sede.
 - **Qué hace:** tareas únicas (asignadas a un empleado o a una sede/puesto, con una fecha límite y una versión de formulario publicada) y tareas por turno generadas a partir de plantillas de tareas cuando llega `shift_started`. Las reglas de recurrencia (RRULE) más allá de las plantillas son trabajo futuro.
 - **Toma de tareas:** una tarea asignada a una sede/puesto puede ser tomada, o respondida directamente, por cualquier empleado con un turno en curso en esa sede y puesto; gana la primera toma.
@@ -249,7 +261,7 @@ Hoy attendance solo verifica la ubicación en el momento de la fichada (GPS o QR
 
 ### 10. media
 
-- **MVP:** `tasks` (módulo `media`).
+- **MVP:** módulo `tasks` de `core` (submódulo `media`).
 - **Rol:** fotos adjuntas a las respuestas de las tareas.
 - **Qué hace:** emite URL prefirmadas para subir directamente a un almacenamiento compatible con S3, guarda metadatos (`mime`, `sizeBytes`, `sha256`, `takenAt`, quien la sube y la clave de almacenamiento) y entrega URL prefirmadas de descarga de corta duración. Límites: 10 MB y `image/jpeg`, `image/png` o `image/webp`.
 - **Solicitud-respuesta:** `tasks.media.request-upload` y `tasks.media.get-url`.
@@ -257,7 +269,7 @@ Hoy attendance solo verifica la ubicación en el momento de la fichada (GPS o QR
 
 ### 11. rules
 
-- **MVP:** `attendance` (módulo `alerts`), con umbrales fijos. El motor de reglas configurable es **futuro**.
+- **MVP:** servicio `telemetry` (dominio `attendance`, submódulo `alerts`), con umbrales fijos. El motor de reglas configurable es **futuro**.
 - **Rol:** generador de alertas. Es el cerebro operativo.
 - **Qué hace hoy:** cuatro tipos de alerta con umbrales fijos: `late` (10 minutos después del inicio del turno sin `in`), `uncovered_post` (15 minutos sin nadie fichado, también cuando el turno no tiene empleado), `out_of_geofence` y `missing_clock_out` (fin del turno + 2 horas con un `in` abierto). La detección se dispara con los eventos de turnos de `organization` y una verificación periódica cada minuto; las alertas son una funcionalidad Pro.
 - **Ciclo de vida de la alerta:** `open`, `acknowledged` por un supervisor de la sede o un admin, `resolved` (manualmente, o automáticamente cuando llega la fichada para `late` y `uncovered_post`, o cuando se agrega la salida para `missing_clock_out`).
@@ -277,7 +289,7 @@ Hoy attendance solo verifica la ubicación en el momento de la fichada (GPS o QR
 
 ### 13. notifications
 
-- **MVP:** `notifications` (solo push e in-app).
+- **MVP:** módulo `notifications` de `core` (solo push e in-app).
 - **Rol:** entrega de mensajes. No tiene lógica de negocio.
 - **Qué hace:** push (FCM) a los tokens de dispositivo activos del destinatario y notificaciones in-app guardadas y listadas para la web; plantillas en código identificadas por `(templateCode, locale)` (hoy solo `es`), registro de entregas y hasta 3 intentos. El correo, el SMS, WhatsApp, las preferencias del usuario y las horas de silencio son trabajo futuro.
 - **Solicitud-respuesta:** `notifications.push-token.register` / `unregister` y `notifications.notification.list` / `unread-count` / `mark-read`.
@@ -286,10 +298,10 @@ Hoy attendance solo verifica la ubicación en el momento de la fichada (GPS o QR
 
 ### 14. tower
 
-- **MVP:** `attendance` (módulo `tower`).
+- **MVP:** servicio `telemetry` (dominio `attendance`, submódulo `tower`).
 - **Rol:** Torre de Control en tiempo real.
-- **Qué hace:** ante cada fichada o cambio de alerta, emite `t.<tenant>.attendance.site_summary_updated` con `siteId`, `expected` (empleados asignados de los turnos en curso), `present` (fichados y sin salida) y `openAlerts`. No tiene base de datos propia más allá de los datos de attendance. La Torre de Control es una funcionalidad Pro.
-- **Conexión del navegador:** el navegador no se conecta a NATS. Abre un WebSocket (Socket.IO) hacia el gateway, que valida el token con `auth.token.verify`, une el socket a una sala por cada sede permitida (supervisor: sus `siteIds`; `owner`/`admin`: todas las sedes del tenant), se suscribe del lado del servidor a los eventos de resumen y los reenvía a la sala de la sede (ver [gateway](#1-gateway)). La Torre no conoce los WebSockets: solo publica los resúmenes.
+- **Qué hace:** ante cada fichada o cambio de alerta, emite `t.<tenant>.attendance.site_summary_updated` con `siteId`, `expected` (empleados asignados de los turnos en curso), `present` (fichados y sin salida) y `openAlerts`. No tiene base de datos propia más allá de los datos de attendance (schema `attendance` de `telemetry`). La Torre de Control es una funcionalidad Pro.
+- **Conexión del navegador:** el navegador no se conecta a NATS. Abre un WebSocket (Socket.IO) hacia `telemetry`, que valida el token con `auth.token.verify`, une el socket a una sala por cada sede permitida (supervisor: sus `siteIds`; `owner`/`admin`: todas las sedes del tenant), se suscribe del lado del servidor a los eventos de resumen y los reenvía a la sala de la sede (ver [gateway](#1-gateway)). La Torre no conoce los WebSockets: solo publica los resúmenes.
 - **Estado inicial:** `attendance.tower.snapshot` (solicitud-respuesta) devuelve la imagen actual cuando se abre el panel; después todo llega como eventos.
 - **Futuro:** un servicio `tower` dedicado que publique `t.<tenant>.tower.summary.<site>` y que además agregue ubicaciones y emergencias.
 
@@ -303,7 +315,7 @@ Hoy attendance solo verifica la ubicación en el momento de la fichada (GPS o QR
 
 ### 16. billing
 
-- **MVP:** `billing`.
+- **MVP:** módulo `billing` de `core`.
 - **Rol:** planes, suscripciones, facturación y cobranza.
 - **Planes y precios:** el catálogo `basic` y `pro` con un precio mensual fijo en ARS y las funcionalidades que habilita cada plan. Solo un `platform_admin` cambia precios y funcionalidades, y un nuevo precio se aplica desde la factura siguiente.
 - **Suscripción:** estados `trial`, `active`, `past_due`, `suspended` y `cancelled`, gobernados por una máquina de estados pura. Con `t.<tenant>.auth.tenant_created` crea la prueba `pro` de 14 días. Una mejora de plan es inmediata; una reducción se aplica al inicio del período siguiente; la cancelación se hace efectiva a fin de mes y puede deshacerse antes; volver a suscribirse crea una nueva suscripción.
@@ -321,7 +333,7 @@ Hoy attendance solo verifica la ubicación en el momento de la fichada (GPS o QR
 
 ## Base de datos
 
-No es obligatorio tener una base de datos por microservicio. Cada microservicio decide más adelante si comparte una base de datos PostgreSQL con otros servicios (con su propio schema) o tiene la suya.
+En el MVP hay una sola base PostgreSQL `teamworkflow`. Cada módulo de `core` y `telemetry` conserva su propio schema (`auth`, `organization`, `tasks`, `notifications`, `billing`, `attendance`), su propio rol, su propio cliente de Prisma y sus propias migraciones; el aislamiento lo garantizan los roles de PostgreSQL y no hay claves foráneas entre schemas. En la arquitectura objetivo, cada microservicio decide si comparte una base con otros servicios (con su propio schema) o tiene la suya.
 
 Lo que queda fijo:
 
@@ -329,7 +341,7 @@ Lo que queda fijo:
 - Los datos de otros servicios se solicitan por NATS, o se guarda una copia alimentada por eventos. No hay consultas ni claves foráneas entre servicios.
 - Cada servicio con datos tiene su propio `prisma/schema.prisma` y sus propias migraciones.
 - Toda tabla con datos de clientes lleva `tenantId`. Row Level Security es opcional y solo se aplica cuando varios servicios comparten una base de datos.
-- `gateway` no tiene base de datos propia.
+- La capa HTTP de `core` (el antiguo `gateway`) no tiene base de datos propia.
 
 El modelo de cada servicio (diagramas entidad-relación y el SQL de referencia original) está en [docs/database.md](docs/database.md).
 
@@ -337,26 +349,26 @@ El modelo de cada servicio (diagramas entidad-relación y el SQL de referencia o
 
 ### Inicio de sesión y acceso
 
-1. El usuario envía su correo y contraseña al gateway, que llama a `auth.login`.
+1. El usuario envía su correo y contraseña a la API de `core` (`/api/v1`), que invoca `auth.login` del módulo `auth`.
 2. `auth` valida las credenciales (bloqueando tras 5 intentos fallidos) y devuelve un token de acceso (15 minutos) y un token de refresco (7 días).
-3. En cada solicitud, el gateway llama a `auth.token.verify` y obtiene `userId`, `tenantId`, `role`, `siteIds` (solo supervisores), `tenantStatus`, `plan` y `features`.
+3. En cada solicitud, la capa HTTP de `core` (y `telemetry`, por NATS) llama a `auth.token.verify` y obtiene `userId`, `tenantId`, `role`, `siteIds` (solo supervisores), `tenantStatus`, `plan` y `features`.
 4. Cuando el token de acceso vence, el cliente llama a `auth.token.refresh`, que rota el token de refresco.
 
 Los empleados inician sesión como todos los demás, con correo y contraseña. Su cuenta nace de una invitación generada a partir del registro del empleado (`employee_created`); los supervisores y administradores se invitan directamente.
 
 ### Torre de Control
 
-1. El navegador abre un WebSocket (Socket.IO) hacia el gateway y envía el token de acceso.
-2. El gateway lo valida con `auth.token.verify` (la Torre de Control es una funcionalidad Pro) y une el socket a una sala por cada sede permitida: los `siteIds` del supervisor, o todas las sedes del tenant para `owner` y `admin`.
-3. El gateway solicita la instantánea inicial por solicitud-respuesta con `attendance.tower.snapshot` y la envía al socket.
-4. El gateway se suscribe del lado del servidor a `t.<tenant>.attendance.site_summary_updated` y reenvía cada mensaje a la sala de su `siteId`. El navegador nunca habla con NATS.
+1. El navegador abre un WebSocket (Socket.IO) hacia `telemetry` (`/ws`) y envía el token de acceso.
+2. `telemetry` lo valida con `auth.token.verify` (la Torre de Control es una funcionalidad Pro) y une el socket a una sala por cada sede permitida: los `siteIds` del supervisor, o todas las sedes del tenant para `owner` y `admin`.
+3. `telemetry` obtiene la instantánea inicial con `attendance.tower.snapshot` (interna de `telemetry`) y la envía al socket.
+4. `telemetry` se suscribe del lado del servidor a `t.<tenant>.attendance.site_summary_updated` y reenvía cada mensaje a la sala de su `siteId`. El navegador nunca habla con NATS.
 
 ### Mora, suspensión y cancelación de un tenant
 
 1. Una factura sigue impaga después de su vencimiento (día 1 de atraso): `billing` marca la suscripción como `past_due`, publica `t.<tenant>.billing.payment_overdue` y solicita el aviso `billing_overdue_notice` mediante `t.<tenant>.notifications.send`. `auth` pasa el tenant a `past_due` y publica `t.<tenant>.auth.tenant_past_due`. Todo sigue funcionando; el `owner` y los `admin` ven un banner (el frontend lee `tenantStatus` de `auth.token.verify`).
 2. En los días 4 y 6 de atraso `billing` solicita el mismo aviso para el `owner` y los `admin`.
 3. El día 7 sin pago, `billing` marca la suscripción como `suspended`, publica `t.<tenant>.billing.subscription_expired` y solicita `billing_suspended`. `auth` pasa el tenant a `suspended`, revoca todos los tokens de refresco de supervisores y empleados y publica `t.<tenant>.auth.tenant_suspended`.
-4. Mientras está suspendido, los supervisores y empleados no pueden iniciar sesión, refrescar ni pasar `auth.token.verify` (código `tenant_suspended`, devuelto en el login solo después de una contraseña correcta, de modo que no filtra información). El `owner` y los `admin` pueden iniciar sesión, pero el gateway solo les permite acceder a las rutas de facturación (pagar) y a la exportación de datos; todo lo demás responde 403 `tenant_suspended`.
+4. Mientras está suspendido, los supervisores y empleados no pueden iniciar sesión, refrescar ni pasar `auth.token.verify` (código `tenant_suspended`, devuelto en el login solo después de una contraseña correcta, de modo que no filtra información). El `owner` y los `admin` pueden iniciar sesión, pero la capa HTTP de `core` solo les permite acceder a las rutas de facturación (pagar) y a la exportación de datos; todo lo demás responde 403 `tenant_suspended`.
 5. Los servicios que consumen `tenant_suspended` pausan sus procesos automáticos para ese tenant: los jobs de turnos de `organization`, la verificación periódica de `attendance`, la generación y el vencimiento de tareas en `tasks`, y los envíos en `notifications` (los avisos `billing_*` se siguen entregando). Los servicios futuros (`rules`, `emergencies`, `location`) harían lo mismo. Los datos se conservan.
 6. En cualquier momento, cuando llega el pago completo, `billing` publica `t.<tenant>.billing.payment_received` (solo cuando no queda otra factura vencida). `auth` pasa un tenant `past_due` o `suspended` a `active` y publica `t.<tenant>.auth.tenant_reactivated`; los servicios reanudan sus procesos y los usuarios vuelven a iniciar sesión con normalidad. Este pago nunca reactiva un tenant `cancelled`.
 7. Cuando una suscripción cancelada llega a fin de mes, `billing` emite la última factura, marca la suscripción como `cancelled` y publica `t.<tenant>.billing.subscription_cancelled`. `auth` pasa el tenant a `cancelled` (mismas restricciones que `suspended`), revoca los tokens de refresco de supervisores y empleados y publica `t.<tenant>.auth.tenant_cancelled`; los servicios pausan sus procesos automáticos como en una suspensión.
@@ -388,7 +400,7 @@ Los empleados inician sesión como todos los demás, con correo y contraseña. S
 
 ### Hoja de ruta sugerida
 
-1. **MVP (3 a 4 meses):** los 7 servicios del [MVP](#mvp): gateway, auth, organization (sites, employees y shifts), attendance (con alertas y la Torre de Control), tasks (formularios, tareas y fotos), notifications y billing. Suficiente para vender los planes Basic y Pro.
+1. **MVP (3 a 4 meses):** los 2 servicios del [MVP](#mvp): `core` (capa HTTP, auth, organization con sites, employees y shifts, tasks con formularios, tareas y fotos, notifications y billing) y `telemetry` (attendance con alertas y la Torre de Control). Suficiente para vender los planes Basic y Pro.
 2. **Fase 2:** `reports`, alertas y reglas configurables, notificaciones por correo y SMS, y un backoffice de plataforma ampliado.
 3. **Fase 3:** `emergencies`, `location` con historial, `integrations`, `audit` y SSO (trabajo futuro). Habilita Enterprise.
-4. **Fase 4:** dividir `organization` en sites, employees y shifts, mover `location` y `reports` a sus propias bases de datos, y predicción de ausentismo con los datos históricos.
+4. **Fase 4:** extraer módulos de `core` a servicios propios cuando la carga o el equipo lo justifiquen, dividir `organization` en sites, employees y shifts, mover `location` y `reports` a sus propias bases de datos, y predicción de ausentismo con los datos históricos.

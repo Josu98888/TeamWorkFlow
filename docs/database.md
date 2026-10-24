@@ -1,67 +1,63 @@
 # Base de datos de TeamWorkFlow
 
-Modelo de datos de los servicios del MVP. Cada sección muestra un diagrama entidad-relación (Mermaid, renderizado por GitHub) construido a partir de la sección `Data Model` del `AGENTS.md` de ese servicio, además de las reglas clave. El diseño previo al MVP (identificadores en español, SQL) se conserva al final solo como referencia.
+Modelo de datos del MVP, que tiene dos servicios: `core` (monolito modular con los módulos `auth`, `organization`, `tasks`, `notifications` y `billing`) y `telemetry` (todo el dominio `attendance`). Cada sección muestra un diagrama entidad-relación (Mermaid, renderizado por GitHub) construido a partir de la sección `Data Model` del `AGENTS.md` de ese módulo o de telemetry, además de las reglas clave. El diseño previo al MVP (identificadores en español, SQL) se conserva al final solo como referencia.
 
-> Estado: todavía no se creó ningún servicio con datos. Todo lo que sigue es el **modelo del MVP por crear** con Prisma. Hoy solo existen `backend/gateway`, `backend/auth` (esqueleto) y `frontend/`. Ver el [README](../README.md) y [AGENTS.md](../AGENTS.md).
+> Estado: todavía no se creó ningún módulo ni servicio con datos. Todo lo que sigue es el **modelo del MVP por crear** con Prisma. Hoy solo existen `backend/core` (con el módulo `auth` y la capa HTTP) y `frontend/`. Ver el [README](../README.md), [AGENTS.md](../AGENTS.md) y la decisión de arquitectura en [`architecture.md`](architecture.md).
 
-> Fuente de verdad: `backend/<service>/AGENTS.md` (sección `Data Model`). Si este documento y un `AGENTS.md` no coinciden, prevalece el `AGENTS.md`.
+> Fuente de verdad: `backend/core/src/<module>/AGENTS.md` y `backend/telemetry/AGENTS.md` (sección `Data Model`). Si este documento y un `AGENTS.md` no coinciden, prevalece el `AGENTS.md`.
 
 ## Contenido
 
 - [Estructura y aislamiento por tenant](#estructura-y-aislamiento-por-tenant)
 - [Resumen](#resumen)
-- Servicios del MVP: [auth](#auth) · [organization](#organization) · [attendance](#attendance) · [tasks](#tasks) · [notifications](#notifications) · [billing](#billing)
+- Módulos de `core` y `telemetry`: [auth](#auth) · [organization](#organization) · [attendance (telemetry)](#attendance) · [tasks](#tasks) · [notifications](#notifications) · [billing](#billing)
 - [Arquitectura objetivo (servicios futuros)](#arquitectura-objetivo-servicios-futuros)
 - [Apéndice: SQL del diseño original (solo referencia)](#apéndice-sql-del-diseño-original-solo-referencia)
 
 ## Estructura y aislamiento por tenant
 
-- **Cada servicio tiene su propio schema de Prisma** (`prisma/schema.prisma`) y su propio historial de migraciones. Si los servicios comparten una base de datos PostgreSQL (cada uno con su propio schema) o tienen bases separadas se decide por servicio, más adelante. Dos servicios nunca migran las mismas tablas.
-- **Toda fila que pertenece a un tenant lleva `tenantId`**, y toda consulta filtra por él. El `tenantId` proviene del actor verificado o del evento consumido, nunca de lo que envía el cliente. Row Level Security no es obligatorio.
-- **Sin claves foráneas entre servicios.** Un id que pertenece a otro servicio es una columna simple, marcada en los diagramas con un comentario como `"ref. organization"` y dibujada sin línea de relación. Los datos de otros servicios se solicitan por NATS o se guardan como una copia alimentada por eventos.
-- `gateway` no tiene base de datos.
+- **Una sola base de datos PostgreSQL (`teamworkflow`).** Cada módulo de `core` (`auth`, `organization`, `tasks`, `notifications`, `billing`) y `telemetry` (schema `attendance`) tiene su propio schema de PostgreSQL, su propio rol (`<schema>_svc`), su propio cliente de Prisma (`schema.prisma` junto al módulo: `backend/core/src/<módulo>/prisma/`, config en `backend/core/prisma.<módulo>.config.ts`) y su propio historial de migraciones (incluida su tabla `_prisma_migrations`, dentro de su schema). Dos dueños nunca migran las mismas tablas.
+- **Aislamiento por rol, no por convención.** Cada rol es dueño solo de su schema y no tiene `USAGE` sobre los demás: una consulta a otro schema falla con `permission denied` (`backend/STEPS.md` S1.1, S2.2b). Lo crea `backend/postgres/init/01-schemas-and-roles.sh`, con una contraseña `<SCHEMA>_DB_PASSWORD` por rol.
+- **Una cadena de conexión por dueño.** Cada módulo de `core` lee `<MODULE>_DATABASE_URL` (`AUTH_DATABASE_URL`, `ORGANIZATION_DATABASE_URL`, `TASKS_DATABASE_URL`, `NOTIFICATIONS_DATABASE_URL`, `BILLING_DATABASE_URL`) y `telemetry` lee `ATTENDANCE_DATABASE_URL`; cada una apunta a su schema (`?schema=<schema>`) con su rol. `backend/core` ya lee `AUTH_DATABASE_URL` (tarea T6.3 de `odd/tasks/two-service-architecture.md`); hasta que T7 retire la app `backend/auth`, esta sigue leyendo `DATABASE_URL`.
+- **Sin claves foráneas entre schemas.** Un id que pertenece a otro módulo o a telemetry es una columna simple, marcada en los diagramas con un comentario como `"ref. organization"` y dibujada sin línea de relación. Los datos del otro dueño se piden por una fachada de módulo (dentro de `core`), por una solicitud NATS `<module>.<resource>.<action>` (entre `core` y `telemetry`) o se guardan como una copia alimentada por eventos.
+- **Eventos por NATS JetStream.** Es el único bus de eventos de dominio, entre módulos de `core` y entre `core` y `telemetry`: subjects `t.<tenant>.<module>.<event>`, un stream `<MODULE>_EVENTS` por dueño y consumidores durables con ack explícito.
+- La capa HTTP de `core` (el antiguo `gateway`) no tiene base de datos ni schema propios.
 
 ### Cómo leer los diagramas
 
-- `PK` clave primaria, `FK` clave foránea (dentro del mismo servicio), `UK` valor único.
+- `PK` clave primaria, `FK` clave foránea (dentro del mismo schema), `UK` valor único.
 - Los modelos van en PascalCase y los campos en camelCase, como en Prisma; las tablas son snake_case en plural mediante `@map`. Los tipos son tokens únicos de Mermaid: `String`, `Int`, `Float`, `Boolean`, `DateTime`, `Decimal`, `Json`; `StringList` e `IntList` representan listas de Prisma (`String[]`, `Int[]`).
 - Las enumeraciones se muestran como `String` con los valores permitidos en el comentario.
 - "Unique per tenant" en un comentario significa un único compuesto con `tenantId`.
-- Cada servicio también tiene una tabla `ProcessedEvent` (`eventId` único) para deduplicar los eventos consumidos. Los servicios que pausan el trabajo automático guardan una fila `TenantState` por cada tenant suspendido o cancelado (sin fila significa activo), y los servicios que restringen funcionalidades pro guardan una copia `TenantFeatures` (sin fila significa sin funcionalidades pro).
+- Cada módulo y telemetry también tiene una tabla `ProcessedEvent` (`eventId` único) para deduplicar los eventos consumidos, escrita en la misma transacción que el handler. Los módulos que pausan el trabajo automático guardan una fila `TenantState` por cada tenant suspendido o cancelado (sin fila significa activo), y los que restringen funcionalidades pro guardan una copia `TenantFeatures` (sin fila significa sin funcionalidades pro).
 
 ## Resumen
 
 ```mermaid
 flowchart LR
-  subgraph nodb["Sin base de datos"]
-    gateway["gateway: HTTP y WebSocket"]
-  end
+  NATS(("NATS JetStream: eventos y request-reply"))
 
-  NATS(("NATS: eventos y request-reply"))
-
-  subgraph withdb["Servicios del MVP con datos propios"]
+  subgraph core["core: monolito modular (HTTP /api/v1)"]
     auth["auth: tenants, usuarios, sesiones"]
     organization["organization: sedes, empleados, turnos"]
-    attendance["attendance: fichadas, jornadas, alertas"]
     tasks["tasks: formularios, tareas, fotos"]
     notifications["notifications: push e in-app"]
     billing["billing: planes, facturas, pagos"]
   end
 
-  gateway <--> NATS
-  NATS <--> auth
-  NATS <--> organization
-  NATS <--> attendance
-  NATS <--> tasks
-  NATS <--> notifications
-  NATS <--> billing
+  subgraph telemetry["telemetry (HTTP /api/v1/telemetry y WebSocket /ws)"]
+    attendance["attendance: fichadas, jornadas, alertas, torre"]
+  end
+
+  core <--> NATS
+  telemetry <--> NATS
 ```
 
-Todos los servicios se comunican entre sí solo por NATS; ninguno consulta el schema de otro. No existe un servicio `users`: el perfil de cada usuario vive en `organization` (módulo employees), que lo crea o vincula a partir del evento `t.<tenant>.auth.user_created`.
+Los módulos de `core` se comunican entre sí solo por fachadas de módulo y eventos, y `core` y `telemetry` solo por NATS; ninguno consulta el schema de otro. No existe un módulo `users`: el perfil de cada usuario vive en `organization` (módulo employees), que lo crea o vincula a partir del evento `t.<tenant>.auth.user_created`.
 
 ## auth
 
-Identidad, sesiones y estado de acceso del tenant. Fuente de verdad: [`backend/auth/AGENTS.md`](../backend/auth/AGENTS.md).
+Identidad, sesiones y estado de acceso del tenant. Fuente de verdad: [`backend/core/src/auth/AGENTS.md`](../backend/core/src/auth/AGENTS.md).
 
 ```mermaid
 erDiagram
@@ -145,7 +141,7 @@ Reglas clave:
 
 ## organization
 
-Sedes, perfiles de empleados y turnos. Tres módulos internos (`sites`, `employees`, `shifts`) en un solo schema. Fuente de verdad: [`backend/organization/AGENTS.md`](../backend/organization/AGENTS.md).
+Sedes, perfiles de empleados y turnos. Tres submódulos internos (`sites`, `employees`, `shifts`) en un solo schema (`organization`). Fuente de verdad: [`backend/core/src/organization/AGENTS.md`](../backend/core/src/organization/AGENTS.md).
 
 ```mermaid
 erDiagram
@@ -255,7 +251,7 @@ Reglas clave:
 
 ## attendance
 
-Fichadas, jornadas, alertas y resúmenes de la Torre de Control. Cuatro módulos internos (`clock-ins`, `workdays`, `alerts`, `tower`). Fuente de verdad: [`backend/attendance/AGENTS.md`](../backend/attendance/AGENTS.md).
+Schema `attendance`, cuyo dueño es `telemetry` (no es un módulo de `core`). Contiene `ClockEvent`, `ClockEventCorrection`, `Workday`, `Alert` y el snapshot de la Torre de Control, más las copias locales `ShiftSnapshot`, `TenantFeatures` y `ProcessedEvent`. Cuatro submódulos internos (`clock-ins`, `workdays`, `alerts`, `tower`). Publica sus eventos (`workday_closed`, `alert_opened`, ...) en el stream `ATTENDANCE_EVENTS`, que `core` consume para reportes y notificaciones. Fuente de verdad: [`backend/telemetry/AGENTS.md`](../backend/telemetry/AGENTS.md).
 
 ```mermaid
 erDiagram
@@ -353,11 +349,11 @@ Reglas clave:
 - `Alert`: como máximo una por (`tenantId`, `shiftId`, `type`) para `LATE`, `UNCOVERED_POST` y `MISSING_CLOCK_OUT` (índice único parcial), y una por (`tenantId`, `clockEventId`) para las alertas de geocerca.
 - `TenantFeatures`: sin fila significa sin funcionalidades pro (se omiten las alertas y la torre).
 - Índices: fichadas por (`tenantId`, `shiftId`, `deviceTime`), turnos en curso por (`status`, `startsAt`), alertas por (`tenantId`, `siteId`, `status`).
-- Purga: `data_retention_expired` elimina todas las filas del tenant en este servicio.
+- Purga: `data_retention_expired` elimina todas las filas del tenant en este dueño.
 
 ## tasks
 
-Formularios, tareas, revisión del supervisor y metadatos de fotos. Tres módulos internos (`forms`, `tasks`, `media`). Fuente de verdad: [`backend/tasks/AGENTS.md`](../backend/tasks/AGENTS.md).
+Formularios, tareas, revisión del supervisor y metadatos de fotos. Tres submódulos internos (`forms`, `tasks`, `media`). Fuente de verdad: [`backend/core/src/tasks/AGENTS.md`](../backend/core/src/tasks/AGENTS.md).
 
 ```mermaid
 erDiagram
@@ -469,7 +465,7 @@ Reglas clave:
 
 ## notifications
 
-Tokens de dispositivo, notificaciones in-app y registro de entregas. Tres módulos internos (`push-tokens`, `routing`, `delivery`). Fuente de verdad: [`backend/notifications/AGENTS.md`](../backend/notifications/AGENTS.md).
+Tokens de dispositivo, notificaciones in-app y registro de entregas. Tres submódulos internos (`push-tokens`, `routing`, `delivery`). Fuente de verdad: [`backend/core/src/notifications/AGENTS.md`](../backend/core/src/notifications/AGENTS.md).
 
 ```mermaid
 erDiagram
@@ -536,7 +532,7 @@ Reglas clave:
 
 ## billing
 
-Planes, suscripciones, facturas y pagos. Cinco módulos internos (`plans`, `subscriptions`, `invoicing`, `payments`, `collections`). Fuente de verdad: [`backend/billing/AGENTS.md`](../backend/billing/AGENTS.md).
+Planes, suscripciones, facturas y pagos. Cinco submódulos internos (`plans`, `subscriptions`, `invoicing`, `payments`, `collections`). Fuente de verdad: [`backend/core/src/billing/AGENTS.md`](../backend/core/src/billing/AGENTS.md).
 
 ```mermaid
 erDiagram
@@ -649,17 +645,17 @@ Reglas clave:
 
 ## Arquitectura objetivo (servicios futuros)
 
-Estos servicios existen solo en la arquitectura objetivo de 16 servicios descrita en el [README](../README.md). Todavía no tienen modelo de datos; cuando se construyan, cada uno tendrá su propio schema de Prisma. Hasta entonces, los datos que les corresponderían viven en el servicio del MVP indicado a continuación, o no existen.
+Estos servicios existen solo en la arquitectura objetivo de 16 servicios descrita en el [README](../README.md). Todavía no tienen modelo de datos; cuando se construyan, cada uno tendrá su propio schema de Prisma. Hasta entonces, los datos que les corresponderían viven en el módulo de `core` o en `telemetry` indicado a continuación, o no existen.
 
 | Futuro dueño de datos | Sería dueño de | Hoy |
 |---|---|---|
-| `location` | Historial de puntos GPS (serie temporal, con retención según el plan) | No se guarda; `attendance` solo verifica la posición de cada fichada |
-| `emergencies` | Búsquedas de turnos de emergencia y sus ofertas a empleados | No construido; los supervisores reasignan turnos manualmente en `organization` |
-| `reports` | Tablas de lectura alimentadas por eventos (asistencia diaria, cobertura por sede, exportaciones) | No construido; use los endpoints de listado de cada servicio |
+| `location` | Historial de puntos GPS (serie temporal, con retención según el plan) | No se guarda; `telemetry` solo verifica la posición de cada fichada |
+| `emergencies` | Búsquedas de turnos de emergencia y sus ofertas a empleados | No construido; los supervisores reasignan turnos manualmente en el módulo `organization` |
+| `reports` | Tablas de lectura alimentadas por eventos (asistencia diaria, cobertura por sede, exportaciones) | No construido; use los endpoints de listado de cada módulo y de `telemetry` |
 | `integrations` | Claves de API, webhooks salientes y su registro de entregas | No construido |
-| `audit` | Registro inmutable, solo de inserción, de quién hizo qué y cuándo | Solo las filas de corrección de `attendance` |
+| `audit` | Registro inmutable, solo de inserción, de quién hizo qué y cuándo | Solo las filas de corrección de `telemetry` (`attendance`) |
 
-También es futuro: dividir `organization` en `sites`, `employees` y `shifts`, y `tasks` en `forms`, `tasks` y `media`.
+También es futuro: extraer un módulo de `core` a su propio servicio (cada uno ya tiene su schema, rol, cliente de Prisma y eventos), y dividir `organization` en `sites`, `employees` y `shifts`, y `tasks` en `forms`, `tasks` y `media`.
 
 ## Apéndice: SQL del diseño original (solo referencia)
 

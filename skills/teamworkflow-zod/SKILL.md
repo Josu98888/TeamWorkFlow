@@ -35,7 +35,7 @@ The frontend is a fresh Next.js scaffold. Schemas in this skill **do not exist y
 - Schemas live in `domains/<domain>/schemas.ts` (agnostic ones in `shared/lib/schemas.ts`). NEVER in `actions.ts` (`"use server"` files export only async functions) or inside components.
 - The SAME schema validates on client and server. Never write two versions.
 - Server Actions and Route Handlers ALWAYS use `safeParse` and return errors. NEVER `parse` (it throws).
-- Zod constraints mirror the gateway DTO constraints (class-validator). The gateway `ValidationPipe` remains the final authority and answers `422` with `{ detail, code, errors }` (teamworkflow-nest).
+- Zod constraints mirror the backend DTO constraints (class-validator). The backend `ValidationPipe` (in `core` and `telemetry`) remains the final authority and answers `422` with `{ detail, code, errors }` (teamworkflow-nest).
 - Enum values come from `as const` arrays in `types.ts` (`z.enum(PROJECT_STATUSES)`), never repeated inline.
 - Schemas validate INPUT. Backend response types live in `types.ts` (teamworkflow-typescript), not in `z.infer`.
 - Use Zod 4 syntax only (see "v3 → v4 Changes").
@@ -58,7 +58,7 @@ Export schemas used outside the domain through `index.ts` (schemas are client-sa
 
 ## Mirroring DTO Constraints
 
-Before writing a schema, Grep `backend/gateway/src/<domain>/dto/` for the request DTO (class-validator decorators) and copy its constraints. If the DTO does not exist yet, agree the contract with the backend first (teamworkflow-nest).
+Before writing a schema, Grep `backend/core/src/<module>/dto/` (or `backend/telemetry/src/<module>/dto/`) for the request DTO (class-validator decorators) and copy its constraints. If the DTO does not exist yet, agree the contract with the backend first (teamworkflow-nest).
 
 | class-validator | Zod 4 |
 |-----------------|-------|
@@ -293,7 +293,7 @@ schema.superRefine((data, ctx) => {
 });
 ```
 
-- Async refinements (e.g. uniqueness checks) require `safeParseAsync`. Prefer letting the gateway/microservice enforce uniqueness and mapping its `{ detail, code }` error instead (e.g. `team_name_taken`).
+- Async refinements (e.g. uniqueness checks) require `safeParseAsync`. Prefer letting the backend enforce uniqueness and mapping its `{ detail, code }` error instead (e.g. `team_name_taken`).
 
 ---
 
@@ -350,7 +350,7 @@ Always use the v4 column.
 - [ ] Zod 4 installed and imported correctly (`"zod"`, or `"zod/v4"` on 3.25.x)
 - [ ] Schemas in `schemas.ts`, never in `actions.ts` or components
 - [ ] Same schema used on client and server
-- [ ] Constraints match the gateway DTO (class-validator); camelCase field names
+- [ ] Constraints match the backend DTO (class-validator); camelCase field names
 - [ ] Enums from `as const` arrays in `types.ts`
 - [ ] Server code uses `safeParse` (only `parse` with `.catch()` fallbacks)
 - [ ] FormData: numbers via string + `.pipe()`, checkboxes via `z.stringbool()`, multi-values via `getAll`

@@ -28,7 +28,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      # One schema + one role per service (backend/STEPS.md S1.1, S2.2)
+      # One schema + one role per core module and for telemetry (backend/STEPS.md S1.1, S2.2)
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d teamworkflow"]
@@ -36,18 +36,21 @@ services:
       timeout: 5s
       retries: 10
 
-  auth-microservice:
+  core:
     build:
-      context: ./auth
+      context: ./core
       dockerfile: dockerfile
     ports:
-      - "3001:3001"
+      - "3000:3000"
     volumes:
-      - ./auth/src:/usr/src/app/src
+      - ./core/src:/usr/src/app/src
     environment:
-      - PORT=3001
+      - PORT=3000
       - NATS_SERVER=nats://nats-server:4222
-      - DATABASE_URL=postgresql://auth_svc:${AUTH_DB_PASSWORD}@postgres:5432/teamworkflow?schema=auth
+      - AUTH_DATABASE_URL=postgresql://auth_svc:${AUTH_DB_PASSWORD}@postgres:5432/teamworkflow?schema=auth
+      - JWT_SECRET=${JWT_SECRET:?set JWT_SECRET in backend/.env}
+      - ACCESS_TOKEN_TTL=${ACCESS_TOKEN_TTL:-15m}
+      - REFRESH_TOKEN_TTL=${REFRESH_TOKEN_TTL:-7d}
       # Bind mounts on Windows do not emit file events; polling makes --watch reload work
       - CHOKIDAR_USEPOLLING=true
     depends_on:
@@ -55,21 +58,6 @@ services:
         condition: service_started
       postgres:
         condition: service_healthy
-
-  gateway:
-    build:
-      context: ./gateway
-      dockerfile: dockerfile
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./gateway/src:/usr/src/app/src
-    environment:
-      - PORT=3000
-      - NATS_SERVER=nats://nats-server:4222
-      - CHOKIDAR_USEPOLLING=true
-    depends_on:
-      - nats-server
 
 volumes:
   nats-data:

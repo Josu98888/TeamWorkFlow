@@ -24,7 +24,8 @@ allowed-tools: Read, Edit, Write, Glob, Grep, Bash
 ## Critical Rules
 
 - Create a PR ONLY when the user asks for it.
-- NEVER create, switch or delete branches (teamworkflow-commits). The PR goes from the current branch.
+- Branches: create/switch allowed, never rename, merge or delete (teamworkflow-commits). The PR goes from the current branch.
+- Base branch: feature branches target `develop`; slice branches of a chained PR target their parent feature branch. NEVER target `main`.
 - NEVER open a PR from `main` / `master`.
 - Uncommitted changes are committed first, following teamworkflow-commits — or left out on purpose and mentioned.
 - Pushing the branch is required to open a PR: confirm with the user once before `git push`. NEVER `--force`.
@@ -46,7 +47,7 @@ gh --version                         # is the GitHub CLI installed?
 gh auth status                       # is it logged in?
 ```
 
-Find the base branch (usually `main`):
+Find the base branch (`develop` for a feature branch, the parent feature branch for a slice branch; never `main`). The default branch is only a fallback reference:
 
 ```bash
 gh repo view --json defaultBranchRef --jq .defaultBranchRef.name
@@ -65,9 +66,9 @@ git diff origin/<base>...HEAD
 
 Identify:
 
-- Areas touched: `frontend/`, `backend/gateway`, `backend/auth` (and other microservices), `backend/<service>/prisma/migrations/`, `backend/docker-compose.yml`, `skills/`.
-- Domains touched: `projects`, `tasks`, …
-- Contract changes: frontend <-> gateway (fields, response shapes, `{ detail, code }` error codes) and gateway <-> microservices (NATS message patterns and payloads).
+- Areas touched: `frontend/`, `backend/core` (and the module inside it), `backend/telemetry`, the owner's `prisma/migrations/`, `backend/docker-compose.yml`, `docs/`, `skills/`.
+- Domains touched: `core` modules (`auth`, `organization`, `tasks`, `notifications`, `billing`), `attendance` (telemetry), …
+- Contract changes: frontend <-> backend public HTTP API (fields, response shapes, `{ detail, code }` error codes) and `core` <-> `telemetry` (NATS request patterns, JetStream event subjects and payloads).
 - Breaking changes (commits with `!` or `BREAKING CHANGE:`).
 
 If the branch is behind the base, tell the user (rebasing/merging the base is their decision).
@@ -140,12 +141,12 @@ If `.github/pull_request_template.md` exists, use it. If not, use this one, and 
 
 ### Description
 
-{What changed, grouped by area (frontend / gateway / microservices / database / docker). Mention migrations, new endpoints,
+{What changed, grouped by area (frontend / core / telemetry / database / docker). Mention migrations, new endpoints,
 contract changes and new dependencies.}
 
 ### Steps to review
 
-1. {Setup: branch, `docker compose up` in `backend/` (or `pnpm start:dev` per service), `pnpm prisma migrate deploy`, env vars if new}
+1. {Setup: branch, `docker compose up` in `backend/` (or `pnpm start:dev` per app), `pnpm prisma migrate deploy`, env vars if new}
 2. {Where to go / what to call}
 3. {Expected result}
 
@@ -166,9 +167,9 @@ contract changes and new dependencies.}
 
 #### Backend (if applicable)
 
-- [ ] Endpoint request/response example (gateway `/api/...`), including the `{ detail, code }` error case
-- [ ] Per touched service (`backend/<service>`): `pnpm lint` (oxlint), `pnpm build` and `pnpm test` (jest) pass
-- [ ] NATS message patterns changed in gateway and microservice in the same PR (teamworkflow-nest)
+- [ ] Endpoint request/response example (`core` `/api/v1/...` or `telemetry` `/api/v1/telemetry/...`), including the `{ detail, code }` error case
+- [ ] Per touched app (`backend/core`, `backend/telemetry`): `pnpm lint` (oxlint), `pnpm build` and `pnpm test` (jest) pass
+- [ ] NATS request patterns and JetStream events changed on the producer, every consumer and the docs of both services in the same PR (teamworkflow-nest)
 - [ ] Prisma migration reviewed and applied cleanly on a fresh database (teamworkflow-prisma-migrations)
 - [ ] `docker compose config` valid if `backend/docker-compose.yml` changed
 - [ ] EXPLAIN output for new or changed queries/indexes (teamworkflow-postgres)
