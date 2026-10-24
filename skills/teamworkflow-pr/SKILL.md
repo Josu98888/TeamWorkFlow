@@ -66,7 +66,7 @@ git diff origin/<base>...HEAD
 
 Identify:
 
-- Areas touched: `frontend/`, `backend/core` (and the module inside it), `backend/telemetry`, the legacy `backend/gateway` and `backend/auth` until they are merged into `core`, the owner's `prisma/migrations/`, `backend/docker-compose.yml`, `docs/`, `skills/`.
+- Areas touched: `frontend/`, `backend/core` (and the module inside it), `backend/telemetry`, the owner's `prisma/migrations/`, `backend/docker-compose.yml`, `docs/`, `skills/`.
 - Domains touched: `core` modules (`auth`, `organization`, `tasks`, `notifications`, `billing`), `attendance` (telemetry), …
 - Contract changes: frontend <-> backend public HTTP API (fields, response shapes, `{ detail, code }` error codes) and `core` <-> `telemetry` (NATS request patterns, JetStream event subjects and payloads).
 - Breaking changes (commits with `!` or `BREAKING CHANGE:`).
@@ -168,7 +168,7 @@ contract changes and new dependencies.}
 #### Backend (if applicable)
 
 - [ ] Endpoint request/response example (`core` `/api/...` or `telemetry` `/api/v1/telemetry/...`), including the `{ detail, code }` error case
-- [ ] Per touched app (`backend/core`, `backend/telemetry`; legacy `backend/gateway`, `backend/auth`): `pnpm lint` (oxlint), `pnpm build` and `pnpm test` (jest) pass
+- [ ] Per touched app (`backend/core`, `backend/telemetry`): `pnpm lint` (oxlint), `pnpm build` and `pnpm test` (jest) pass
 - [ ] NATS request patterns and JetStream events changed on the producer, every consumer and the docs of both services in the same PR (teamworkflow-nest)
 - [ ] Prisma migration reviewed and applied cleanly on a fresh database (teamworkflow-prisma-migrations)
 - [ ] `docker compose config` valid if `backend/docker-compose.yml` changed

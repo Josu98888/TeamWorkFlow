@@ -137,7 +137,6 @@ Non-domain areas:
 | `shared` | Agnostic shared code (`shared/lib`, `shared/hooks`, `app/shared`) |
 | `core` | `backend/core` infrastructure shared across modules: config, the shared HTTP layer (guard, filters, rate limiting), event bus and NATS responders; not tied to one module |
 | `telemetry` | `backend/telemetry` infrastructure not tied to one of its modules (`clock-ins`, `workdays`, `alerts`, `tower`): config, HTTP/WebSocket layer, NATS client |
-| `gateway` | Legacy `backend/gateway` code, only until it is merged into `core` (task T6) |
 | `architecture` | `docs/architecture.md` and cross-service documentation |
 | `prisma` | Prisma schema, migrations and client setup not tied to one domain |
 | `db` | DB-wide changes not tied to one domain (naming convention, extensions) |
