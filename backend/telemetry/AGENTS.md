@@ -186,11 +186,11 @@ Ask before installing any dependency.
 
 ## Current Status (READ FIRST)
 
-The folder contains only this `AGENTS.md` and the `README.md`. The `telemetry` service does not exist yet: no `package.json`, no `src/`, no Prisma, no Dockerfile, no entry in `backend/docker-compose.yml`, no reverse-proxy routing. It is built after `backend/core` (task T6 creates `core`; building `telemetry` is planned separately, see `docs/architecture.md` Migration step 4). Port: to be defined.
+The folder contains only this `AGENTS.md` and the `README.md`. The `telemetry` service does not exist yet: no `package.json`, no `src/`, no Prisma, no Dockerfile, no entry in `backend/docker-compose.yml`, no reverse-proxy routing. It is built after `backend/core` (task T6 creates `core`; building `telemetry` is planned separately, see `docs/architecture.md` Migration step 4). Port: 3003 (decided in `backend/STEPS.md`).
 
 First tasks, in order (ask before each install):
 
-- [ ] Scaffold the Nest app (HTTP + WebSocket + NATS client, `src/config/envs.ts`, `.env.example`) and pick the port.
+- [ ] Scaffold the Nest app (HTTP + WebSocket + NATS client, `src/config/envs.ts`, `.env.example`) on port 3003.
 - [ ] Prisma schema and first migration (`ShiftSnapshot`, `ClockEvent`).
 - [ ] HTTP layer: guard through `auth.token.verify`, actor, role/plan/tenant-status checks, error filter.
 - [ ] Modules `clock-ins`, `workdays`, `alerts`, `tower`, with their HTTP controllers and operation-name constants.
@@ -287,8 +287,8 @@ Every query filters by `tenantId`. Indexes for the real lookups: clock events by
 | Variable | Description |
 |----------|-------------|
 | `NATS_SERVER` | Comma-separated NATS URLs |
-| `DATABASE_URL` | PostgreSQL connection string for this service (schema `attendance`, role `attendance_svc`) |
-| `PORT` | HTTP and WebSocket port. To be defined |
+| `ATTENDANCE_DATABASE_URL` | PostgreSQL connection string for this service (schema `attendance`, role `attendance_svc`) |
+| `PORT` | HTTP and WebSocket port. Default 3003 |
 | `WEB_ORIGIN` | Allowed web origin for CORS and Socket.IO (credentials enabled) |
 | `NATS_TIMEOUT_MS` | Timeout of the requests to `core`. Initial value: `5000` |
 | `RATE_LIMIT_AUTH_TTL_MS` / `RATE_LIMIT_AUTH_LIMIT` | Authenticated routes per user. Values to be defined from expected clock-in traffic |

@@ -4,7 +4,7 @@
 
 > **Nombre:** el servicio se llama `telemetry`, pero el dominio, el schema de PostgreSQL (`attendance`), el rol (`attendance_svc`), los subjects de eventos (`t.<tenant>.attendance.<evento>`), el stream (`ATTENDANCE_EVENTS`) y los nombres de operación (`attendance.<recurso>.<accion>`) conservan el nombre `attendance`.
 
-> **Estado:** todavía no existe la aplicación Nest; la carpeta solo contiene documentación. Puerto: por definir. Este documento describe el diseño objetivo. Ver [Estado actual](#estado-actual).
+> **Estado:** todavía no existe la aplicación Nest; la carpeta solo contiene documentación. Puerto: 3003. Este documento describe el diseño objetivo. Ver [Estado actual](#estado-actual).
 >
 > Documentos relacionados: [AGENTS.md](AGENTS.md) (reglas detalladas para agentes, fuente de verdad) · [README general](../../README.md) · [Decisión de arquitectura](../../docs/architecture.md) · [core](../core/README.md).
 
@@ -185,8 +185,8 @@ Modelos de Prisma: `ShiftSnapshot`, `ClockEvent`, `ClockEventCorrection`, `Workd
 | Variable | Descripción |
 |----------|-------------|
 | `NATS_SERVER` | URLs de NATS separadas por coma |
-| `DATABASE_URL` | Conexión a PostgreSQL (schema `attendance`, rol `attendance_svc`) |
-| `PORT` | Puerto HTTP y WebSocket. Por definir |
+| `ATTENDANCE_DATABASE_URL` | Conexión a PostgreSQL (schema `attendance`, rol `attendance_svc`) |
+| `PORT` | Puerto HTTP y WebSocket. Por defecto 3003 |
 | `WEB_ORIGIN` | Origen web permitido (CORS y Socket.IO) |
 | `NATS_TIMEOUT_MS` | Timeout de las peticiones a `core`. Valor inicial: `5000` |
 | `RATE_LIMIT_AUTH_TTL_MS`, `RATE_LIMIT_AUTH_LIMIT` | Rate limit por usuario. Valores por definir según el tráfico de fichadas |

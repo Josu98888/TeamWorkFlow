@@ -84,7 +84,7 @@ TeamWorkFlow is a multitenant SaaS for managing and monitoring field staff acros
 | Component | Location | Tech Stack | Port |
 |-----------|----------|------------|------|
 | Core (modular monolith) | `backend/core/` (docs only until T6; see migration note below) | NestJS 12, modules `auth`, `organization`, `tasks`, `notifications`, `billing`, public HTTP API (former gateway), NATS (request/reply + JetStream), Prisma 7 | 3000 (HTTP, prefix `/api`) |
-| Telemetry | `backend/telemetry/` (docs only, code not created yet) | NestJS 12, whole `attendance` domain (clock-ins, corrections, workdays, alerts, Torre de Control), Socket.IO, NATS, Prisma 7 | to be defined (HTTP `/api/v1/telemetry` + WebSocket `/ws`) |
+| Telemetry | `backend/telemetry/` (docs only, code not created yet) | NestJS 12, whole `attendance` domain (clock-ins, corrections, workdays, alerts, Torre de Control), Socket.IO, NATS, Prisma 7 | 3003 (HTTP `/api/v1/telemetry` + WebSocket `/ws`) |
 | Gateway (current code) | `backend/gateway/` | NestJS 12, `@nestjs/microservices` (NATS client), joi. Becomes the HTTP layer of `core` | 3000 (HTTP, prefix `/api`) |
 | Auth (current code) | `backend/auth/` | NestJS 12, NATS transport, Prisma 7. Becomes the `auth` module of `core` | 3001 |
 | Message broker | `backend/docker-compose.yml` (`nats-server`) | NATS with JetStream | 4222 (client), 8222 (monitoring) |
