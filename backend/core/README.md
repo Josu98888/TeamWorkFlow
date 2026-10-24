@@ -2,7 +2,7 @@
 
 `core` es el servicio principal del backend de TeamWorkFlow. Es un **monolito modular** de NestJS con los módulos `auth`, `organization`, `tasks`, `notifications` y `billing`, y es también la API HTTP pública (el rol que antes tenía el `gateway`). La aplicación web y la aplicación móvil le hablan por HTTP; NATS nunca se expone a internet.
 
-> **Estado:** `backend/core` todavía no contiene código. La tarea T6 de [`odd/tasks/two-service-architecture.md`](../../odd/tasks/two-service-architecture.md) lo crea a partir de `backend/gateway` y `backend/auth`, que mantienen su código hasta entonces. Este documento describe el diseño objetivo.
+> **Estado:** `backend/core` contiene el módulo `auth` y la capa HTTP básica (tareas T6 y T7 de [`odd/tasks/two-service-architecture.md`](../../odd/tasks/two-service-architecture.md); las apps `backend/gateway` y `backend/auth` se fusionaron en él y se eliminaron). El resto de este documento describe el diseño objetivo.
 >
 > Documentos relacionados: [AGENTS.md](AGENTS.md) (reglas detalladas para agentes, fuente de verdad) · [Decisión de arquitectura](../../docs/architecture.md) · [README general](../../README.md) · [telemetry](../telemetry/README.md) · [Modelo de datos](../../docs/database.md).
 
@@ -135,12 +135,14 @@ Cada módulo suma sus propias variables (conexión a su schema, claves de FCM, M
 
 ## Desarrollo
 
-Mientras T6 no se complete, el código vive en `backend/gateway` y `backend/auth`. Cuando exista `backend/core`:
+Requisitos: `backend/.env` con `JWT_SECRET` (mínimo 32 caracteres) y las contraseñas `*_DB_PASSWORD` (ver `backend/.env.example`); compose falla si falta alguna.
 
 ```bash
 # Todo el backend con Docker (NATS + PostgreSQL + core)
 cd backend
 docker compose up --build
+# Las migraciones no se ejecutan al arrancar: la primera vez y tras cambiar el schema
+docker compose exec core pnpm prisma:auth:migrate:deploy
 
 # Solo este servicio
 cd backend/core
@@ -156,9 +158,9 @@ pnpm build
 
 ## Estado actual
 
-- [x] Módulo `auth` implementado en `backend/auth` hasta el paso S7 (ver [STEPS.md](src/auth/STEPS.md)).
-- [x] Esqueleto de la capa HTTP en `backend/gateway` (prefijo `api`, cliente NATS, validación de variables).
-- [ ] Crear `backend/core` a partir de ambos (T6): los controladores de `auth` pasan de `@MessagePattern` a HTTP.
+- [x] Módulo `auth` implementado en `backend/core/src/auth` (ver [STEPS.md](src/auth/STEPS.md)).
+- [x] Esqueleto de la capa HTTP (prefijo `api`, validación de variables, guard, filtros de errores).
+- [x] `backend/core` creado a partir de `backend/gateway` y `backend/auth` (T6): los controladores de `auth` pasaron de `@MessagePattern` a HTTP; las apps legacy se eliminaron en T7.
 - [ ] Capa HTTP: versionado `/api/v1`, CORS, `ValidationPipe`, guard, actor, roles, plan, estado del tenant, cookies, CSRF, filtro de errores y rate limit.
 - [ ] Módulos `organization`, `tasks`, `notifications` y `billing`.
 - [ ] Responder por NATS las peticiones de `telemetry`.
