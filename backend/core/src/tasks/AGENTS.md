@@ -176,7 +176,7 @@ The tenant of a consumed event comes from the subject and is checked against the
 
 ### Errors
 
-Throw `RpcException` with `{ status, code, message }` (see `teamworkflow-nest`). The HTTP exception filter of `core` maps it to HTTP `{ detail, code }`.
+Throw an `AppException` subclass from `src/common/exceptions/` (see `teamworkflow-nest`). The HTTP exception filter of `core` maps it to HTTP `{ detail, code }`; NATS responders map it to `{ status, code, message }` via `NatsErrorFilter`.
 
 | code | status | When |
 |------|--------|------|
