@@ -24,7 +24,8 @@ allowed-tools: Read, Edit, Write, Glob, Grep, Bash
 ## Critical Rules
 
 - Create a PR ONLY when the user asks for it.
-- NEVER create, switch or delete branches (teamworkflow-commits). The PR goes from the current branch.
+- Branches: create/switch allowed, never rename, merge or delete (teamworkflow-commits). The PR goes from the current branch.
+- Base branch: feature branches target `develop`; slice branches of a chained PR target their parent feature branch. NEVER target `main`.
 - NEVER open a PR from `main` / `master`.
 - Uncommitted changes are committed first, following teamworkflow-commits — or left out on purpose and mentioned.
 - Pushing the branch is required to open a PR: confirm with the user once before `git push`. NEVER `--force`.
@@ -46,7 +47,7 @@ gh --version                         # is the GitHub CLI installed?
 gh auth status                       # is it logged in?
 ```
 
-Find the base branch (usually `main`):
+Find the base branch (`develop` for a feature branch, the parent feature branch for a slice branch; never `main`). The default branch is only a fallback reference:
 
 ```bash
 gh repo view --json defaultBranchRef --jq .defaultBranchRef.name

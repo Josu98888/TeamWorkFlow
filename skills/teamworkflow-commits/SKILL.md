@@ -2,7 +2,7 @@
 name: teamworkflow-commits
 description: >
   Git commit rules for TeamWorkFlow: Conventional Commits with domain scopes, small and frequent commits
-  (max 3 files, large files alone), branch safety (the user creates branches), staging rules, amend
+  (max 3 files, large files alone), branch safety (create/switch allowed, never rename/merge/delete), staging rules, amend
   and push restrictions.
   Trigger: When committing changes, preparing commits, writing commit messages, staging files,
   or when asked to save/commit work in git.
@@ -22,8 +22,8 @@ allowed-tools: Read, Glob, Grep, Bash
 
 ## Critical Rules
 
-- NEVER create, switch, rename, merge or delete branches. Always work on the current branch; the user creates branches.
-- NEVER commit on `main` / `master`. If the current branch is one of them, STOP and ask the user to create a branch.
+- Create and switch branches when the work needs one (for example a slice branch for a chained PR, created from the current feature branch). NEVER create a branch from `main` / `master`. NEVER rename, merge or delete branches.
+- NEVER commit on `main` / `master`. If the current branch is one of them, create a feature branch first (never from `main` for slice work; see above).
 - Format: `type(scope): description` — scope is the domain (`projects`, `tasks`…) or a fixed area.
 - Small, frequent commits: **max 3 files per commit**. A **large file goes alone**.
 - Each commit is ONE logical change and leaves the code working.
@@ -282,7 +282,7 @@ Mention anything left uncommitted on purpose (unrelated changes, files waiting f
 
 ## Checklist
 
-- [ ] Not on `main` / `master` (branch created by the user)
+- [ ] Not on `main` / `master`
 - [ ] Files staged explicitly; `git diff --cached --stat` reviewed
 - [ ] ≤ 3 files; large files (> 200 changed lines or new > 300 lines) alone
 - [ ] One logical change; code works after the commit

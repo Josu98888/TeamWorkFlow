@@ -162,7 +162,7 @@ Follow Conventional Commits: `<type>(<scope>): <description>`
 
 Rules for AI agents:
 
-- NEVER create, switch, rename, merge or delete branches. Always work on the current branch; the user creates branches.
+- Create and switch branches when the work needs one (for example a slice branch for a chained PR, created from the current feature branch). NEVER create a branch from `main` / `master`. NEVER rename, merge or delete branches.
 - Commit verified work as you go, following `teamworkflow-commits` (never on `main`/`master`). Open pull requests following `teamworkflow-pr`.
 - `git push` only after confirming with the user once (see `teamworkflow-pr`). NEVER `--force`.
 - NEVER add `Co-Authored-By` lines or any AI attribution to commits or PRs.
