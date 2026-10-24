@@ -1,6 +1,6 @@
 ---
 name: teamworkflow-nest
-description: "Trigger: creating or editing code in backend/ (core modules and HTTP layer, telemetry, legacy gateway/auth): controllers, DTOs, module facades, NATS patterns and events, Prisma data access, errors, config, tests. NestJS 12 modular monolith + telemetry patterns for TeamWorkFlow."
+description: "Trigger: creating or editing code in backend/ (core modules and HTTP layer, telemetry): controllers, DTOs, module facades, NATS patterns and events, Prisma data access, errors, config, tests. NestJS 12 modular monolith + telemetry patterns for TeamWorkFlow."
 license: Apache-2.0
 metadata:
   author: teamworkflow-team
@@ -31,26 +31,23 @@ A reverse proxy publishes both under one origin. Verify against the real files b
 
 | Piece | State |
 |-------|-------|
-| `backend/core` | Docs only (`AGENTS.md`, `README.md`, `src/<module>/AGENTS.md` for the five modules). No `package.json`, no code. Task T6 of `odd/tasks/two-service-architecture.md` creates it by merging `backend/gateway` and `backend/auth` |
+| `backend/core` | Real code since T6: scaffold, `src/common` (errors, pipe, filters), `src/http` (global `AuthGuard`, `@Public()`, `@CurrentActor()`), `src/auth` (HTTP controllers, services, Prisma, JetStream events, `auth.token.verify` responder, platform admin seed) and `test/e2e`. The other four modules (`organization`, `tasks`, `notifications`, `billing`) are docs only (`src/<module>/AGENTS.md`). It replaced the legacy `backend/gateway` and `backend/auth` apps, removed in T7 |
 | `backend/telemetry` | Docs only (`AGENTS.md`, `README.md`). No code, no `package.json`, no Prisma |
-| `backend/gateway` (legacy, becomes the HTTP layer of `core`) | `main.ts`: `NestFactory.create`, `setGlobalPrefix('api')`, `RpcExceptionFilter`, global `ValidationPipe`. `src/auth/` has `AuthController` (login, logout, register, refresh-token via `client.send`, bodies typed `any`), `auth.patterns.ts`, `guards/auth.guard.ts`. Also `common/decorators/public.decorator.ts`, `common/filters/rpc-exception.filter.ts`, `config/` (`envs.ts`, `services.ts` with `AUTH_SERVICE` and `NATS_SERVICE`, `index.ts`), `transport/nats.module.ts` |
-| `backend/auth` (legacy, becomes the `auth` module of `core`) | Real NATS microservice: `main.ts` uses `NestFactory.createMicroservice` with `Transport.NATS` and a global validation pipe. Sub-domains `auth`, `invitations`, `users`, `password-reset`, `tenants`, `platform-admin`; JetStream code in `src/events/` (`JetStreamService`, `ConsumedEventProcessor`); Prisma 7 in `prisma/` with the client generated into `src/generated/prisma` (gitignored); `AppRpcException` hierarchy in `src/common/exceptions/`; joi env validation in `src/config/env.schema.ts`; many unit specs plus e2e under `test/` |
 | Tooling | pnpm per app (no root workspace), TypeScript, Jest (+ ts-jest), supertest, oxlint (`--type-aware`), prettier |
-| `backend/docker-compose.yml` | `nats-server` (4222, 8222), `postgres`, `auth-microservice` (3001), `gateway` (3000). Switches to `core` in task T7 |
+| `backend/docker-compose.yml` | `nats-server` (4222, 8222), `postgres` and `core` (3000, built from `backend/core`, hot reload, `JWT_SECRET` required from `backend/.env`). Migrations do not run on start: `docker compose exec core pnpm prisma:auth:migrate:deploy`. `telemetry` is added when it exists |
 
 ### What does NOT exist yet
 
 - Any code under `backend/core` and `backend/telemetry`; the module facades; the shared HTTP layer of core (`src/http/`: guard, actor, roles, plan gating, tenant status, CSRF, throttling, error filter); the NATS responders for telemetry.
 - The `organization`, `tasks`, `notifications` and `billing` modules, and the `attendance` domain. Only their design docs exist.
 - Decided in T6: modules in `core` throw transport-agnostic `AppException` subclasses (`backend/core/src/common/exceptions/app.exceptions.ts`); the HTTP body stays `{ detail, code }`. Prisma folders are colocated per module in `backend/core/src/<module>/prisma/`.
-- In `backend/gateway`: no DTO classes (bodies are `any`), no pagination DTOs, the `AUTH_SERVICE` token is unused. Do not copy the `any` bodies into new code.
 - Pagination DTOs and a shared library between apps do not exist (each app duplicates its own constants).
 
 ### Rules for working in this state
 
 1. Map the existing structure first (Glob `backend/**/*.ts`, excluding `node_modules`, `dist` and `src/generated`).
-2. New code follows this skill (the target layout). Existing code in `gateway`/`auth` is NOT moved or restructured outside task T6 without asking; propose a plan instead of mixing styles silently.
-3. NEVER import a package that is not installed in that app. Check its `package.json` first. `class-validator`, `class-transformer`, `joi`, `dotenv` are in `gateway`; Prisma 7, `pg`, `argon2`, `@nestjs/jwt` and `@nats-io/jetstream` are in `auth`. Anything else (for example `@nestjs/throttler`, `cookie-parser`, `@nestjs/schedule`) needs asking the user before `pnpm add` inside the app folder.
+2. New code follows this skill (the target layout). Existing code in `core` is NOT moved or restructured without asking; propose a plan instead of mixing styles silently.
+3. NEVER import a package that is not installed in that app. Check its `package.json` first. `class-validator`, `class-transformer`, `joi`, `dotenv`, Prisma 7, `pg`, `argon2`, `@nestjs/jwt` and `@nats-io/jetstream` are in `core`. Anything else (for example `@nestjs/throttler`, `cookie-parser`, `@nestjs/schedule`) needs asking the user before `pnpm add` inside the app folder.
 4. Files this skill describes but that do not exist are marked "(to create)".
 5. Mark pending work with `// TODO(<feature>):` and report it.
 
@@ -80,7 +77,7 @@ A reverse proxy publishes both under one origin. Verify against the real files b
 | Database | PostgreSQL; one shared database `teamworkflow`, one PostgreSQL schema + role + Prisma schema + migration history per owner (`auth`, `organization`, `tasks`, `notifications`, `billing` in `core`; `attendance` in `telemetry`) | No cross-schema foreign keys |
 | Tests | Jest, `@nestjs/testing`, supertest | Run through the `test` scripts of each app |
 | Lint / format | oxlint (`pnpm lint`), prettier (`pnpm format`) | |
-| Package manager | pnpm | Run commands from the app folder (`backend/core`, `backend/telemetry`; today `backend/gateway`, `backend/auth`) |
+| Package manager | pnpm | Run commands from the app folder (`backend/core`, `backend/telemetry`) |
 
 ---
 
@@ -109,8 +106,8 @@ A reverse proxy publishes both under one origin. Verify against the real files b
 
 ```text
 backend/
-├── docker-compose.yml                    # exists; switches to core (+ telemetry) in T7
-├── core/                                 # (to create in T6; port 3000, prefix /api)
+├── docker-compose.yml                    # exists: nats, postgres, core (+ telemetry once it exists)
+├── core/                                 # (exists since T6; port 3000, prefix /api)
 │   └── src/
 │       ├── main.ts                       # HTTP app + NATS listener for the responders
 │       ├── app.module.ts
@@ -119,7 +116,7 @@ backend/
 │       │   ├── filters/
 │       │   ├── decorators/               # @Public(), @Roles(), @RequiresFeature(), @CurrentActor()
 │       │   └── dto/                      # pagination.dto.ts, page.dto.ts
-│       ├── events/                       # JetStreamService, consumed-event processor (from backend/auth)
+│       ├── events/                       # JetStreamService, consumed-event processor (today in src/auth/events/)
 │       └── <module>/                     # auth | organization | tasks | notifications | billing
 │           ├── AGENTS.md                 # exists: domain rules of the module
 │           ├── <module>.module.ts        # exports ONLY the facade service
@@ -129,7 +126,7 @@ backend/
 │           ├── <domain>.service.ts       # business logic, one use case per method
 │           ├── <domain>.repository.ts    # optional, see "Data Access"
 │           ├── dto/
-│           └── prisma/                   # Prisma schema, client output, PrismaService (layout decided in T6)
+│           └── prisma/                   # Prisma schema, migrations, client output (gitignored), PrismaService
 ├── telemetry/                            # (to create; port 3003)
 │   ├── prisma/                           # schema.prisma (schema `attendance`) + migrations
 │   ├── prisma.config.ts
@@ -138,11 +135,6 @@ backend/
 │       ├── config/envs.ts
 │       ├── http/                         # guard through auth.token.verify, filters
 │       └── <module>/                     # clock-ins | workdays | alerts | tower
-├── gateway/                              # LEGACY (exists): merged into core/src/http by T6
-└── auth/                                 # LEGACY (exists): merged into core/src/auth by T6
-    ├── prisma/ (schema.prisma, migrations/)
-    ├── prisma.config.ts
-    └── src/ (main.ts, config/, common/exceptions/, prisma/, events/, auth/, invitations/, users/, ...)
 ```
 
 Create each file when a feature needs it. Small domains may skip `repository` until needed, never skip the service. Module docs live in `backend/core/src/<module>/AGENTS.md`; read the one for the module you touch.
@@ -205,7 +197,7 @@ Query filters          -> <Model>FiltersDto extends PaginationDto
 Validate once at import time, export a typed `envs` object, fail fast. `core` and `telemetry` each have their own `src/config/envs.ts`.
 
 ```typescript
-// core/src/config/envs.ts (to create; mirrors gateway/src/config/envs.ts and auth/src/config/env.schema.ts)
+// core/src/config/envs.ts (exists: see core/src/config/env.schema.ts for the real schema)
 import 'dotenv/config';
 import * as joi from 'joi';
 
@@ -255,7 +247,7 @@ AUTH_DATABASE_URL=postgresql://auth_svc:password@localhost:5432/teamworkflow?sch
 ```
 
 - One connection string per data owner, named `<OWNER>_DATABASE_URL`: `AUTH_`, `ORGANIZATION_`, `TASKS_`, `NOTIFICATIONS_`, `BILLING_` (all in `core`) and `ATTENDANCE_DATABASE_URL` (in `telemetry`). Passwords stay `<OWNER>_DB_PASSWORD` (`backend/STEPS.md` S2.4). Each owner's role can only read its own schema.
-- Today `backend/auth` still uses a single `DATABASE_URL`; the switch to the per-owner names happens with T6/T7. Do not rename it in `backend/auth` outside those tasks.
+- `core` reads `AUTH_DATABASE_URL` (the legacy single `DATABASE_URL` disappeared with `backend/auth` in T7). `docker-compose.yml` builds it from `AUTH_DB_PASSWORD` and takes `JWT_SECRET` from `backend/.env` with a `:?` guard so compose fails fast when it is missing.
 - `telemetry` uses `PORT=3003` and `ATTENDANCE_DATABASE_URL`; its other variables are listed in `backend/telemetry/AGENTS.md`.
 - `NATS_SERVER` is a comma-separated list split into `string[]`.
 - In `docker-compose.yml` each service's `environment` must also receive its database URLs (host = the postgres service name, not `localhost`).
@@ -283,7 +275,7 @@ Two mechanisms, both on NATS. Never mix them up.
 | `organization.site.get` | Geofence and QR of a site |
 | `organization.shift.get` | Shift data on a local-copy miss |
 
-Pattern constants live in one file per owner (`<module>.patterns.ts`). `backend/auth/src/auth/auth.patterns.ts` is the existing example:
+Pattern constants live in one file per owner (`<module>.patterns.ts`). `backend/core/src/auth/auth.patterns.ts` is the existing example:
 
 ```typescript
 export const AUTH_PATTERNS = {
@@ -304,7 +296,7 @@ export const AUTH_PATTERNS = {
 
 - NATS JetStream is the ONLY domain event bus. Subjects `t.<tenant>.<module>.<event>`; one stream `<MODULE>_EVENTS` per module on `t.*.<module>.>`, created by the owning module on startup; durable consumers named `<consumer>-<producer>` with explicit ack (`backend/STEPS.md` S1.2).
 - Every event carries a unique `eventId` and an ISO-8601 UTC `occurredAt`. Consumers deduplicate with a `ProcessedEvent` row written in the same transaction as the handler. Emit only after the database transaction commits. The tenant of a consumed event comes from the subject and is checked against the payload.
-- Use the `JetStreamService` pattern (`@nats-io/jetstream` v3, `backend/STEPS.md` S1.3). The existing implementation is `backend/auth/src/events/` (`jetstream.service.ts`, `consumed-event.processor.ts`, `auth.events.ts`); reuse it rather than writing a second one.
+- Use the `JetStreamService` pattern (`@nats-io/jetstream` v3, `backend/STEPS.md` S1.3). The existing implementation is `backend/core/src/auth/events/` (`jetstream.service.ts`, `consumed-event.processor.ts`, `auth.events.ts`); reuse it rather than writing a second one.
 - Events that cross the process boundary are listed in `backend/core/AGENTS.md` (Event bus) and `backend/telemetry/AGENTS.md`. The `attendance` domain keeps the module name `attendance` in subjects.
 
 ### Bootstrap
@@ -327,7 +319,7 @@ await app.listen(envs.port);
 ```
 
 - Global pipes/filters of the HTTP app do not reach a connected microservice unless `inheritAppConfig: true`. Verify the behavior against the installed Nest version.
-- The legacy bootstrap of `backend/auth/src/main.ts` (`createMicroservice` with `Transport.NATS`, no HTTP port) keeps working until T6 merges it. The validation pipe must throw a `ValidationException` (an `AppException`), not a `BadRequestException` (see `backend/core/src/common/pipes/validation.pipe.ts`; the legacy `backend/auth` pipe throws `RpcException`).
+- `core/src/main.ts` is a hybrid app (HTTP plus a NATS microservice). The validation pipe must throw a `ValidationException` (an `AppException`), not a `BadRequestException` or `RpcException` (see `backend/core/src/common/pipes/validation.pipe.ts`).
 
 ---
 
@@ -365,7 +357,7 @@ Rules:
 - A controller validates (DTO / pipes), takes the actor from `@CurrentActor()` and calls ONE facade method. No business rules, no Prisma, no other module's classes.
 - The actor is built by the global guard from the `auth.token.verify` result (an in-process facade call in `core`). Public routes carry `@Public()`. Coarse role checks use `@Roles(...)` and plan gating `@RequiresFeature(...)`; fine-grained rules stay in the module. Full rules: `backend/core/AGENTS.md` (HTTP layer, route map).
 - Routes: plural kebab-case resource, collection route is `@Get()` (no trailing slash), path params `:id` validated with a pipe (`ParseUUIDPipe` for UUID ids). The route map in `backend/core/AGENTS.md` is the contract; update it when you add a route.
-- Constructor injection only (the legacy gateway controller uses field injection and `any` bodies; do not copy that).
+- Constructor injection only (never field injection or `any` bodies).
 
 ### Responder (answers telemetry)
 
@@ -386,7 +378,7 @@ export class OrganizationResponder {
 
 ### Calling core from telemetry (NATS client)
 
-`telemetry` registers one NATS `ClientProxy` (token `NATS_SERVICE` in `config/services.ts`, as `gateway/src/transport/nats.module.ts` does today) and wraps every request with `timeout` and `catchError`:
+`telemetry` registers one NATS `ClientProxy` (token `NATS_SERVICE` in `config/services.ts`, the pattern the removed gateway used) and wraps every request with `timeout` and `catchError`:
 
 ```typescript
 // telemetry/src/common/nats-request.ts (to create)
@@ -457,7 +449,7 @@ export class SiteResponseDto {
 
 Rules:
 
-- `@nestjs/mapped-types` (`PartialType`, `PickType`, `OmitType`) is a dependency of `auth` and `gateway`; check the app's `package.json` before importing.
+- `@nestjs/mapped-types` (`PartialType`, `PickType`, `OmitType`) is not installed in `core` yet; check the app's `package.json` before importing.
 - `whitelist: true` + `forbidNonWhitelisted: true` is the "extra=forbid" equivalent: unknown fields are rejected, so mass assignment is impossible. Every DTO property MUST carry at least one validator decorator, or `whitelist` strips it.
 - `transform: true` converts payloads to DTO instances and primitives from `@Param` / `@Query` (use `@Type(() => Number)` for query numbers).
 - Strip any `tenantId` / `actor` field the client sent; the actor comes from the guard, never from the DTO.
@@ -472,7 +464,7 @@ Rules:
 ## Services and facades
 
 ```typescript
-// backend/auth/src/auth/auth.service.ts (shape; target: core/src/auth/)
+// backend/core/src/auth/auth.service.ts (shape)
 @Injectable()
 export class AuthService {
   constructor(private readonly prisma: PrismaService) {}
@@ -613,13 +605,13 @@ export class HttpErrorFilter implements ExceptionFilter {
 
 ### Project status
 
-Prisma is installed only in `backend/auth` (Prisma 7.10: `prisma/schema.prisma` in the `auth` PostgreSQL schema, `prisma.config.ts`, `PrismaService`, generated client in `src/generated/prisma`, one init migration). The other owners do not exist yet. Conventions below assume **Prisma ORM 7**. Prisma 8 is published as a release candidate with a different client API (`db.orm...`, `db migrate`); do NOT adopt it without asking. Check the installed version before copying any snippet: `pnpm list prisma @prisma/client`.
+Prisma is installed only for the `auth` module of `backend/core` (Prisma 7.10: `src/auth/prisma/schema.prisma` in the `auth` PostgreSQL schema, `prisma.auth.config.ts`, `PrismaService`, generated client in `src/auth/prisma/generated`, migrations in `src/auth/prisma/migrations`). The other owners do not exist yet. Conventions below assume **Prisma ORM 7**. Prisma 8 is published as a release candidate with a different client API (`db.orm...`, `db migrate`); do NOT adopt it without asking. Check the installed version before copying any snippet: `pnpm list prisma @prisma/client`.
 
 ### Owners and layout
 
 - One Prisma schema, client, migration history, PostgreSQL schema and role per owner: `auth`, `organization`, `tasks`, `notifications`, `billing` (all inside `core`) and `attendance` (inside `telemetry`).
 - `core` opens one connection per module with that module's role (`<module>_svc`), which cannot read other schemas. Isolation is enforced by roles, not only by convention.
-- The folder layout of the five Prisma projects inside `core` (`src/<module>/prisma/` vs a root `prisma/<module>/`) is decided in T6; follow `backend/core/AGENTS.md` once it says so. `telemetry` uses `backend/telemetry/prisma/` and `ATTENDANCE_DATABASE_URL`.
+- The folder layout of the five Prisma projects inside `core` (`src/<module>/prisma/` vs a root `prisma/<module>/`) was decided in T6: `src/<module>/prisma/` plus one `prisma.<module>.config.ts` at the `backend/core` root and `pnpm prisma:<module>:*` scripts that pass `--config`. `telemetry` uses `backend/telemetry/prisma/` and `ATTENDANCE_DATABASE_URL`.
 
 ### Install (ask first), inside the app that owns the data
 
@@ -633,7 +625,7 @@ pnpm exec prisma init --datasource-provider postgresql --output ../src/generated
 ### Files
 
 ```prisma
-// backend/auth/prisma/schema.prisma (exists; same shape for every owner)
+// backend/core/src/auth/prisma/schema.prisma (exists; same shape for every owner)
 generator client {
   provider     = "prisma-client"
   output       = "../src/generated/prisma"
@@ -656,7 +648,7 @@ model User {
 ```
 
 ```typescript
-// backend/auth/prisma.config.ts (exists). Other owners read their own variable, e.g. ATTENDANCE_DATABASE_URL
+// backend/core/prisma.auth.config.ts (exists; the schema and migrations paths point to src/auth/prisma/). Other owners read their own variable, e.g. ATTENDANCE_DATABASE_URL
 import 'dotenv/config';
 import { defineConfig } from 'prisma/config';
 
@@ -667,12 +659,12 @@ export default defineConfig({
 });
 ```
 
-Notes verified against Prisma docs and the existing `backend/auth`:
+Notes verified against Prisma docs and the existing `backend/core` auth module:
 
 - In Prisma 7 the connection URL lives in `prisma.config.ts`, NOT in `schema.prisma`; the generator is `prisma-client` with an explicit `output`; the client needs a driver adapter (`@prisma/adapter-pg`).
-- `backend/auth/prisma.config.ts` reads the URL without `env()` because `prisma generate` runs in the Docker build, where the variable does not exist and `env()` would throw.
-- The generated client is source code inside `src/generated/prisma/`: it is gitignored; run `pnpm exec prisma generate` in dev setup, CI and in the Dockerfile before `nest build`.
-- The `pg` adapter does not read `?schema=` from the URL: pass the PostgreSQL schema to `PrismaPg` explicitly (see `backend/auth/src/prisma/prisma.service.ts`).
+- `backend/core/prisma.auth.config.ts` reads the URL without `env()` because `prisma generate` runs in the Docker build, where the variable does not exist and `env()` would throw.
+- The generated client is source code inside `src/<module>/prisma/generated/`: it is gitignored; run `pnpm prisma:<module>:generate` in dev setup, CI and in the Dockerfile before `nest build`.
+- The `pg` adapter does not read `?schema=` from the URL: pass the PostgreSQL schema to `PrismaPg` explicitly (see `backend/core/src/auth/prisma/prisma.service.ts`).
 - `moduleFormat = "cjs"` avoids `exports is not defined in ES module scope` when Nest (CommonJS) loads the client.
 - Table/column names: Prisma models are PascalCase singular; map them to plural snake_case with `@@map` / `@map` so raw SQL and `teamworkflow-postgres` queries stay readable.
 - No foreign keys across schemas. Reference another owner's data by id only, and keep a local copy fed by events when you need to read it (for example telemetry's `ShiftSnapshot`).
@@ -680,7 +672,7 @@ Notes verified against Prisma docs and the existing `backend/auth`:
 ### PrismaService (one per owner)
 
 ```typescript
-// backend/auth/src/prisma/prisma.service.ts (exists; shape)
+// backend/core/src/auth/prisma/prisma.service.ts (exists; shape)
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
@@ -706,7 +698,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 ```
 
 - ONE `PrismaService` per owner, importing ITS OWN generated client. In `core` it is provided inside its module and NEVER exported: other modules reach the data through the facade.
-- Do not make a module's `PrismaModule` `@Global()` in `core`: a global Prisma provider would let any module reach another module's client. (The legacy `auth` app can keep its own.)
+- Do not make a module's `PrismaModule` `@Global()` in `core`: a global Prisma provider would let any module reach another module's client.
 - Slow query logging: see teamworkflow-postgres ("Query logging").
 
 ### Data access: service or repository?
@@ -866,13 +858,13 @@ export class SiteFiltersDto extends PaginationDto {
 | SQL injection | Prisma queries / tagged `$queryRaw` only; never `Unsafe` variants with user input |
 | Secrets | Only via `envs`; never committed, never logged, never in responses or error messages |
 | Info disclosure | Generic error messages; no stack traces; Prisma errors translated; never log tokens, cookies or `Authorization` headers |
-| Passwords | Hash with argon2 (used by `backend/auth`); never store or log plain text |
+| Passwords | Hash with argon2 (used by the `auth` module); never store or log plain text |
 | NATS | Never exposed to the internet. Only `core` and `telemetry` are published, behind one reverse proxy. Do not publish `4222`/`8222` beyond local development; use credentials/TLS when deployed (ask) |
 | CORS / cookies / CSRF | `core` allows only `WEB_ORIGIN` with credentials; httpOnly cookies and CSRF for web, bearer for mobile (rules in `backend/core/AGENTS.md`) |
 
 ### Auth
 
-The `auth` module (today `backend/auth`) owns identity, tokens and `auth.token.verify`. `core` verifies tokens in-process through the `auth` facade; `telemetry` verifies every HTTP request and WebSocket connection with the NATS request `auth.token.verify`. Do not invent a second auth mechanism; follow `backend/core/src/auth/AGENTS.md`. Mark gaps with `// TODO(auth):`.
+The `auth` module (`backend/core/src/auth`) owns identity, tokens and `auth.token.verify`. `core` verifies tokens in-process through the `auth` facade; `telemetry` verifies every HTTP request and WebSocket connection with the NATS request `auth.token.verify`. Do not invent a second auth mechanism; follow `backend/core/src/auth/AGENTS.md`. Mark gaps with `// TODO(auth):`.
 
 ---
 
@@ -903,7 +895,7 @@ The `auth` module (today `backend/auth`) owns identity, tokens and `auth.token.v
 
 ### Setup
 
-Tests run with the scripts of each app (`pnpm test`, `pnpm test:cov`, `pnpm test:e2e`), which launch Jest. Specs sit next to the code (`*.spec.ts`, as in `backend/auth/src/auth/auth.service.login.spec.ts`); e2e specs go in `test/` with `jest-e2e.json`. Existing auth unit and e2e specs move with the code in T6 and stay green.
+Tests run with the scripts of each app (`pnpm test`, `pnpm test:cov`, `pnpm test:e2e`), which launch Jest. Specs sit next to the code (`*.spec.ts`, as in `backend/core/src/auth/auth.service.login.spec.ts`); e2e specs go in `test/` (`test/e2e/` against the isolated test stack, `test/jest-e2e.json`). Keep the existing specs green.
 
 ### Controller: mock the facade
 
@@ -939,7 +931,7 @@ describe('SitesController', () => {
 ### Service: mock `PrismaService`
 
 ```typescript
-// backend/auth/src/auth/auth.service.login.spec.ts (shape of the existing specs)
+// backend/core/src/auth/auth.service.login.spec.ts (shape of the existing specs)
 describe('AuthService.login', () => {
   let service: AuthService;
   const prisma = { user: { findUnique: jest.fn() } };
@@ -1004,7 +996,7 @@ describe('Sites (e2e)', () => {
 });
 ```
 
-- The global prefix, pipe, filter and guard MUST be applied in the test the same way as in `main.ts`; extract a shared `configureApp(app)` function (the auth e2e support in `backend/auth/test/support/auth-app.ts` is the existing reference for bootstrapping).
+- The global prefix, pipe, filter and guard MUST be applied in the test the same way as in `main.ts`; extract a shared `configureApp(app)` function (`backend/core/test/support/core-app.ts` is the existing reference for bootstrapping).
 - HTTP layer tests always cover: guard (no token, invalid token, actor only from the verify result), cookie vs bearer, CSRF, CORS, role decorators, plan gating, tenant status, error mapping, throttling. The full list is in `backend/core/AGENTS.md` (Tests).
 - Module e2e against a real database: use a dedicated TEST database or schema (its `<OWNER>_DATABASE_URL` pointing to the test database), migrated with `prisma migrate deploy`, and clean tables between tests. NEVER run tests against development or production data.
 - Name tests by behavior: `<action> <expected> when <condition>`.
@@ -1015,7 +1007,7 @@ describe('Sites (e2e)', () => {
 ## Commands
 
 ```bash
-cd backend/<app>          # core | telemetry (target); gateway | auth until T6
+cd backend/<app>          # core | telemetry
 
 pnpm install
 pnpm start:dev            # nest start --watch
@@ -1027,7 +1019,7 @@ pnpm test:cov
 pnpm test:e2e
 
 # Whole stack (from backend/)
-docker compose up --build   # today: nats, postgres, auth-microservice, gateway. Target (T7): nats, postgres, core (+ telemetry)
+docker compose up --build   # nats, postgres, core (+ telemetry once it exists); then: docker compose exec core pnpm prisma:auth:migrate:deploy
 
 # Prisma (only in apps with a schema)
 pnpm exec prisma generate
