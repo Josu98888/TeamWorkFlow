@@ -1,10 +1,10 @@
-# AGENTS.md — `tasks` microservice
+# AGENTS.md — `tasks` module (`backend/core`)
 
-Guide for coding agents working on this service. Read it fully before making changes. It overrides the root `AGENTS.md` when they conflict. Code patterns live in `skills/teamworkflow-nest`; migrations in `skills/teamworkflow-prisma-migrations`.
+Guide for coding agents working on the `tasks` module of `backend/core`. Read `backend/core/AGENTS.md` (core-wide rules: module boundaries, HTTP layer, event bus) and then this file fully before making changes. This file overrides the root `AGENTS.md` and `backend/core/AGENTS.md` for the `tasks` domain rules when they conflict. Code patterns live in `skills/teamworkflow-nest`; migrations in `skills/teamworkflow-prisma-migrations`.
 
-## What this service is
+## What this module is
 
-`tasks` owns the work that employees must do and prove: configurable forms, the tasks that use them, supervisor review, and the photos attached to answers. It is one NestJS 12 app with three internal modules: `forms`, `tasks` and `media`. In the 16-service target architecture of the root README these may be split later, so keep modules separable: a module never reads another module's tables, it calls the other module's exported service.
+`tasks` owns the work that employees must do and prove: configurable forms, the tasks that use them, supervisor review, and the photos attached to answers. It is a module of the `backend/core` modular monolith (`src/tasks/`, `TasksModule`) with three internal sub-modules: `forms`, `tasks` and `media`. Other core modules reach it only through its exported facade service or its events; it can be extracted to its own service later without changing its event consumers (`docs/architecture.md`). Keep the sub-modules separable: a sub-module never reads another sub-module's tables, it calls the other's exported service.
 
 Responsibilities:
 
@@ -12,13 +12,13 @@ Responsibilities:
 - **tasks:** single tasks and per-shift tasks, claiming of site/post tasks, answers (including offline ones), expiration, cancellation with the shift and supervisor review.
 - **media:** presigned uploads of photos to S3-compatible storage and their metadata.
 
-Plans: tasks and forms are a `pro` feature. The gateway blocks every `tasks.*` route of a tenant whose plan lacks the `tasks` feature (403 `feature_not_in_plan`, from `auth.token.verify`), and this service ALSO keeps a local copy of the tenant's `features` and refuses or skips the pro work for tenants without it (see Plan gating inside the service).
+Plans: tasks and forms are a `pro` feature. The HTTP layer of `core` blocks every `tasks.*` route of a tenant whose plan lacks the `tasks` feature (403 `feature_not_in_plan`, from `auth.token.verify`), and this module ALSO keeps a local copy of the tenant's `features` and refuses or skips the pro work for tenants without it (see Plan gating inside the module).
 
 Out of scope (do NOT implement here):
 
-- Sites, employees, shifts: owned by `organization`. `tasks` asks it over NATS and reacts to its events.
+- Sites, employees, shifts: owned by the `organization` module. `tasks` calls its exported facade service (in-process) and reacts to its events.
 - Notifications: owned by `notifications`, which consumes `task_assigned`, `task_completed` and `task_expired`.
-- Clock-ins and alerts: owned by `attendance`.
+- Clock-ins and alerts: owned by the `attendance` domain, which lives in the `telemetry` service.
 - Thumbnails, automatic retention or deletion of photos, video, document uploads. Future work; ask before adding.
 
 ## Business Rules
@@ -46,7 +46,7 @@ Out of scope (do NOT implement here):
 A task with no `employeeId` (assigned to a site/post: a single task created that way, or a per-shift task of a shift with no employee) can be completed by ANY employee who has a shift `in_progress` at that site and post:
 
 1. The employee claims it with `tasks.task.claim`, or simply answers it: `tasks.task.answer` on an unassigned task claims and completes it in the same transaction.
-2. The service resolves the employee (`organization.employee.get` by `userId`) and checks, over NATS (`organization.shift.list` filtered by `employeeId` and `day`), that the employee has a shift with status `in_progress` whose `siteId` and `postId` match the task. Otherwise `no_shift_in_progress` (403).
+2. The module resolves the employee (`organization.employee.get` by `userId`) and checks, with an in-process call to the `organization` facade (`organization.shift.list` filtered by `employeeId` and `day`), that the employee has a shift with status `in_progress` whose `siteId` and `postId` match the task. Otherwise `no_shift_in_progress` (403).
 3. The FIRST claim wins: the update is a compare-and-set (`employeeId` is null and status `pending`), and that employee becomes the assignee. Any other employee then gets `task_already_claimed` (409) and can no longer complete it.
 4. A claim never changes the deadline or the state; only the assignee can answer from then on.
 5. Claim and answer are idempotent for the same employee (claiming a task you already hold succeeds).
@@ -66,16 +66,16 @@ Same rule as attendance: the app sends a client-generated unique `clientAnswerId
 
 ### Photos and storage
 
-1. Storage is S3-compatible (MinIO locally). The service never receives the file bytes.
-2. Flow: the app calls `tasks.media.request-upload` with `mime`, `sizeBytes`, `sha256` and `takenAt`; the service validates the limits, creates a `Media` row (`pending`) and returns `{ mediaId, uploadUrl, expiresAt }` with a presigned PUT URL. The app uploads directly to storage and then submits the answer with the `mediaId` in the `photo` field.
-3. When the answer is submitted, the service checks that each referenced media belongs to the tenant, was requested by the same user, and the object exists with the declared size; then marks it `uploaded`. Otherwise `media_not_uploaded` (422).
+1. Storage is S3-compatible (MinIO locally). The module never receives the file bytes.
+2. Flow: the app calls `tasks.media.request-upload` with `mime`, `sizeBytes`, `sha256` and `takenAt`; the module validates the limits, creates a `Media` row (`pending`) and returns `{ mediaId, uploadUrl, expiresAt }` with a presigned PUT URL. The app uploads directly to storage and then submits the answer with the `mediaId` in the `photo` field.
+3. When the answer is submitted, the module checks that each referenced media belongs to the tenant, was requested by the same user, and the object exists with the declared size; then marks it `uploaded`. Otherwise `media_not_uploaded` (422).
 4. Limits: 10 MB, `image/jpeg`, `image/png`, `image/webp`. Rejected otherwise (`media_too_large`, `media_type_not_allowed`, 422).
 5. Stored metadata: `mime`, `sizeBytes`, `sha256`, `takenAt`, `uploadedByUserId`, `storageKey`. Storage keys start with the tenant (`<tenantId>/...`) and are never guessable or returned as public URLs. Reads go through short-lived presigned GET URLs (`tasks.media.get-url`), checked against the actor's tenant and sites.
 6. No thumbnails and no automatic retention yet (future).
 
-### Plan gating inside the service
+### Plan gating inside the module
 
-Basic-plan tenants have no tasks. The gateway blocks the routes, but the automatic work is done here, so the service keeps a local copy of the tenant's `features` (`TenantFeatures`), fed by `t.<tenant>.billing.subscription_created` and `t.<tenant>.billing.plan_changed`:
+Basic-plan tenants have no tasks. The HTTP layer of `core` blocks the routes, but the automatic work is done here, so the module keeps a local copy of the tenant's `features` (`TenantFeatures`), fed by `t.<tenant>.billing.subscription_created` and `t.<tenant>.billing.plan_changed`:
 
 - The copy is updated only when the event's `effectiveAt` (or `occurredAt` for `subscription_created`) is newer than the stored one; the same event twice is a no-op.
 - No copy yet means no pro features (fail closed).
@@ -88,9 +88,9 @@ Consume `t.<tenant>.auth.tenant_suspended` / `tenant_cancelled` / `tenant_reacti
 
 ### Tenant data purge
 
-Consume `t.<tenant>.billing.data_retention_expired` (emitted 90 days after the tenant was cancelled). It permanently deletes ALL the tenant's data in this service: first the stored photos (every object under the `<tenantId>/` prefix of the bucket, listed and deleted in batches), then the database rows (media, answers, tasks, templates, form versions and forms, tenant state, features copy and processed events). Photos go first so the `Media` rows stay as the record of what is left if the storage call fails: in that case the event is not acknowledged and JetStream redelivers it. It is idempotent (a second delivery finds no objects and no rows and is a no-op) and emits nothing.
+Consume `t.<tenant>.billing.data_retention_expired` (emitted 90 days after the tenant was cancelled). It permanently deletes ALL the tenant's data in this module: first the stored photos (every object under the `<tenantId>/` prefix of the bucket, listed and deleted in batches), then the database rows (media, answers, tasks, templates, form versions and forms, tenant state, features copy and processed events). Photos go first so the `Media` rows stay as the record of what is left if the storage call fails: in that case the event is not acknowledged and JetStream redelivers it. It is idempotent (a second delivery finds no objects and no rows and is a no-op) and emits nothing.
 
-## Roles in this service
+## Roles in this module
 
 | Action | owner / admin | supervisor | employee |
 |--------|:-------------:|:----------:|:--------:|
@@ -101,53 +101,55 @@ Consume `t.<tenant>.billing.data_retention_expired` (emitted 90 days after the t
 | Answer a task, request photo uploads | ❌ | ❌ | ✅ own tasks, or a site/post task after claiming it while on a shift in progress there |
 | Claim a site/post task | ❌ | ❌ | ✅ only with a shift in progress at that site/post |
 
-The actor (`userId`, `tenantId`, `role`, `siteIds`) comes from the gateway, which got it from `auth.token.verify`. Resources outside the actor's tenant or sites answer 404 (never 403). The employee of an actor is resolved through `organization.employee.get` by `userId`.
+The actor (`userId`, `tenantId`, `role`, `siteIds`) comes from the HTTP layer of `core`, which got it from `auth.token.verify`. Resources outside the actor's tenant or sites answer 404 (never 403). The employee of an actor is resolved through `organization.employee.get` by `userId`.
 
 ## Stack
 
-- NestJS 12 microservice over NATS (`@nestjs/microservices`).
-- PostgreSQL + Prisma 7 with its own `prisma/schema.prisma` in the `tasks` schema of the shared `teamworkflow` database, accessed with its own `tasks_svc` role that cannot read other schemas (see `backend/STEPS.md` S1.1). Not installed yet.
+- NestJS 12 module inside `backend/core`; HTTP controllers for this module's endpoints live in `src/tasks/` (see `backend/core/AGENTS.md`). NATS is used for JetStream events only: this module answers no NATS requests.
+- PostgreSQL + Prisma 7 with its own `prisma/schema.prisma` in the `tasks` schema of the shared `teamworkflow` database, accessed through its own Prisma client with its own `tasks_svc` role that cannot read other schemas (see `backend/STEPS.md` S1.1). Not installed yet.
 - S3-compatible client for presigned URLs (for example `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`) against MinIO locally. Not installed yet.
-- `class-validator` + `class-transformer` with a global `ValidationPipe` throwing `RpcException`. Not installed yet.
+- `class-validator` + `class-transformer` with the global `ValidationPipe` of `core` (422 `validation_error`). Not installed yet.
 - Scheduling for the expiration job (for example `@nestjs/schedule`). Not installed yet.
-- Env validation with joi in `src/config/envs.ts`, same pattern as the gateway.
+- Env validation with joi in `src/config/envs.ts`, same pattern as the rest of `core`.
 - Jest for tests.
 
 Ask before installing any dependency.
 
 ## Current Status (READ FIRST)
 
-The folder contains only this `AGENTS.md` and the `README.md`. There is no Nest app yet: no `package.json`, no `src/`, no Prisma, no Dockerfile, no MinIO container, no entry in `backend/docker-compose.yml`.
+`backend/core` does not exist yet (task T6 of `odd/tasks/two-service-architecture.md` creates it from `backend/gateway` + `backend/auth`). This folder contains only this `AGENTS.md`: there is no `TasksModule`, no Prisma schema, no controllers, no MinIO container in `backend/docker-compose.yml`.
 
 First tasks, in order (ask before each install):
 
-- [ ] Scaffold the Nest app (microservice bootstrap with `Transport.NATS`, `src/config/envs.ts`, `.env.example`).
+- [ ] Create `TasksModule` in `backend/core/src/tasks/` (needs `backend/core` from T6), its config in `src/config/envs.ts` and `.env.example`.
 - [ ] Prisma schema and first migration (`Form`, `FormVersion`).
-- [ ] Modules `forms`, `tasks`, `media`, with their patterns constants.
+- [ ] Sub-modules `forms`, `tasks`, `media`, with their HTTP controllers, the exported facade service and operation-name constants.
 - [ ] Consumers of `organization` and `auth` events and the expiration job.
-- [ ] MinIO in `backend/docker-compose.yml` and the gateway routes.
+- [ ] MinIO in `backend/docker-compose.yml` and the module routes in its HTTP controllers (feature `tasks` required on every route).
 
 ## NATS Contract
 
-Request-reply patterns follow `tasks.<resource>.<action>` and carry NO tenant in the subject: the tenant comes from the actor. Domain events follow `t.<tenant>.tasks.<event>` (JetStream, snake_case names). Keep the pattern names in constants files (to create: `src/<module>/<module>.patterns.ts`) and keep the gateway side in sync.
+Operation names follow `tasks.<resource>.<action>` and carry NO tenant: the tenant comes from the actor. Domain events follow `t.<tenant>.tasks.<event>` (JetStream, snake_case names).
 
-### Request-reply (`@MessagePattern`)
+In `core` every operation below is an **in-process call** to the module's facade service (invoked by the module's HTTP controllers); the pattern string is kept as the operation's stable name. `telemetry` does not need anything from this module, so there are **no NATS request-reply responders** here. Keep the names in a constants file (to create: `src/tasks/tasks.patterns.ts`).
+
+### Operations (module facade) and NATS responders
 
 "actor" = `{ userId, tenantId, role, siteIds }` from `auth.token.verify`. Lists return `{ items, total }`.
 
-| Pattern | Caller | Payload | Returns |
+| Operation | Caller | Payload | Returns |
 |---------|--------|---------|---------|
-| `tasks.form.create` / `update` | gateway (owner/admin) | actor, `name`, `fields` (and `formId` on update, draft only) | form (draft) |
-| `tasks.form.publish` | gateway (owner/admin) | actor, `formId` | new `FormVersion` |
-| `tasks.form.get` / `list` | gateway | actor, `formId` / filters | form with its versions / forms |
-| `tasks.task-template.create` / `update` / `list` | gateway (owner/admin) | actor, `siteId`, `postId`, `formVersionId`, deadline rule | template / templates |
-| `tasks.task.create` | gateway (owner/admin/supervisor) | actor, `formVersionId`, `deadline`, `employeeId` or `siteId` + `postId`, optional `expectedQr` | task |
-| `tasks.task.get` / `list` | gateway | actor, `taskId` / filters (`status`, `employeeId`, `siteId`), `page`, `pageSize` | task(s) |
-| `tasks.task.claim` | gateway (employee) | actor, `taskId` | task with the employee as assignee |
-| `tasks.task.answer` | gateway (employee) | actor, `taskId`, `clientAnswerId`, `deviceTime`, `answers` | completed task (claims an unassigned site/post task first) |
-| `tasks.task.review` | gateway (owner/admin/supervisor) | actor, `taskId`, `result` (`approved` \| `observed`), `note` | task |
-| `tasks.media.request-upload` | gateway (employee) | actor, `mime`, `sizeBytes`, `sha256`, `takenAt` | `{ mediaId, uploadUrl, expiresAt }` |
-| `tasks.media.get-url` | gateway | actor, `mediaId` | `{ url, expiresAt }` |
+| `tasks.form.create` / `update` | HTTP controller (owner/admin) | actor, `name`, `fields` (and `formId` on update, draft only) | form (draft) |
+| `tasks.form.publish` | HTTP controller (owner/admin) | actor, `formId` | new `FormVersion` |
+| `tasks.form.get` / `list` | HTTP controller | actor, `formId` / filters | form with its versions / forms |
+| `tasks.task-template.create` / `update` / `list` | HTTP controller (owner/admin) | actor, `siteId`, `postId`, `formVersionId`, deadline rule | template / templates |
+| `tasks.task.create` | HTTP controller (owner/admin/supervisor) | actor, `formVersionId`, `deadline`, `employeeId` or `siteId` + `postId`, optional `expectedQr` | task |
+| `tasks.task.get` / `list` | HTTP controller | actor, `taskId` / filters (`status`, `employeeId`, `siteId`), `page`, `pageSize` | task(s) |
+| `tasks.task.claim` | HTTP controller (employee) | actor, `taskId` | task with the employee as assignee |
+| `tasks.task.answer` | HTTP controller (employee) | actor, `taskId`, `clientAnswerId`, `deviceTime`, `answers` | completed task (claims an unassigned site/post task first) |
+| `tasks.task.review` | HTTP controller (owner/admin/supervisor) | actor, `taskId`, `result` (`approved` \| `observed`), `note` | task |
+| `tasks.media.request-upload` | HTTP controller (employee) | actor, `mime`, `sizeBytes`, `sha256`, `takenAt` | `{ mediaId, uploadUrl, expiresAt }` |
+| `tasks.media.get-url` | HTTP controller | actor, `mediaId` | `{ url, expiresAt }` |
 
 ### Events emitted (JetStream)
 
@@ -174,7 +176,7 @@ The tenant of a consumed event comes from the subject and is checked against the
 
 ### Errors
 
-Throw `RpcException` with `{ status, code, message }` (see `teamworkflow-nest`). The gateway maps it to HTTP `{ detail, code }`.
+Throw `RpcException` with `{ status, code, message }` (see `teamworkflow-nest`). The HTTP exception filter of `core` maps it to HTTP `{ detail, code }`.
 
 | code | status | When |
 |------|--------|------|
@@ -210,8 +212,8 @@ Every query filters by `tenantId`. Indexes for the real lookups: tasks by `(tena
 
 | Variable | Description |
 |----------|-------------|
-| `NATS_SERVER` | Comma-separated NATS URLs |
-| `DATABASE_URL` | PostgreSQL connection string for this service |
+| `NATS_SERVER` | Comma-separated NATS URLs (shared by all of `core`) |
+| `DATABASE_URL` | PostgreSQL connection string for this module (its own role and schema) |
 | `S3_ENDPOINT` | Storage endpoint (MinIO URL locally) |
 | `S3_REGION` | Storage region |
 | `S3_BUCKET` | Bucket for photos |
@@ -219,7 +221,7 @@ Every query filters by `tenantId`. Indexes for the real lookups: tasks by `(tena
 | `S3_FORCE_PATH_STYLE` | `true` for MinIO |
 | `MEDIA_URL_TTL_SECONDS` | Presigned URL lifetime. Default `300` |
 
-Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Never commit `.env`.
+Variable names are provisional until the shared `core` config exists (T4/T6): in `core` each module has its own database URL for its own role. Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Never commit `.env`.
 
 ## Security Rules (non-negotiable)
 
@@ -228,11 +230,11 @@ Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Ne
 3. Storage keys are namespaced by tenant; presigned URLs are short-lived and issued only after checking the actor's tenant and sites.
 4. Never log storage credentials, presigned URLs or answer contents.
 5. An employee only answers tasks assigned to them and only requests uploads for their own answers.
-6. Never read another service's tables; ask over NATS.
+6. Never read another module's tables or use its Prisma client; call its exported facade service or consume its events.
 
 ## Tests
 
-- Unit tests for every use case with Prisma, `ClientProxy` and the S3 client mocked (`pnpm test`).
+- Unit tests for every use case with Prisma, the facades of other modules and the S3 client mocked (`pnpm test`).
 - Always covered: tenant isolation on forms, tasks and media; supervisor limited to `siteIds`; site/post task claimed by an employee with a shift in progress there (and refused with `no_shift_in_progress` otherwise), first claim wins and the second gets `task_already_claimed`, answer on an unassigned task claiming it in one step, only the assignee can answer afterwards; `shift_cancelled` cancelling pending per-shift tasks only (completed and expired untouched), idempotent, and answering a cancelled task giving `task_not_open`; draft editable and publish creating an immutable version; answers referencing the version used; every field type validated; required fields; QR answer matching and mismatch; per-shift generation on `shift_started` (idempotent for the same event twice, one task per template); expiration job; review `approved`/`observed` (note mandatory for observed); offline duplicates ignored and `answer_too_old` after 24 hours; photo limits (size, mime), media ownership and `media_not_uploaded`; suspended and cancelled tenants skipped by generation and expiration; plan gating (basic tenant: `tasks.task.create` answers `feature_not_in_plan` and `shift_started` generates no tasks; pro tenant: both work; `subscription_created`/`plan_changed` idempotent and stale events ignored; downgrade keeps existing tasks); tenant data purge (`data_retention_expired` deletes the tenant's S3 objects and rows, leaves other tenants untouched, is idempotent, and is redelivered when the storage call fails); idempotent handling of every consumed event.
 - E2E tests (to create in `test/`) once the transport, the database and MinIO are set up, against a dedicated test database and bucket.
 
@@ -240,5 +242,5 @@ Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Ne
 
 - [ ] `pnpm lint`, `pnpm test` and `pnpm build` pass.
 - [ ] Schema changes come with a reviewed Prisma migration.
-- [ ] If you changed a pattern, event or payload, you updated this file, the gateway and the consuming services' docs, and called it out in the PR description.
+- [ ] If you changed a pattern, event or payload, you updated this file, `backend/core/AGENTS.md` and the consuming modules' docs, and called it out in the PR description.
 - [ ] No secrets, presigned URLs or personal data in logs, tests or fixtures.
