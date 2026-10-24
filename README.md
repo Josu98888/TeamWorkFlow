@@ -73,17 +73,17 @@ Un proxy inverso publica ambos servicios bajo el mismo origen y enruta por path 
 
 Qué grupo de la arquitectura objetivo implementa cada módulo del MVP:
 
-| Módulo del MVP | Servicio | Documentación de diseño (hoy) | Agrupa (arquitectura objetivo) |
+| Módulo del MVP | Servicio | Documentación de diseño | Agrupa (arquitectura objetivo) |
 |---|---|---|---|
-| capa HTTP (antes `gateway`) | `core` | [backend/gateway/README.md](backend/gateway/README.md) | [gateway](#1-gateway) (sin el WebSocket de la Torre, que pasa a `telemetry`) |
-| `auth` | `core` | [backend/auth/README.md](backend/auth/README.md) | [auth](#2-auth) |
-| `organization` | `core` | [backend/organization/README.md](backend/organization/README.md) | [sites](#3-sites), [employees](#4-employees) y [shifts](#5-shifts) |
-| `tasks` | `core` | [backend/tasks/README.md](backend/tasks/README.md) | [forms](#8-forms), [tasks](#9-tasks) y [media](#10-media) |
-| `notifications` | `core` | [backend/notifications/README.md](backend/notifications/README.md) | [notifications](#13-notifications) (solo push e in-app) |
-| `billing` | `core` | [backend/billing/README.md](backend/billing/README.md) | [billing](#16-billing) |
-| `attendance` | `telemetry` | [backend/attendance/README.md](backend/attendance/README.md) | [attendance](#6-attendance), la parte de alertas de [rules](#11-rules) y [tower](#14-tower) |
+| capa HTTP (antes `gateway`) | `core` | [backend/core/README.md](backend/core/README.md) | [gateway](#1-gateway) (sin el WebSocket de la Torre, que pasa a `telemetry`) |
+| `auth` | `core` | [backend/core/src/auth/AGENTS.md](backend/core/src/auth/AGENTS.md) | [auth](#2-auth) |
+| `organization` | `core` | [backend/core/src/organization/AGENTS.md](backend/core/src/organization/AGENTS.md) | [sites](#3-sites), [employees](#4-employees) y [shifts](#5-shifts) |
+| `tasks` | `core` | [backend/core/src/tasks/AGENTS.md](backend/core/src/tasks/AGENTS.md) | [forms](#8-forms), [tasks](#9-tasks) y [media](#10-media) |
+| `notifications` | `core` | [backend/core/src/notifications/AGENTS.md](backend/core/src/notifications/AGENTS.md) | [notifications](#13-notifications) (solo push e in-app) |
+| `billing` | `core` | [backend/core/src/billing/AGENTS.md](backend/core/src/billing/AGENTS.md) | [billing](#16-billing) |
+| `attendance` | `telemetry` | [backend/telemetry/README.md](backend/telemetry/README.md) | [attendance](#6-attendance), la parte de alertas de [rules](#11-rules) y [tower](#14-tower) |
 
-Las rutas de documentación de la tercera columna corresponden al diseño anterior por servicio y se reubicarán en `backend/core/` y `backend/telemetry/`.
+La documentación de diseño de cada módulo vive junto a su código: `backend/core/src/<módulo>/AGENTS.md`; la de `telemetry` en `backend/telemetry/`.
 
 Decisiones comunes del MVP:
 
@@ -96,7 +96,7 @@ Decisiones comunes del MVP:
 - Planes: `auth` guarda el plan y las funcionalidades del tenant (a partir de los eventos de `billing`) y la capa HTTP de `core` bloquea con 403 `feature_not_in_plan` las rutas que el plan no incluye. Las alertas, la Torre de Control, las tareas y los formularios son funcionalidades Pro.
 - Rol `platform_admin`: no pertenece a ningún tenant, se crea mediante seed o CLI y solo opera las rutas de plataforma de `billing` (planes y precios, pagos manuales, anulaciones).
 
-El diseño de cada módulo y su contrato NATS están hoy en el `README.md` y, con más detalle para los agentes, en el `AGENTS.md` de su carpeta anterior; pasarán a `backend/core/` y `backend/telemetry/`.
+El diseño de cada módulo y su contrato (operaciones y eventos) están en el `AGENTS.md` de su carpeta (`backend/core/src/<módulo>/AGENTS.md` y `backend/telemetry/AGENTS.md`); el resumen de `core` está en [backend/core/README.md](backend/core/README.md).
 
 ## Arquitectura general
 
@@ -159,7 +159,7 @@ La revocación de sesiones vive en `auth` (tokens de refresco revocados en su ba
 
 - **MVP:** módulo `auth` de `core` (hoy `backend/auth`, que se fusionará en `backend/core`).
 
-> Fuente de verdad: [`backend/auth/AGENTS.md`](backend/auth/AGENTS.md). El diseño original (DNI + PIN, MFA, SSO, auth callout, RBAC detallado) se simplificó; lo que se quitó figura más abajo como trabajo futuro.
+> Fuente de verdad: [`backend/core/src/auth/AGENTS.md`](backend/core/src/auth/AGENTS.md). El diseño original (DNI + PIN, MFA, SSO, auth callout, RBAC detallado) se simplificó; lo que se quitó figura más abajo como trabajo futuro.
 
 - **Rol:** identidad, sesiones, alcance de sedes de los supervisores y estado de acceso del tenant.
 - **Registro:** `auth.register` crea el tenant y su primer usuario, que pasa a ser el `owner`, en una única transacción, y emite `tenant_created` (consumido por `billing`, que inicia la prueba). El correo es único en todo el sistema.

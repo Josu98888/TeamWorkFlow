@@ -61,7 +61,7 @@ Todos los servicios se comunican entre sí solo por NATS; ninguno consulta el sc
 
 ## auth
 
-Identidad, sesiones y estado de acceso del tenant. Fuente de verdad: [`backend/auth/AGENTS.md`](../backend/auth/AGENTS.md).
+Identidad, sesiones y estado de acceso del tenant. Fuente de verdad: [`backend/core/src/auth/AGENTS.md`](../backend/core/src/auth/AGENTS.md).
 
 ```mermaid
 erDiagram
@@ -145,7 +145,7 @@ Reglas clave:
 
 ## organization
 
-Sedes, perfiles de empleados y turnos. Tres módulos internos (`sites`, `employees`, `shifts`) en un solo schema. Fuente de verdad: [`backend/organization/AGENTS.md`](../backend/organization/AGENTS.md).
+Sedes, perfiles de empleados y turnos. Tres módulos internos (`sites`, `employees`, `shifts`) en un solo schema. Fuente de verdad: [`backend/core/src/organization/AGENTS.md`](../backend/core/src/organization/AGENTS.md).
 
 ```mermaid
 erDiagram
@@ -255,7 +255,7 @@ Reglas clave:
 
 ## attendance
 
-Fichadas, jornadas, alertas y resúmenes de la Torre de Control. Cuatro módulos internos (`clock-ins`, `workdays`, `alerts`, `tower`). Fuente de verdad: [`backend/attendance/AGENTS.md`](../backend/attendance/AGENTS.md).
+Fichadas, jornadas, alertas y resúmenes de la Torre de Control. Cuatro módulos internos (`clock-ins`, `workdays`, `alerts`, `tower`). Fuente de verdad: [`backend/telemetry/AGENTS.md`](../backend/telemetry/AGENTS.md).
 
 ```mermaid
 erDiagram
@@ -357,7 +357,7 @@ Reglas clave:
 
 ## tasks
 
-Formularios, tareas, revisión del supervisor y metadatos de fotos. Tres módulos internos (`forms`, `tasks`, `media`). Fuente de verdad: [`backend/tasks/AGENTS.md`](../backend/tasks/AGENTS.md).
+Formularios, tareas, revisión del supervisor y metadatos de fotos. Tres módulos internos (`forms`, `tasks`, `media`). Fuente de verdad: [`backend/core/src/tasks/AGENTS.md`](../backend/core/src/tasks/AGENTS.md).
 
 ```mermaid
 erDiagram
@@ -469,7 +469,7 @@ Reglas clave:
 
 ## notifications
 
-Tokens de dispositivo, notificaciones in-app y registro de entregas. Tres módulos internos (`push-tokens`, `routing`, `delivery`). Fuente de verdad: [`backend/notifications/AGENTS.md`](../backend/notifications/AGENTS.md).
+Tokens de dispositivo, notificaciones in-app y registro de entregas. Tres módulos internos (`push-tokens`, `routing`, `delivery`). Fuente de verdad: [`backend/core/src/notifications/AGENTS.md`](../backend/core/src/notifications/AGENTS.md).
 
 ```mermaid
 erDiagram
@@ -536,7 +536,7 @@ Reglas clave:
 
 ## billing
 
-Planes, suscripciones, facturas y pagos. Cinco módulos internos (`plans`, `subscriptions`, `invoicing`, `payments`, `collections`). Fuente de verdad: [`backend/billing/AGENTS.md`](../backend/billing/AGENTS.md).
+Planes, suscripciones, facturas y pagos. Cinco módulos internos (`plans`, `subscriptions`, `invoicing`, `payments`, `collections`). Fuente de verdad: [`backend/core/src/billing/AGENTS.md`](../backend/core/src/billing/AGENTS.md).
 
 ```mermaid
 erDiagram
