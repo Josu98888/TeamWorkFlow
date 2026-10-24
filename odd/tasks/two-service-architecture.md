@@ -27,7 +27,8 @@ Seven services mean seven deploys, pipelines and databases to operate, plus dist
 ## Tasks
 - [x] T1 (inline; evidence: docs/architecture.md written, decisions confirmed by user 2026-10-24; commit 45f473c): architecture decision record `docs/architecture.md` (context, decision, consequences, module boundaries, event bus, DB, public entrypoints).
 - [x] T2 (delegated writer; evidence: commit 0b97cfd; `rg` for 7-service wording leaves only the README replaced-design sentence and the superseded STEPS.index entry; `rg backend/core|telemetry` hits in all 3 files): root docs — `AGENTS.md`, `README.md`, `STEPS.index.md` (rows and "7 MVP services" decision).
-- [ ] T3 (delegated writer): service docs — `backend/core/` and `backend/telemetry/` `AGENTS.md`/`README.md` built from the 7 existing pairs; old folders' docs removed or moved into `backend/core/src/<module>/`.
+- [x] T3 (delegated writer; evidence: commits ee86ceb organization, 35aee6d tasks, e003f3d notifications, 4bf0ab5 billing, 6c60733 auth+STEPS, 0f65fcf/31fa59a telemetry, 3330730 core AGENTS, 755b739 core README, 90d008b/cf9ea38 old README removal, dc4e93e/e262f9d gateway/auth stubs, dd6a215/22f3a22/cc61ec2 path refs; `fd` on organization/tasks/notifications/billing/attendance: folders gone; `rg` path refs leave only intended hits; skills left to T5; user decision 2026-10-24: module docs live in `backend/core/src/<module>/`): service docs — `backend/core/` and `backend/telemetry/` `AGENTS.md`/`README.md` built from the 7 existing pairs; old folders' docs removed or moved into `backend/core/src/<module>/`.
+  - Gaps recorded in the docs: error class in core (RpcException vs HttpException, T6); owner/admin tower rooms need a site list from core (`organization.site.list` is not in the ADR responder list); `workday_closed` payload unspecified; telemetry port, rate-limit numbers and per-module `DATABASE_URL` naming undefined (T4/T6); `/api/v1` versioning vs ADR `/api/telemetry`; Prisma folder layout per module in core (T6); `backend/core/src/http/STEPS.md` path chosen for STEPS row B2.
 - [ ] T4 (delegated writer): DB and infra docs/config — `backend/STEPS.md`, `docs/database.md`, compose files, `.env.example`, postgres init.
 - [ ] T5 (delegated writer): skills — `teamworkflow-nest` and the other skills that mention services; keep the root `AGENTS.md` skill table in sync.
 - [ ] T6 (delegated writer): code — create `backend/core` from gateway + auth; auth tests (unit + e2e) green; lint and build pass.
@@ -46,4 +47,4 @@ Seven services mean seven deploys, pipelines and databases to operate, plus dist
 - Strategy: `ask-on-risk`. Docs tasks T1–T5 are large but passive; code tasks T6–T7 likely exceed ~400 lines (mostly moves).
 
 ## Progress
-- Created 2026-10-24. T2 done. Next: T3.
+- Created 2026-10-24. T2 done. T3 done. Next: T4.
