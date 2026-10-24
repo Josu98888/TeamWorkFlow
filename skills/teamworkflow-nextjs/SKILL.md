@@ -19,7 +19,7 @@ allowed-tools: Read, Edit, Write, Glob, Grep, Bash, WebFetch, WebSearch, Task
 
 ## Project Status (READ FIRST)
 
-The frontend is a fresh Next.js scaffold. The NestJS backend already exists in `backend/`. The target is 2 services behind one origin: `core` (public HTTP API under `/api`, modular monolith) and `telemetry` (`/api/v1/telemetry` and the `/ws` WebSocket). `core` is real code (`auth` module and HTTP layer; the legacy `backend/gateway` and `backend/auth` apps were removed) and `telemetry` has no code yet (see teamworkflow-nest).
+The frontend is a fresh Next.js scaffold. The NestJS backend already exists in `backend/`. The target is 2 services behind one origin: `core` (public HTTP API under `/api/v1`, modular monolith) and `telemetry` (`/api/v1/telemetry` and the `/ws` WebSocket). `core` is real code (`auth` module and HTTP layer; the legacy `backend/gateway` and `backend/auth` apps were removed) and `telemetry` has no code yet (see teamworkflow-nest).
 Most files in this skill **do not exist yet**.
 
 - Before importing any module or library, check it exists (Glob/Grep, `frontend/package.json`).
@@ -34,7 +34,7 @@ Most files in this skill **do not exist yet**.
 ## Critical Rules
 
 - Server Components by default; `"use client"` only when required (see teamworkflow-react).
-- The frontend NEVER accesses the database. All data goes through the public HTTP API (`core` under the global prefix `/api`, `telemetry` under `/api/v1/telemetry`; one origin) via `backendFetch`. NEVER call NATS or an internal service port directly.
+- The frontend NEVER accesses the database. All data goes through the public HTTP API (`core` under the global prefix `/api/v1`, `telemetry` under `/api/v1/telemetry`; one origin) via `backendFetch`. NEVER call NATS or an internal service port directly.
 - The backend DTOs are the source of truth: `types.ts` mirrors the response DTOs of `core` and `telemetry` (camelCase JSON, see teamworkflow-nest).
 - From `app/` or other domains, import a domain ONLY through `@/domains/<domain>` (client-safe), `@/domains/<domain>/server` (server-only) or `@/domains/<domain>/actions`. No deep imports.
 - Server Actions live in `domains/<domain>/actions.ts`; Zod schemas in `domains/<domain>/schemas.ts`.
@@ -93,12 +93,12 @@ cd frontend
 
 ```bash
 # frontend/.env.local (NOT committed)
-BACKEND_URL=http://localhost:3000/api   # core base URL (global prefix /api); telemetry is reached under /api/v1/telemetry on the same origin
+BACKEND_URL=http://localhost:3000/api/v1   # core base URL (global prefix /api/v1); telemetry is reached under /api/v1/telemetry on the same origin
 ```
 
 ```bash
 # frontend/.env.example (committed, no real values)
-BACKEND_URL=http://localhost:3000/api
+BACKEND_URL=http://localhost:3000/api/v1
 ```
 
 Server-only variables MUST NOT use the `NEXT_PUBLIC_` prefix.
@@ -151,7 +151,7 @@ export async function backendFetch<T>(path: string, init: RequestInit = {}): Pro
 
 ```ts
 // ❌ NEVER: hardcoded URLs, direct fetch to the backend from pages/components, exported secrets
-await fetch("http://localhost:3000/api/projects");
+await fetch("http://localhost:3000/api/v1/projects");
 export const authToken = process.env.BACKEND_AUTH_TOKEN; // exported secret
 ```
 

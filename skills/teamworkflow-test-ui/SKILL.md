@@ -28,7 +28,7 @@ The frontend is a fresh Next.js scaffold. **Playwright is not installed and no t
 - Check `frontend/package.json` for `@playwright/test`. If missing, do NOT write tests yet: ask the user to set up Playwright (see "Setup").
 - Before creating a Page Object or helper, search `frontend/tests/` for an existing one.
 - Auth is not implemented yet. Tests that need a logged-in user wait for it (`// TODO(auth):`).
-- Test data comes from the public HTTP API of the NestJS backend (`core`: global prefix `/api`, port 3000; `telemetry` routes under `/api/v1/telemetry`, port 3003). NEVER run E2E tests against a production or shared database.
+- Test data comes from the public HTTP API of the NestJS backend (`core`: global prefix `/api/v1`, port 3000; `telemetry` routes under `/api/v1/telemetry`, port 3003). NEVER run E2E tests against a production or shared database.
 
 ---
 
@@ -104,7 +104,7 @@ export default defineConfig({
 ```bash
 # frontend/.env.example — add
 E2E_BASE_URL=http://localhost:3000
-E2E_BACKEND_URL=http://localhost:3000/api/   # core public API; keep the trailing slash
+E2E_BACKEND_URL=http://localhost:3000/api/v1/   # core public API; keep the trailing slash
 ```
 
 Recommended scripts (ask before adding):
@@ -390,8 +390,8 @@ import { request, type APIRequestContext } from "@playwright/test";
 
 export async function backendContext(): Promise<APIRequestContext> {
   return request.newContext({
-    // Trailing slash + relative paths (no leading "/") so the "/api" prefix is kept
-    baseURL: process.env.E2E_BACKEND_URL ?? "http://localhost:3000/api/",
+    // Trailing slash + relative paths (no leading "/") so the "/api/v1" prefix is kept
+    baseURL: process.env.E2E_BACKEND_URL ?? "http://localhost:3000/api/v1/",
   });
 }
 
