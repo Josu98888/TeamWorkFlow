@@ -2,7 +2,7 @@
 
 > Follow `/STEPS.rules.md`. This file is the ONLY place the order is written. Domain `STEPS.md` files reference it, never copy it.
 
-**Next action:** continue B1 auth module (`backend/auth/STEPS.md`, next S8.1; S9.1 and S9.2 blocked on the HTTP layer and producers). Architecture change in progress: MVP is 2 services (`core`, `telemetry`), see `docs/architecture.md` and `odd/tasks/two-service-architecture.md`.
+**Next action:** continue B1 auth module (`backend/core/src/auth/STEPS.md`, next S8.1; S9.1 and S9.2 blocked on the HTTP layer and producers). Architecture change in progress: MVP is 2 services (`core`, `telemetry`), see `docs/architecture.md` and `odd/tasks/two-service-architecture.md`.
 
 ## 1. How an agent uses this file
 
@@ -20,18 +20,18 @@ Status values: `not planned` (no `STEPS.md` yet) · `planned` (`STEPS.md` writte
 
 ### Backend
 
-Rows map to the 2-service MVP (`docs/architecture.md`): B1–B4, B6, B7 are modules of `backend/core`, B2 is the HTTP layer of `core` (the former gateway), B5 is the `telemetry` service. STEPS file paths are the current ones (per-service folders); they move into `backend/core` and `backend/telemetry` with tasks T3 and T6 of `odd/tasks/two-service-architecture.md`. B1 and B2 describe code that today still lives in `backend/auth` and `backend/gateway`.
+Rows map to the 2-service MVP (`docs/architecture.md`): B1–B4, B6, B7 are modules of `backend/core`, B2 is the HTTP layer of `core` (the former gateway), B5 is the `telemetry` service. STEPS file paths are the target ones (next to the module code, per the 2026-10-24 decision). Only `backend/core/src/auth/STEPS.md` exists today; the others are "not created" and are written when the row starts. B1 and B2 describe code that today still lives in `backend/auth` and `backend/gateway` until task T6 of `odd/tasks/two-service-architecture.md` moves it into `backend/core`.
 
 | # | Domain | STEPS file | Depends on | Status | Next |
 |---|--------|-----------|------------|--------|------|
 | B0 | backend foundation | `backend/STEPS.md` | — | done | — |
-| B1 | core: auth module | `backend/auth/STEPS.md` | B0 | in progress | S8.1 (S9.1, S9.2 blocked; S10.3, S11 pending) |
-| B2 | core: HTTP layer (former gateway) | `backend/gateway/STEPS.md` | B1 | not planned | — |
-| B3 | core: billing module | `backend/billing/STEPS.md` | B1, B2 | not planned | — |
-| B4 | core: organization module | `backend/organization/STEPS.md` | B1, B2, B3 | not planned | — |
-| B5 | telemetry (attendance domain) | `backend/attendance/STEPS.md` | B4 | not planned | — |
-| B6 | core: tasks module | `backend/tasks/STEPS.md` | B4 | not planned | — |
-| B7 | core: notifications module | `backend/notifications/STEPS.md` | B1, B3, B4, B5, B6 | not planned | — |
+| B1 | core: auth module | `backend/core/src/auth/STEPS.md` | B0 | in progress | S8.1 (S9.1, S9.2 blocked; S10.3, S11 pending) |
+| B2 | core: HTTP layer (former gateway) | `backend/core/src/http/STEPS.md` (not created) | B1 | not planned | — |
+| B3 | core: billing module | `backend/core/src/billing/STEPS.md` (not created) | B1, B2 | not planned | — |
+| B4 | core: organization module | `backend/core/src/organization/STEPS.md` (not created) | B1, B2, B3 | not planned | — |
+| B5 | telemetry (attendance domain) | `backend/telemetry/STEPS.md` (not created) | B4 | not planned | — |
+| B6 | core: tasks module | `backend/core/src/tasks/STEPS.md` (not created) | B4 | not planned | — |
+| B7 | core: notifications module | `backend/core/src/notifications/STEPS.md` (not created) | B1, B3, B4, B5, B6 | not planned | — |
 
 ### Frontend
 
@@ -83,7 +83,7 @@ Referenced, not reopened (rules §4). Source in parentheses.
 - Request-reply patterns `<module>.<resource>.<action>`, no tenant prefix; events `t.<tenant>.<module>.<event>` on JetStream with `eventId` + `occurredAt` (`/AGENTS.md`, each service `AGENTS.md` § NATS Contract).
 - The frontend talks only to the public HTTP API (`core` under `/api/...`, `telemetry` under `/api/telemetry` and Socket.IO on `/ws` for the Torre de Control, one origin) (`/AGENTS.md` § Architecture Rules).
 - Errors: microservices throw `RpcException { status, code, message }`; the HTTP layer of `core` answers HTTP `{ detail, code }` (`skills/teamworkflow-nest`).
-- `tenantId`, `role`, `siteIds`, `plan`, `features` come only from `auth.token.verify` (`backend/auth/AGENTS.md` § Sessions and tokens).
+- `tenantId`, `role`, `siteIds`, `plan`, `features` come only from `auth.token.verify` (`backend/core/src/auth/AGENTS.md` § Sessions and tokens).
 - Each core module and telemetry owns its data and Prisma schema; never read another module's tables or use its Prisma client (`/AGENTS.md` § Architecture Rules).
 - One PostgreSQL database, one schema per data-owning module or service, one role per schema (`backend/STEPS.md` S1.1, Decisions 2026-10-08; kept by the 2026-10-24 decision).
 - One JetStream stream per owning module (`<MODULE>_EVENTS` on `t.*.<module>.>`), created by that module on startup; durable consumers named `<consumer>-<producer>` (`backend/STEPS.md` S1.2, Decisions 2026-10-09).

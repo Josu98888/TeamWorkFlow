@@ -3,7 +3,7 @@
 ## How to Use This Guide
 
 - Start here for cross-project norms. TeamWorkFlow is a monorepo with a NestJS backend (a modular monolith plus a telemetry service) and a Next.js frontend. The architecture decision is in [`docs/architecture.md`](docs/architecture.md).
-- Components may have their own `AGENTS.md` with specific guidelines. Today: `frontend/AGENTS.md` (Next.js agent rules written by `next dev`) and the per-service files of the previous 7-service layout (`backend/auth`, `backend/organization`, `backend/attendance`, `backend/tasks`, `backend/notifications`, `backend/billing`). Target: `backend/core/AGENTS.md` and `backend/telemetry/AGENTS.md`. Until the service docs are rewritten (task T3 of `odd/tasks/two-service-architecture.md`), the old per-service docs stay as the detailed reference for each module's contract; where they mention a separate service, read it as a module of `core` (or of `telemetry` for `attendance`).
+- Components may have their own `AGENTS.md` with specific guidelines: `frontend/AGENTS.md` (Next.js agent rules written by `next dev`), `backend/core/AGENTS.md` (core-wide rules and route map), one per core module (`backend/core/src/auth/AGENTS.md`, `backend/core/src/organization/AGENTS.md`, `backend/core/src/tasks/AGENTS.md`, `backend/core/src/notifications/AGENTS.md`, `backend/core/src/billing/AGENTS.md`) and `backend/telemetry/AGENTS.md` (the whole `attendance` domain). `backend/gateway/AGENTS.md` and `backend/auth/AGENTS.md` are stubs: that code is being merged into `backend/core` (task T6 of `odd/tasks/two-service-architecture.md`).
 - Component docs override this file when guidance conflicts.
 - The project is at an early stage: many files referenced by the skills do not exist yet. Check before importing or assuming (each skill has a "Project Status" section).
 
@@ -83,8 +83,8 @@ TeamWorkFlow is a multitenant SaaS for managing and monitoring field staff acros
 
 | Component | Location | Tech Stack | Port |
 |-----------|----------|------------|------|
-| Core (modular monolith) | `backend/core/` (target; see migration note below) | NestJS 12, modules `auth`, `organization`, `tasks`, `notifications`, `billing`, public HTTP API (former gateway), NATS (request/reply + JetStream), Prisma 7 | 3000 (HTTP, prefix `/api`) |
-| Telemetry | `backend/telemetry/` (not created yet) | NestJS 12, whole `attendance` domain (clock-ins, corrections, workdays, alerts, Torre de Control), Socket.IO, NATS, Prisma 7 | to be defined (HTTP `/api/telemetry` + WebSocket `/ws`) |
+| Core (modular monolith) | `backend/core/` (docs only until T6; see migration note below) | NestJS 12, modules `auth`, `organization`, `tasks`, `notifications`, `billing`, public HTTP API (former gateway), NATS (request/reply + JetStream), Prisma 7 | 3000 (HTTP, prefix `/api`) |
+| Telemetry | `backend/telemetry/` (docs only, code not created yet) | NestJS 12, whole `attendance` domain (clock-ins, corrections, workdays, alerts, Torre de Control), Socket.IO, NATS, Prisma 7 | to be defined (HTTP `/api/telemetry` + WebSocket `/ws`) |
 | Gateway (current code) | `backend/gateway/` | NestJS 12, `@nestjs/microservices` (NATS client), joi. Becomes the HTTP layer of `core` | 3000 (HTTP, prefix `/api`) |
 | Auth (current code) | `backend/auth/` | NestJS 12, NATS transport, Prisma 7. Becomes the `auth` module of `core` | 3001 |
 | Message broker | `backend/docker-compose.yml` (`nats-server`) | NATS with JetStream | 4222 (client), 8222 (monitoring) |
