@@ -12,6 +12,7 @@ Seven services mean seven deploys, pipelines and databases to operate, plus dist
 - 2026-10-24 (user): telemetry owns the whole `attendance` domain (ClockEvent, ClockEventCorrection, Workday, Alert, tower snapshot). The core consumes its events (`workday_closed`, `alert_opened`, ...) for reporting and notifications.
 - 2026-10-24 (user): NATS JetStream stays the only domain event bus, both between core modules and between core and telemetry. The existing auth event code (envelope, `ProcessedEvent` dedup, durable consumers) is kept, and a module can be extracted later without rewriting its consumers.
 - Default: each core module keeps its own PostgreSQL schema, Prisma client, migrations and role. Database isolation between modules (STEPS S2.2b) stays enforced by roles, not only by convention.
+- 2026-10-24 (user): domain errors in `core` are transport-agnostic (e.g. `AppException` with `status` and `code`), converted from the current `AppRpcException` hierarchy. Edge filters map them: HTTP filter to `{ detail, code }`, NATS responder filter to `{ status, code, message }`. Domain code never throws `RpcException` or `HttpException`.
 - Default: modules talk to each other only through an exported module service (a public facade) or events; never through another module's Prisma client.
 - Default: telemetry exposes its own HTTP ingestion and Socket.IO tower endpoints, routed under the same public origin (reverse proxy, path `/api/v1/telemetry`, `/ws`). Telemetry verifies tokens through the NATS request `auth.token.verify`, which the core answers.
 
