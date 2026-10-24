@@ -9,8 +9,7 @@ export interface NatsErrorBody {
 }
 
 // Responder-side filter for NATS request/reply: sends `{ status, code, message }`
-// (the shape telemetry expects) to the caller. Not wired yet: the NATS
-// microservice arrives in T6.4a.
+// (the shape telemetry expects) to the caller. Bound on the NATS responders.
 @Catch()
 export class NatsErrorFilter implements ExceptionFilter {
   private readonly logger = new Logger(NatsErrorFilter.name);

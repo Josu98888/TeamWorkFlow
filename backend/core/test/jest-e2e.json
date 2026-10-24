@@ -13,6 +13,7 @@
     "^(\\.{1,2}/.*)\\.js$": "$1"
   },
   "testEnvironment": "node",
+  "setupFiles": ["<rootDir>/test/setup-env.ts"],
   "maxWorkers": 1,
   "testTimeout": 30000
 }
