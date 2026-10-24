@@ -50,7 +50,7 @@ Out of scope (do NOT implement here):
 - The HTTP controllers of a module live inside the module (`src/<module>/`), not in a shared controller layer.
 - The checks that apply to all routes (guard, actor, roles, plan, tenant status, rate limit, CSRF, CORS, error filter) live in a shared HTTP layer (`src/http/`, to create) used by every module controller.
 
-Open decision (gap): the error class the modules throw. The existing auth code throws `RpcException { status, code, message }` (the shape is kept); whether `core` keeps `RpcException` or switches to `HttpException`/own domain errors is decided in T6. Either way the HTTP body stays `{ detail, code }`.
+Errors: modules throw transport-agnostic `AppException` subclasses (`{ status, code, message }`, plus `errors` for `validation_error`) and never `RpcException` or `HttpException`. The HTTP edge maps them to `{ detail, code }` (`HttpErrorFilter`), the NATS edge to `{ status, code, message }` (`NatsErrorFilter`). See `src/common/exceptions/app.exceptions.ts`, `src/common/pipes/validation.pipe.ts`, `src/http/filters/http-exception.filter.ts`, `src/common/filters/nats-exception.filter.ts` and `src/app.config.ts` (`configureApp`).
 
 ## Event bus
 
@@ -146,7 +146,7 @@ Rules inherited from the former gateway design. They apply to every route of eve
 ### Error mapping
 
 - A global exception filter maps domain errors `{ status, code, message }` to the HTTP status with body `{ detail, code }`. Known codes from the modules include `invalid_credentials` (401), `invalid_token` (401), `forbidden` (403), `tenant_suspended` (403), `tenant_cancelled` (403), `email_taken` (409), `validation_error` (422). HTTP-layer codes: `feature_not_in_plan` (403), `rate_limited` (429), `csrf_invalid` (403).
-- Unknown errors answer 500 `{ detail: "Internal error", code: "internal_error" }`; never leak stack traces or internal messages that were not meant for clients.
+- Unknown errors answer 500 `{ detail: "Internal server error", code: "internal_error" }`; never leak stack traces or internal messages that were not meant for clients.
 - Global `ValidationPipe` (whitelist, forbid non-whitelisted, transform) on every DTO; a validation failure answers 422 `validation_error`.
 
 ## Route map
@@ -244,7 +244,7 @@ For `billing.admin.*` the `tenantId` in the path or body is a legitimate input (
 - One PostgreSQL database `teamworkflow`. Each module has its own schema (`auth`, `organization`, `tasks`, `notifications`, `billing`), its own role (`<module>_svc`), its own Prisma schema, client and migrations (see `backend/STEPS.md` S1.1 and `skills/teamworkflow-prisma-migrations`).
 - Isolation is enforced by PostgreSQL roles, not only by convention: `core` opens one connection per module with that module's role, which cannot read other schemas.
 - No foreign keys across schemas. Never read another module's tables.
-- The layout of Prisma folders per module inside `core` (for example `src/<module>/prisma/` vs a root `prisma/<module>/`) is decided in T6 (gap).
+- Prisma folders are colocated per module: `backend/core/src/<module>/prisma/`.
 
 ## Stack
 

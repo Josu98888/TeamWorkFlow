@@ -45,7 +45,7 @@ This service has no gateway in front of it, so it applies the same HTTP rules as
 - **Plan gating:** `alerts` routes need feature `alerts`; `tower` routes and the WebSocket need `tower`. Otherwise 403 `feature_not_in_plan`.
 - **Tenant status:** `suspended` or `cancelled` tenants: `owner` and `admin` have no billing/export route here, so every telemetry route answers 403 `tenant_suspended` / `tenant_cancelled` (matching the status); `supervisor` and `employee` are already rejected by `auth.token.verify`. `active` and `past_due` are unrestricted.
 - **Rate limiting:** `@nestjs/throttler`, per user (`userId`) with a generous limit because clock-in ingestion is high frequency; over the limit answers 429 `rate_limited`. Exact numbers are open (see Environment Variables).
-- **Error mapping:** a global filter maps errors `{ status, code, message }` to HTTP `{ detail, code }`; unknown errors answer 500 `{ detail: "Internal error", code: "internal_error" }`; the global `ValidationPipe` answers 422 `validation_error`.
+- **Error mapping:** a global filter maps errors `{ status, code, message }` to HTTP `{ detail, code }`; unknown errors answer 500 `{ detail: "Internal server error", code: "internal_error" }`; the global `ValidationPipe` answers 422 `validation_error`.
 - **Never** log tokens, cookies, `Authorization` headers, QR values, or coordinates together with the employee name.
 
 ### Route map (proposed shape, under `/api/v1/telemetry`)
