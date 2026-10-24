@@ -15,7 +15,7 @@ Use these skills for detailed patterns on demand. Read the `SKILL.md` before wri
 
 | Skill | Description | URL |
 |-------|-------------|-----|
-| `teamworkflow-nest` | NestJS 12 microservices: gateway, NATS patterns, DTOs, errors, Prisma access, config, tests | [SKILL.md](skills/teamworkflow-nest/SKILL.md) |
+| `teamworkflow-nest` | NestJS 12 modular monolith (`core`) and `telemetry`: module facades, HTTP layer, NATS patterns and events, DTOs, errors, Prisma access, config, tests | [SKILL.md](skills/teamworkflow-nest/SKILL.md) |
 | `teamworkflow-prisma-migrations` | Prisma Migrate on PostgreSQL: safe migrations, backfills, forward-fix | [SKILL.md](skills/teamworkflow-prisma-migrations/SKILL.md) |
 | `teamworkflow-postgres` | PostgreSQL indexing, EXPLAIN, monitoring, maintenance with Prisma | [SKILL.md](skills/teamworkflow-postgres/SKILL.md) |
 
@@ -24,13 +24,13 @@ Use these skills for detailed patterns on demand. Read the `SKILL.md` before wri
 | Skill | Description | URL |
 |-------|-------------|-----|
 | `teamworkflow-frontend` | Frontend architecture, domains, placement, design system (source of truth) | [SKILL.md](skills/teamworkflow-frontend/SKILL.md) |
-| `teamworkflow-nextjs` | Next.js 16 App Router, Server Actions, data fetching from the gateway | [SKILL.md](skills/teamworkflow-nextjs/SKILL.md) |
+| `teamworkflow-nextjs` | Next.js 16 App Router, Server Actions, data fetching from the public HTTP API | [SKILL.md](skills/teamworkflow-nextjs/SKILL.md) |
 | `teamworkflow-react` | React 19 + React Compiler, forms with `useActionState` | [SKILL.md](skills/teamworkflow-react/SKILL.md) |
 | `teamworkflow-tailwind` | Tailwind 4 tokens, `cn()`, `cva` variants | [SKILL.md](skills/teamworkflow-tailwind/SKILL.md) |
-| `teamworkflow-typescript` | Strict TypeScript, types mirroring gateway DTOs | [SKILL.md](skills/teamworkflow-typescript/SKILL.md) |
+| `teamworkflow-typescript` | Strict TypeScript, types mirroring backend DTOs | [SKILL.md](skills/teamworkflow-typescript/SKILL.md) |
 | `teamworkflow-zod` | Zod 4 validation for Server Actions, forms, searchParams | [SKILL.md](skills/teamworkflow-zod/SKILL.md) |
 | `teamworkflow-zustand` | Zustand 5 client state with App Router | [SKILL.md](skills/teamworkflow-zustand/SKILL.md) |
-| `teamworkflow-test-ui` | Playwright E2E tests, Page Objects, seeding via the gateway | [SKILL.md](skills/teamworkflow-test-ui/SKILL.md) |
+| `teamworkflow-test-ui` | Playwright E2E tests, Page Objects, seeding via the public HTTP API | [SKILL.md](skills/teamworkflow-test-ui/SKILL.md) |
 
 ### Workflow
 
@@ -46,10 +46,10 @@ When performing these actions, ALWAYS invoke the corresponding skill FIRST:
 | Action | Skill |
 |--------|-------|
 | Adding indexes or constraints to database tables | `teamworkflow-prisma-migrations` |
-| Adding or changing NATS message patterns between gateway and microservices | `teamworkflow-nest` |
+| Adding or changing NATS patterns or events between core and telemetry | `teamworkflow-nest` |
 | Analyzing query performance with EXPLAIN | `teamworkflow-postgres` |
 | App Router / Server Actions | `teamworkflow-nextjs` |
-| Changing `schema.prisma` in any microservice | `teamworkflow-prisma-migrations` |
+| Changing `schema.prisma` in any core module or in telemetry | `teamworkflow-prisma-migrations` |
 | Committing changes / creating git commits / writing commit messages | `teamworkflow-commits` |
 | Create a PR with `gh pr create` | `teamworkflow-pr` |
 | Creating endpoints, DTOs or modules in `backend/` | `teamworkflow-nest` |
