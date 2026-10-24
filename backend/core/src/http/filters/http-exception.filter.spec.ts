@@ -51,11 +51,11 @@ describe('HttpErrorFilter', () => {
   it('maps a Nest HttpException to a snake_case code', () => {
     const { filter, host, status, json } = setup();
 
-    filter.catch(new NotFoundException('Cannot GET /api/x'), host);
+    filter.catch(new NotFoundException('Cannot GET /api/v1/x'), host);
 
     expect(status).toHaveBeenCalledWith(404);
     expect(json).toHaveBeenCalledWith({
-      detail: 'Cannot GET /api/x',
+      detail: 'Cannot GET /api/v1/x',
       code: 'not_found',
     });
   });
