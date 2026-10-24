@@ -2,8 +2,8 @@
 
 ## How to Use This Guide
 
-- Start here for cross-project norms. TeamWorkFlow is a monorepo with a NestJS microservices backend and a Next.js frontend.
-- Components may have their own `AGENTS.md` with specific guidelines (today: `frontend/AGENTS.md`, Next.js agent rules written by `next dev`, and one per backend service: `backend/auth`, `backend/organization`, `backend/attendance`, `backend/tasks`, `backend/notifications`, `backend/billing`).
+- Start here for cross-project norms. TeamWorkFlow is a monorepo with a NestJS backend (a modular monolith plus a telemetry service) and a Next.js frontend. The architecture decision is in [`docs/architecture.md`](docs/architecture.md).
+- Components may have their own `AGENTS.md` with specific guidelines. Today: `frontend/AGENTS.md` (Next.js agent rules written by `next dev`) and the per-service files of the previous 7-service layout (`backend/auth`, `backend/organization`, `backend/attendance`, `backend/tasks`, `backend/notifications`, `backend/billing`). Target: `backend/core/AGENTS.md` and `backend/telemetry/AGENTS.md`. Until the service docs are rewritten (task T3 of `odd/tasks/two-service-architecture.md`), the old per-service docs stay as the detailed reference for each module's contract; where they mention a separate service, read it as a module of `core` (or of `telemetry` for `attendance`).
 - Component docs override this file when guidance conflicts.
 - The project is at an early stage: many files referenced by the skills do not exist yet. Check before importing or assuming (each skill has a "Project Status" section).
 
@@ -83,44 +83,54 @@ TeamWorkFlow is a multitenant SaaS for managing and monitoring field staff acros
 
 | Component | Location | Tech Stack | Port |
 |-----------|----------|------------|------|
-| API Gateway | `backend/gateway/` | NestJS 12, `@nestjs/microservices` (NATS client), joi | 3000 (HTTP, prefix `/api`) |
-| Auth microservice | `backend/auth/` | NestJS 12, NATS transport | 3001 |
-| Organization microservice (sites, employees, shifts) | `backend/organization/` | NestJS 12, NATS transport, Prisma 7 (docs only, not created yet) | n/a (NATS only) |
-| Attendance microservice (clock-ins, workdays, alerts, tower) | `backend/attendance/` | NestJS 12, NATS transport, Prisma 7 (docs only, not created yet) | n/a (NATS only) |
-| Tasks microservice (forms, tasks, media) | `backend/tasks/` | NestJS 12, NATS transport, Prisma 7, S3-compatible storage (docs only, not created yet) | n/a (NATS only) |
-| Notifications microservice | `backend/notifications/` | NestJS 12, NATS transport, Prisma 7, FCM (docs only, not created yet) | n/a (NATS only) |
-| Billing microservice (plans, invoices, payments) | `backend/billing/` | NestJS 12, NATS transport, Prisma 7, Mercado Pago behind `PaymentProvider` (docs only, not created yet) | n/a (NATS only) |
-| Message broker | `backend/docker-compose.yml` (`nats-server`) | NATS | 4222 (client), 8222 (monitoring) |
+| Core (modular monolith) | `backend/core/` (target; see migration note below) | NestJS 12, modules `auth`, `organization`, `tasks`, `notifications`, `billing`, public HTTP API (former gateway), NATS (request/reply + JetStream), Prisma 7 | 3000 (HTTP, prefix `/api`) |
+| Telemetry | `backend/telemetry/` (not created yet) | NestJS 12, whole `attendance` domain (clock-ins, corrections, workdays, alerts, Torre de Control), Socket.IO, NATS, Prisma 7 | to be defined (HTTP `/api/telemetry` + WebSocket `/ws`) |
+| Gateway (current code) | `backend/gateway/` | NestJS 12, `@nestjs/microservices` (NATS client), joi. Becomes the HTTP layer of `core` | 3000 (HTTP, prefix `/api`) |
+| Auth (current code) | `backend/auth/` | NestJS 12, NATS transport, Prisma 7. Becomes the `auth` module of `core` | 3001 |
+| Message broker | `backend/docker-compose.yml` (`nats-server`) | NATS with JetStream | 4222 (client), 8222 (monitoring) |
 | Frontend | `frontend/` | Next.js 16, React 19, Tailwind 4, TypeScript 5 | 3000 by default (see note below) |
-| Database | not set up yet | PostgreSQL + Prisma 7 (one shared database `teamworkflow`, one PostgreSQL schema and one role per data-owning microservice) | — |
+| Database | not set up yet | PostgreSQL + Prisma 7 (one shared database `teamworkflow`; one PostgreSQL schema, role, Prisma client and migration history per core module and for telemetry) | — |
 
-The MVP is exactly 7 services: `gateway`, `auth`, `organization`, `attendance`, `tasks`, `notifications` and `billing`. Each service folder has its own `AGENTS.md` (source of truth for that service) and a Spanish `README.md`. Naming is English everywhere in the MVP (folders, NATS patterns `<service>.<resource>.<action>`, events `t.<tenant>.<service>.<event>`, error codes, data model); the Spanish names in the root `README.md` belong to the 16-service target architecture.
+The MVP backend is exactly 2 services (see [`docs/architecture.md`](docs/architecture.md)):
+
+- `core`: a NestJS modular monolith with the modules `auth`, `organization`, `tasks`, `notifications` and `billing`, plus the public HTTP API (the former `gateway`; there is no separate gateway service). It answers NATS requests from telemetry (`auth.token.verify`, `organization.*.get`).
+- `telemetry`: the whole `attendance` domain (clock-in ingestion, corrections, workdays, real-time alerts) and the Torre de Control Socket.IO WebSocket. It exposes HTTP `/api/telemetry` and the WebSocket.
+
+A reverse proxy publishes both under one origin, routing by path (`/api` to `core`; `/api/telemetry` and `/ws` to `telemetry`), so the frontend still sees one API.
+
+> **Migration in progress.** `backend/core` and `backend/telemetry` do not exist yet. Today the code lives in `backend/gateway` and `backend/auth` as separate apps; task T6 of `odd/tasks/two-service-architecture.md` merges them into `backend/core`. The other modules (`organization`, `tasks`, `notifications`, `billing`) and `telemetry` are documented but not built. The folders `backend/organization`, `backend/attendance`, `backend/tasks`, `backend/notifications` and `backend/billing` hold design docs only; they will be folded into `backend/core` and `backend/telemetry` by task T3.
+
+Naming is English everywhere in the MVP (folders, NATS patterns `<module>.<resource>.<action>`, events `t.<tenant>.<module>.<event>`, error codes, data model); the Spanish names in the root `README.md` belong to the 16-service target architecture, which stays as the long-term reference (each core module is a natural extraction candidate).
 
 > Port clash: the gateway and `next dev` both default to 3000. Run the frontend on another port (`pnpm dev -p 3002`) until this is fixed in config.
 
 ### Architecture Rules
 
-- The frontend talks ONLY to the gateway: HTTP (`/api/...`) and, for the Torre de Control, a Socket.IO WebSocket. It never calls a microservice or NATS directly.
-- The gateway has no database and no business logic: it validates input, forwards to microservices with `ClientProxy` (`NATS_SERVICE`) and maps errors to HTTP.
-- Microservices own their data: each one has its own Prisma schema and migrations. All services share one PostgreSQL database (`teamworkflow`); each one has its own PostgreSQL schema (`auth`, `organization`, …) and its own role that cannot read other schemas (`backend/STEPS.md` S1.1). Never read another service's tables; ask the owning service over NATS.
-- Microservices throw `RpcException`; the gateway turns them into HTTP errors with the `{ detail, code }` shape (see `teamworkflow-nest`).
+- The frontend talks ONLY to the public HTTP API: `core` under `/api/...`, `telemetry` under `/api/telemetry`, and, for the Torre de Control, a Socket.IO WebSocket on `/ws` (telemetry). Both are behind one origin (reverse proxy by path). It never calls NATS directly.
+- The HTTP layer of `core` (the former gateway) has no business logic: it validates input, calls the owning module's exported service (facade) and maps errors to HTTP with the `{ detail, code }` shape (see `teamworkflow-nest`). `telemetry` verifies tokens with the NATS request `auth.token.verify`, which the `auth` module answers.
+- Module boundaries inside `core`: each module lives in `backend/core/src/<module>/` and exposes only one public service (facade). A module never imports another module's repositories, Prisma client or internal classes. Cross-domain reactions go through events; synchronous facade calls are reserved for reads needed inside a request.
+- NATS JetStream is the ONLY domain event bus, between core modules and between `core` and `telemetry`. Subjects `t.<tenant>.<module>.<event>`, one stream `<MODULE>_EVENTS` per module, durable consumers with explicit ack, `ProcessedEvent` dedup in the same transaction as the handler. Request/reply patterns are `<module>.<resource>.<action>`.
+- Data: one PostgreSQL database (`teamworkflow`). Each core module and `telemetry` owns its own PostgreSQL schema (`auth`, `organization`, `tasks`, `notifications`, `billing`, `attendance`), role, Prisma client and migrations; roles cannot read other schemas (`backend/STEPS.md` S1.1, S2.2b). No cross-schema foreign keys. Never read another module's tables or use its Prisma client; use its facade or events.
+- Errors: the `RpcException` shape `{ status, code, message }` stays for NATS request/reply (core to telemetry); the HTTP layer turns errors into `{ detail, code }`.
 - Environment variables are validated at startup with joi in `src/config/envs.ts`. Add every new variable there and to `.env.example`.
 
 ---
 
 ## Development
 
-Package manager: **pnpm** (each service has its own `package.json`; there is no root workspace yet).
+Package manager: **pnpm** (each app has its own `package.json`; there is no root workspace yet).
 
 ```bash
-# Whole backend with Docker (NATS + auth + gateway, hot reload)
+# Whole backend with Docker (today: NATS + auth + gateway, hot reload)
+# Target after task T7: NATS + PostgreSQL + core (+ telemetry once it exists)
 cd backend
 docker compose up --build
 
-# A single backend service locally
-cd backend/gateway        # or backend/auth
+# A single backend app locally
+cd backend/gateway        # or backend/auth (today)
 pnpm install
 pnpm start:dev
+# Target after task T6: cd backend/core, same commands
 
 # Frontend
 cd frontend
@@ -128,7 +138,7 @@ pnpm install
 pnpm dev -p 3002
 ```
 
-### Code Quality (per backend service)
+### Code Quality (per backend app)
 
 ```bash
 pnpm lint        # oxlint --type-aware
@@ -148,7 +158,7 @@ Follow Conventional Commits: `<type>(<scope>): <description>`
 
 **Types:** `feat`, `fix`, `docs`, `chore`, `perf`, `refactor`, `style`, `test`
 
-**Scopes:** `gateway`, `auth`, `frontend`, `prisma`, `docker`, `skills`, plus domain scopes (see `teamworkflow-commits`).
+**Scopes:** `core` (backend/core infrastructure), module scopes (`auth`, `organization`, `tasks`, `notifications`, `billing`), `telemetry`, `gateway` (until it is merged into `core`), `frontend`, `prisma`, `docker`, `architecture` (for `docs/architecture.md` and cross-service docs), `skills`, plus domain scopes (see `teamworkflow-commits`).
 
 Rules for AI agents:
 
@@ -160,7 +170,7 @@ Rules for AI agents:
 
 Before creating a PR:
 
-1. Run lint, tests and build for every service you touched.
+1. Run lint, tests and build for every app you touched.
 2. Review generated `migration.sql` files if `schema.prisma` changed.
 3. Fill the PR description following `teamworkflow-pr`.
 4. Link screenshots for UI changes.
