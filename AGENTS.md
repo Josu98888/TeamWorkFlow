@@ -83,7 +83,7 @@ TeamWorkFlow is a multitenant SaaS for managing and monitoring field staff acros
 
 | Component | Location | Tech Stack | Port |
 |-----------|----------|------------|------|
-| Core (modular monolith) | `backend/core/` (`auth` module and HTTP layer are real code; the other modules are docs only) | NestJS 12, modules `auth`, `organization`, `tasks`, `notifications`, `billing`, public HTTP API (former gateway), NATS (request/reply + JetStream), Prisma 7 | 3000 (HTTP, prefix `/api`) |
+| Core (modular monolith) | `backend/core/` (`auth` module and HTTP layer are real code; the other modules are docs only) | NestJS 12, modules `auth`, `organization`, `tasks`, `notifications`, `billing`, public HTTP API (former gateway), NATS (request/reply + JetStream), Prisma 7 | 3000 (HTTP, prefix `/api/v1`) |
 | Telemetry | `backend/telemetry/` (docs only, code not created yet) | NestJS 12, whole `attendance` domain (clock-ins, corrections, workdays, alerts, Torre de Control), Socket.IO, NATS, Prisma 7 | 3003 (HTTP `/api/v1/telemetry` + WebSocket `/ws`) |
 | Message broker | `backend/docker-compose.yml` (`nats-server`) | NATS with JetStream | 4222 (client), 8222 (monitoring) |
 | Frontend | `frontend/` | Next.js 16, React 19, Tailwind 4, TypeScript 5 | 3000 by default (see note below) |
@@ -94,7 +94,7 @@ The MVP backend is exactly 2 services (see [`docs/architecture.md`](docs/archite
 - `core`: a NestJS modular monolith with the modules `auth`, `organization`, `tasks`, `notifications` and `billing`, plus the public HTTP API (the former `gateway`; there is no separate gateway service). It answers NATS requests from telemetry (`auth.token.verify`, `organization.*.get`).
 - `telemetry`: the whole `attendance` domain (clock-in ingestion, corrections, workdays, real-time alerts) and the Torre de Control Socket.IO WebSocket. It exposes HTTP `/api/v1/telemetry` and the WebSocket.
 
-A reverse proxy publishes both under one origin, routing by path (`/api` to `core`; `/api/v1/telemetry` and `/ws` to `telemetry`), so the frontend still sees one API.
+A reverse proxy publishes both under one origin, routing by path (`/api/v1/telemetry` and `/ws` to `telemetry`, the rest of `/api/v1` to `core`; longest prefix first), so the frontend still sees one API.
 
 > **Status.** `backend/core` is real code for the `auth` module and the HTTP layer (the legacy `gateway` and `auth` apps were merged into it and removed in task T6/T7 of `odd/tasks/two-service-architecture.md`). The other modules (`organization`, `tasks`, `notifications`, `billing`) and `backend/telemetry` are documented but not built. Their design docs already live in `backend/core/src/<module>/AGENTS.md` and `backend/telemetry/AGENTS.md`.
 Naming is English everywhere in the MVP (folders, NATS patterns `<module>.<resource>.<action>`, events `t.<tenant>.<module>.<event>`, error codes, data model); the Spanish names in the root `README.md` belong to the 16-service target architecture, which stays as the long-term reference (each core module is a natural extraction candidate).
@@ -103,7 +103,7 @@ Naming is English everywhere in the MVP (folders, NATS patterns `<module>.<resou
 
 ### Architecture Rules
 
-- The frontend talks ONLY to the public HTTP API: `core` under `/api/...`, `telemetry` under `/api/v1/telemetry`, and, for the Torre de Control, a Socket.IO WebSocket on `/ws` (telemetry). Both are behind one origin (reverse proxy by path). It never calls NATS directly.
+- The frontend talks ONLY to the public HTTP API: `core` under `/api/v1/...`, `telemetry` under `/api/v1/telemetry`, and, for the Torre de Control, a Socket.IO WebSocket on `/ws` (telemetry). Both are behind one origin (reverse proxy by path). It never calls NATS directly.
 - The HTTP layer of `core` (the former gateway) has no business logic: it validates input, calls the owning module's exported service (facade) and maps errors to HTTP with the `{ detail, code }` shape (see `teamworkflow-nest`). `telemetry` verifies tokens with the NATS request `auth.token.verify`, which the `auth` module answers.
 - Module boundaries inside `core`: each module lives in `backend/core/src/<module>/` and exposes only one public service (facade). A module never imports another module's repositories, Prisma client or internal classes. Cross-domain reactions go through events; synchronous facade calls are reserved for reads needed inside a request.
 - NATS JetStream is the ONLY domain event bus, between core modules and between `core` and `telemetry`. Subjects `t.<tenant>.<module>.<event>`, one stream `<MODULE>_EVENTS` per module, durable consumers with explicit ack, `ProcessedEvent` dedup in the same transaction as the handler. Request/reply patterns are `<module>.<resource>.<action>`.
