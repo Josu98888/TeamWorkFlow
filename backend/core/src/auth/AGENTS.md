@@ -168,7 +168,30 @@ Ask before installing any dependency.
 
 ## Current Status (READ FIRST)
 
-Task T6 of `odd/tasks/two-service-architecture.md` is merging `backend/auth` (a NATS microservice with `@MessagePattern` handlers; step status in [STEPS.md](STEPS.md)) and `backend/gateway` into `backend/core`: handlers become HTTP controllers calling the same services, and `auth.token.verify` is also kept as a NATS responder for `telemetry`. Done in `src/auth/` so far: Prisma layout, crypto, wire and tenant access (T6.3); and, in T6.4a, `AuthService` (register, login, refresh, logout, verify), `TokenService`, the register/login/refresh/logout/verify DTOs, the HTTP controller (`POST /api/auth/register|login|refresh|logout`; `refresh` replaces the gateway's `refresh-token`), the `auth.token.verify` NATS responder, `JetStreamService` for publishing (`src/auth/events/`, producer side only) and `AuthModule` (exports only `AuthService`). The global guard lives in `src/http/guards/`. Not moved yet: invitations, users and password reset (T6.4b), the consumed-event processor and handlers, tenants and platform admin (T6.5).
+Task T6 of `odd/tasks/two-service-architecture.md` is merging `backend/auth` (a NATS microservice with `@MessagePattern` handlers; step status in [STEPS.md](STEPS.md)) and `backend/gateway` into `backend/core`: handlers become HTTP controllers calling the same services, and `auth.token.verify` is also kept as a NATS responder for `telemetry`. Done in `src/auth/` so far: Prisma layout, crypto, wire and tenant access (T6.3); in T6.4a, `AuthService` (register, login, refresh, logout, verify), `TokenService`, the register/login/refresh/logout/verify DTOs, the HTTP controller (`POST /api/auth/register|login|refresh|logout`; `refresh` replaces the gateway's `refresh-token`), the `auth.token.verify` NATS responder, `JetStreamService` for publishing (`src/auth/events/`, producer side only) and `AuthModule` (exports only `AuthService`); and, in T6.4b, invitations, users and password reset (services, policies, DTOs, specs and HTTP controllers, see Routes). Not moved yet: the consumed-event processor and handlers (including `employee_created` -> invitation), tenants and platform admin (T6.5).
+
+Layout (all under `src/auth/`, all providers of `AuthModule`; none is exported):
+
+- `invitations/`: `InvitationsService` (create, list, regenerate), `InvitationAcceptService`, `invitation-policy.ts`, `InvitationsController`, `dto/`.
+- `users/`: `UserChangeRoleService`, `UserAssignSitesService`, `UserDeactivateService`, `UserListRecipientsService` (internal, registered but without route or facade method yet), `user-policy.ts`, `UsersController`, `dto/`.
+- `password-reset/`: `PasswordResetCreateService`, `PasswordResetConfirmService`, `PasswordResetController`, `dto/`.
+- `service-actor.ts`: `toServiceActor()` reduces the verified actor to `{ userId, tenantId, role }` for the services.
+
+### Routes (prefix `/api`)
+
+| Method + path | Operation | Auth | Roles |
+|---|---|---|---|
+| `POST /auth/invitations` | `auth.invitation.create` | guarded | owner, admin (admin only for `supervisor`/`employee`) |
+| `GET /auth/invitations` | `auth.invitation.list` | guarded | owner, admin |
+| `POST /auth/invitations/:invitationId/regenerate` | `auth.invitation.regenerate` | guarded | owner, admin (admin only for non-admin invitations) |
+| `POST /auth/invitations/accept` | `auth.invitation.accept` | `@Public()` | - |
+| `PATCH /auth/users/:userId/role` | `auth.user.change-role` | guarded | owner, admin (see role table) |
+| `PUT /auth/users/:userId/sites` | `auth.user.assign-sites` | guarded | owner, admin |
+| `POST /auth/users/:userId/deactivate` | `auth.user.deactivate` | guarded | owner, admin (admin only for non-admin targets) |
+| `POST /auth/users/:userId/password-reset` | `auth.password-reset.create` | guarded | owner, admin (admin only for non-admin targets) |
+| `POST /auth/password-reset/confirm` | `auth.password-reset.confirm` | `@Public()` | - |
+
+Rules for these controllers: the actor comes only from `@CurrentActor()`; body DTOs (`*BodyDto`) never declare `actor` or `tenantId` (the global pipe answers 422 if a client sends them); path params are validated by DTOs (`UserIdParamDto`, `InvitationIdParamDto`: uuid, 422 otherwise); the controller builds `{ ...body, ...params, actor }` and the service applies the role and tenant rules (there is no `@Roles` decorator yet, so the services' 403 `forbidden` is the role check). `auth.user.list-recipients` has no route.
 
 NOTE (gap): `POST /auth/logout` is guarded, but `AuthService.logout` does not check that the refresh token belongs to the actor (behavior moved unchanged); decide whether to scope it. Web cookies and CSRF are not implemented: the guard reads `Authorization: Bearer` only and tokens are returned in the JSON body.
 
