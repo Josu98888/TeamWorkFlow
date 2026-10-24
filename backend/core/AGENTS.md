@@ -244,7 +244,7 @@ For `billing.admin.*` the `tenantId` in the path or body is a legitimate input (
 - One PostgreSQL database `teamworkflow`. Each module has its own schema (`auth`, `organization`, `tasks`, `notifications`, `billing`), its own role (`<module>_svc`), its own Prisma schema, client and migrations (see `backend/STEPS.md` S1.1 and `skills/teamworkflow-prisma-migrations`).
 - Isolation is enforced by PostgreSQL roles, not only by convention: `core` opens one connection per module with that module's role, which cannot read other schemas.
 - No foreign keys across schemas. Never read another module's tables.
-- Prisma folders are colocated per module: `backend/core/src/<module>/prisma/`.
+- Prisma folders are colocated per module: `backend/core/src/<module>/prisma/` (schema, migrations, generated client, gitignored). One Prisma config per module schema at the `backend/core` root (`prisma.<module>.config.ts`, e.g. `prisma.auth.config.ts`), reading `<MODULE>_DATABASE_URL`; scripts `pnpm prisma:<module>:generate` and `prisma:<module>:migrate:*` pass `--config`.
 
 ## Stack
 

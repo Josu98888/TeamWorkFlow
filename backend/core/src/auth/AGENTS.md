@@ -158,7 +158,7 @@ Out of scope (do NOT implement here):
 ## Stack
 
 - NestJS 12 module inside `backend/core`; HTTP controllers for this module's endpoints live in `src/auth/` (see `backend/core/AGENTS.md`). NATS is used for JetStream events and for the one request responder `telemetry` needs (`auth.token.verify`).
-- PostgreSQL + Prisma 7 (own `prisma/schema.prisma` and Prisma client, in the `auth` schema of the shared `teamworkflow` database, accessed with the `auth_svc` role that cannot read other schemas; see `backend/STEPS.md` S1.1). Not installed yet.
+- PostgreSQL + Prisma 7 (own `src/auth/prisma/schema.prisma`, migrations and generated client, colocated in the module; Prisma config `backend/core/prisma.auth.config.ts`, scripts `pnpm prisma:auth:generate` / `prisma:auth:migrate:dev` / `prisma:auth:migrate:deploy` / `prisma:auth:migrate:status`; `auth` schema of the shared `teamworkflow` database, accessed with the `auth_svc` role that cannot read other schemas; see `backend/STEPS.md` S1.1). `PrismaService` is private to `AuthModule`.
 - Password hashing: Argon2id (`argon2` package). Not installed yet.
 - JWT: `@nestjs/jwt`. Not installed yet.
 - Validation: `class-validator` + `class-transformer` with the global `ValidationPipe` of `core` (422 `validation_error`). Not installed yet.
@@ -265,7 +265,7 @@ Every query on users, invitations and tokens filters by `tenantId` (or by a `use
 | Variable | Description |
 |----------|-------------|
 | `NATS_SERVER` | Comma-separated NATS URLs (shared by all of `core`) |
-| `DATABASE_URL` | PostgreSQL connection string for the `teamworkflow` database, `auth` schema, `auth_svc` role (name provisional until the shared `core` config exists, T4/T6) |
+| `AUTH_DATABASE_URL` | PostgreSQL connection string for the `teamworkflow` database, `auth` schema (`?schema=auth`), `auth_svc` role |
 | `JWT_SECRET` | Access token signing secret (at least 32 random bytes) |
 | `ACCESS_TOKEN_TTL` | Default `15m` |
 | `REFRESH_TOKEN_TTL` | Default `7d` |

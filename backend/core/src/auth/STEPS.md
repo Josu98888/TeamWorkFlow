@@ -27,7 +27,7 @@ Commits: 58cd5b3, d12199f, 7bfa96b, b49f308, c915bf4, 222a607, a643466, f5c81d8,
   Check: `<test> envs` passes with cases: missing `JWT_SECRET` throws; `JWT_SECRET` of 31 chars throws; TTL defaults applied. `rg -n "JWT_SECRET=.{32,}" .env.example` is empty.
 - [x] **S1.3** `src/main.ts` becomes `NestFactory.createMicroservice` with `Transport.NATS` and `servers: envs.natsServers` (skill § Microservice bootstrap). Remove `PORT` usage.
   Check: `rg -n "NestFactory.create\(|app\.listen\([^)]" src --glob '!**/*.spec.ts'` is empty (a microservice's argument-less `app.listen()` is expected); `<build>` passes.
-- [x] **S1.4** `src/common/exceptions/app.exceptions.ts`: `RpcException` hierarchy emitting `{ status, code, message }` for every code in AGENTS § Errors (`invalid_credentials` 401, `invalid_token` 401, `forbidden` 403, `tenant_suspended` 403, `tenant_cancelled` 403, `email_taken` 409, `validation_error` 422).
+- [x] **S1.4** `src/common/exceptions/app.exceptions.ts`: `AppException` hierarchy (`backend/core/src/common/exceptions/app.exceptions.ts`, transport-agnostic, no `RpcException`) emitting `{ status, code, message }` for every code in AGENTS § Errors (`invalid_credentials` 401, `invalid_token` 401, `forbidden` 403, `tenant_suspended` 403, `tenant_cancelled` 403, `email_taken` 409, `validation_error` 422).
   Check: `<test> app.exceptions` passes; one case per code asserts the exact `status` and `code`.
 - [x] **S1.5** Global `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`) whose `exceptionFactory` throws the `validation_error` exception from S1.4.
   Check: `<test> validation` passes: a payload with an unknown field and one with a missing required field both produce `{ status: 422, code: 'validation_error' }`.
