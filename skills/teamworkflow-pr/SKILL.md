@@ -167,7 +167,7 @@ contract changes and new dependencies.}
 
 #### Backend (if applicable)
 
-- [ ] Endpoint request/response example (`core` `/api/...` or `telemetry` `/api/v1/telemetry/...`), including the `{ detail, code }` error case
+- [ ] Endpoint request/response example (`core` `/api/v1/...` or `telemetry` `/api/v1/telemetry/...`), including the `{ detail, code }` error case
 - [ ] Per touched app (`backend/core`, `backend/telemetry`): `pnpm lint` (oxlint), `pnpm build` and `pnpm test` (jest) pass
 - [ ] NATS request patterns and JetStream events changed on the producer, every consumer and the docs of both services in the same PR (teamworkflow-nest)
 - [ ] Prisma migration reviewed and applied cleanly on a fresh database (teamworkflow-prisma-migrations)

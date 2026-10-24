@@ -14,7 +14,7 @@ El backend del MVP son **2 servicios**:
 
 | Servicio | Carpeta | Contiene | Expone |
 |---|---|---|---|
-| `core` (monolito modular) | `backend/core/` | Módulos `auth`, `organization`, `tasks`, `notifications`, `billing` y la API HTTP pública (el antiguo `gateway`) | HTTP `/api`; responde peticiones NATS de telemetría (`auth.token.verify`, `organization.*.get`) |
+| `core` (monolito modular) | `backend/core/` | Módulos `auth`, `organization`, `tasks`, `notifications`, `billing` y la API HTTP pública (el antiguo `gateway`) | HTTP `/api/v1`; responde peticiones NATS de telemetría (`auth.token.verify`, `organization.*.get`) |
 | `telemetry` | `backend/telemetry/` | Todo el dominio `attendance`: ingesta de fichadas, correcciones, jornadas (`Workday`), alertas en tiempo real y Torre de Control | HTTP `/api/v1/telemetry`; WebSocket (Socket.IO) de la Torre de Control |
 
 Ambos servicios se publican bajo el mismo origen mediante un proxy inverso que enruta por path, por lo que el frontend sigue viendo una sola API.

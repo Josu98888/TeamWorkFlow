@@ -23,8 +23,8 @@ describe('e2e harness', () => {
     expect(rows[0].n).toBe(0);
   });
 
-  it('answers the HTTP error shape { detail, code } under /api', async () => {
-    const response = await core.http().get('/api/auth/invitations').expect(401);
+  it('answers the HTTP error shape { detail, code } under /api/v1', async () => {
+    const response = await core.http().get('/api/v1/auth/invitations').expect(401);
 
     expect(response.body).toEqual({
       detail: expect.any(String) as string,
@@ -45,7 +45,7 @@ describe('e2e harness', () => {
   it('answers auth.token.verify over NATS with the verified actor', async () => {
     const registered = await core
       .http()
-      .post('/api/auth/register')
+      .post('/api/v1/auth/register')
       .send({
         tenantName: 'Harness Co',
         name: 'Hana Harness',

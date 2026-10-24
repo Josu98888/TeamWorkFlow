@@ -37,7 +37,7 @@ Modelo de datos del MVP, que tiene dos servicios: `core` (monolito modular con l
 flowchart LR
   NATS(("NATS JetStream: eventos y request-reply"))
 
-  subgraph core["core: monolito modular (HTTP /api)"]
+  subgraph core["core: monolito modular (HTTP /api/v1)"]
     auth["auth: tenants, usuarios, sesiones"]
     organization["organization: sedes, empleados, turnos"]
     tasks["tasks: formularios, tareas, fotos"]

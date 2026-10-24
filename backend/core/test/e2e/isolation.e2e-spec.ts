@@ -37,7 +37,7 @@ describe('tenant isolation e2e', () => {
   async function registerOwner(tag: string) {
     const response = await core
       .http()
-      .post('/api/auth/register')
+      .post('/api/v1/auth/register')
       .send({
         tenantName: `Tenant ${tag}`,
         name: `Owner ${tag}`,
@@ -57,14 +57,14 @@ describe('tenant isolation e2e', () => {
     const invitation = (
       await core
         .http()
-        .post('/api/auth/invitations')
+        .post('/api/v1/auth/invitations')
         .set('Authorization', bearer(ownerMember.tokens))
         .send({ email, role })
         .expect(201)
     ).body as CreatedInvitation;
     const accepted = await core
       .http()
-      .post('/api/auth/invitations/accept')
+      .post('/api/v1/auth/invitations/accept')
       .send({
         token: invitation.token,
         name: 'Fake Member',
@@ -91,7 +91,7 @@ describe('tenant isolation e2e', () => {
 
     const role = await core
       .http()
-      .patch(`/api/auth/users/${targetId}/role`)
+      .patch(`/api/v1/auth/users/${targetId}/role`)
       .set('Authorization', bearer(adminA.tokens))
       .send({ role: 'admin' })
       .expect(403);
@@ -99,7 +99,7 @@ describe('tenant isolation e2e', () => {
 
     const deactivate = await core
       .http()
-      .post(`/api/auth/users/${targetId}/deactivate`)
+      .post(`/api/v1/auth/users/${targetId}/deactivate`)
       .set('Authorization', bearer(adminA.tokens))
       .expect(403);
     expect(deactivate.body).toMatchObject({ code: 'forbidden' });
@@ -115,21 +115,21 @@ describe('tenant isolation e2e', () => {
     const ownerB = await registerOwner('b');
     await core
       .http()
-      .post('/api/auth/invitations')
+      .post('/api/v1/auth/invitations')
       .set('Authorization', bearer(ownerB.tokens))
       .send({ email: 'pending-b@iso.test', role: 'employee' })
       .expect(201);
 
     const listA = await core
       .http()
-      .get('/api/auth/invitations')
+      .get('/api/v1/auth/invitations')
       .set('Authorization', bearer(ownerA.tokens))
       .expect(200);
     expect(listA.body).toEqual([]);
 
     const listB = await core
       .http()
-      .get('/api/auth/invitations')
+      .get('/api/v1/auth/invitations')
       .set('Authorization', bearer(ownerB.tokens))
       .expect(200);
     expect((listB.body as { email: string }[]).map((i) => i.email)).toEqual([

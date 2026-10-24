@@ -70,7 +70,7 @@ Each rule lives in ONE skill. Load the owner when working on its topic.
 - Other domains and `app/` import a domain ONLY through its public entry points (`index.ts`, `server.ts`, `actions.ts`). No deep imports.
 - Search before writing: reuse existing components, hooks, helpers, types, schemas, labels and constants. No duplicated code.
 - UI built with shadcn/ui + Tailwind. Colors only from semantic tokens in `app/globals.css`.
-- The frontend NEVER accesses the database — only the public HTTP API of the NestJS backend (`core` under `/api`, `telemetry` under `/api/v1/telemetry`; one origin) via `backendFetch` (teamworkflow-nextjs).
+- The frontend NEVER accesses the database — only the public HTTP API of the NestJS backend (`core` under `/api/v1`, `telemetry` under `/api/v1/telemetry`; one origin) via `backendFetch` (teamworkflow-nextjs).
 - Server-side validation is mandatory, even if the client validates too.
 
 ---

@@ -37,7 +37,7 @@ describe('session e2e', () => {
   async function register() {
     const response = await core
       .http()
-      .post('/api/auth/register')
+      .post('/api/v1/auth/register')
       .send(owner)
       .expect(201);
     return response.body as TokenPair;
@@ -61,7 +61,7 @@ describe('session e2e', () => {
     const session = (
       await core
         .http()
-        .post('/api/auth/login')
+        .post('/api/v1/auth/login')
         .send({ email: owner.email, password: owner.password })
         .expect(201)
     ).body as TokenPair;
@@ -73,7 +73,7 @@ describe('session e2e', () => {
     const refreshed = (
       await core
         .http()
-        .post('/api/auth/refresh')
+        .post('/api/v1/auth/refresh')
         .send({ refreshToken: session.refreshToken })
         .expect(201)
     ).body as TokenPair;
@@ -84,7 +84,7 @@ describe('session e2e', () => {
     expect(oldRow.revoked_at).not.toBeNull();
     const replay = await core
       .http()
-      .post('/api/auth/refresh')
+      .post('/api/v1/auth/refresh')
       .send({ refreshToken: session.refreshToken })
       .expect(401);
     expect(replay.body).toMatchObject({ code: 'invalid_token' });
@@ -92,12 +92,12 @@ describe('session e2e', () => {
     // Logout is guarded: it needs the access token as a bearer.
     await core
       .http()
-      .post('/api/auth/logout')
+      .post('/api/v1/auth/logout')
       .send({ refreshToken: refreshed.refreshToken })
       .expect(401);
     const loggedOut = await core
       .http()
-      .post('/api/auth/logout')
+      .post('/api/v1/auth/logout')
       .set('Authorization', bearer(refreshed))
       .send({ refreshToken: refreshed.refreshToken })
       .expect(201);
@@ -105,7 +105,7 @@ describe('session e2e', () => {
 
     const afterLogout = await core
       .http()
-      .post('/api/auth/refresh')
+      .post('/api/v1/auth/refresh')
       .send({ refreshToken: refreshed.refreshToken })
       .expect(401);
     expect(afterLogout.body).toMatchObject({ code: 'invalid_token' });
@@ -118,14 +118,14 @@ describe('session e2e', () => {
 
     const wrong = await core
       .http()
-      .post('/api/auth/login')
+      .post('/api/v1/auth/login')
       .send({ email: owner.email, password: 'wrong-password' })
       .expect(401);
     expect(wrong.body).toMatchObject({ code: 'invalid_credentials' });
 
     const duplicate = await core
       .http()
-      .post('/api/auth/register')
+      .post('/api/v1/auth/register')
       .send({ ...owner, tenantName: 'Other' })
       .expect(409);
     expect(duplicate.body).toMatchObject({ code: 'email_taken' });
@@ -134,12 +134,12 @@ describe('session e2e', () => {
   it('rejects a guarded route with a missing or invalid access token', async () => {
     await register();
 
-    const missing = await core.http().get('/api/auth/invitations').expect(401);
+    const missing = await core.http().get('/api/v1/auth/invitations').expect(401);
     expect(missing.body).toMatchObject({ code: 'invalid_token' });
 
     const invalid = await core
       .http()
-      .get('/api/auth/invitations')
+      .get('/api/v1/auth/invitations')
       .set('Authorization', 'Bearer not-a-jwt')
       .expect(401);
     expect(invalid.body).toMatchObject({ code: 'invalid_token' });
@@ -152,7 +152,7 @@ describe('session e2e', () => {
     const invitation = (
       await core
         .http()
-        .post('/api/auth/invitations')
+        .post('/api/v1/auth/invitations')
         .set('Authorization', bearer(registered))
         .send({ email: 'Eve@Acme.test', role: 'employee' })
         .expect(201)
@@ -162,7 +162,7 @@ describe('session e2e', () => {
     const accepted = (
       await core
         .http()
-        .post('/api/auth/invitations/accept')
+        .post('/api/v1/auth/invitations/accept')
         .send({
           token: invitation.token,
           name: 'Eve Employee',
@@ -177,13 +177,13 @@ describe('session e2e', () => {
 
     const login = await core
       .http()
-      .post('/api/auth/login')
+      .post('/api/v1/auth/login')
       .send({ email: 'eve@acme.test', password: 'eve-password-1' })
       .expect(201);
     expect(login.body).toMatchObject({ accessToken: expect.any(String) });
 
     // Single use: the same token cannot be accepted twice.
-    const again = await core.http().post('/api/auth/invitations/accept').send({
+    const again = await core.http().post('/api/v1/auth/invitations/accept').send({
       token: invitation.token,
       name: 'Eve Again',
       password: 'eve-password-2',
@@ -197,7 +197,7 @@ describe('session e2e', () => {
 
     const response = await core
       .http()
-      .post('/api/auth/invitations')
+      .post('/api/v1/auth/invitations')
       .set('Authorization', bearer(registered))
       .send({
         email: 'mallory@acme.test',

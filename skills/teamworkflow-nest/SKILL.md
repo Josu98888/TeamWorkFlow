@@ -22,7 +22,7 @@ Architecture source of truth: `docs/architecture.md` (accepted ADR). Service gui
 
 The target backend is exactly 2 services:
 
-- `core` (`backend/core`, port 3000, HTTP prefix `/api`): NestJS modular monolith with the modules `auth`, `organization`, `tasks`, `notifications`, `billing` plus the public HTTP API (the former gateway).
+- `core` (`backend/core`, port 3000, HTTP prefix `/api/v1`): NestJS modular monolith with the modules `auth`, `organization`, `tasks`, `notifications`, `billing` plus the public HTTP API (the former gateway).
 - `telemetry` (`backend/telemetry`, port 3003): the whole `attendance` domain, HTTP `/api/v1/telemetry` and Socket.IO `/ws`.
 
 A reverse proxy publishes both under one origin. Verify against the real files before writing code, because the migration is in progress.
@@ -107,7 +107,7 @@ A reverse proxy publishes both under one origin. Verify against the real files b
 ```text
 backend/
 ├── docker-compose.yml                    # exists: nats, postgres, core (+ telemetry once it exists)
-├── core/                                 # (exists since T6; port 3000, prefix /api)
+├── core/                                 # (exists since T6; port 3000, prefix /api/v1)
 │   └── src/
 │       ├── main.ts                       # HTTP app + NATS listener for the responders
 │       ├── app.module.ts
@@ -306,7 +306,7 @@ export const AUTH_PATTERNS = {
 ```typescript
 // core/src/main.ts (to create)
 const app = await NestFactory.create(AppModule);
-app.setGlobalPrefix('api');
+app.setGlobalPrefix('api/v1');
 app.useGlobalPipes(createValidationPipe());      // whitelist + forbidNonWhitelisted + transform
 app.useGlobalFilters(new HttpErrorFilter());      // domain errors -> { detail, code }
 app.enableCors({ origin: envs.webOrigin, credentials: true });
@@ -886,7 +886,7 @@ The `auth` module (`backend/core/src/auth`) owns identity, tokens and `auth.toke
 | Pattern constant | `<MODULE>_PATTERNS.<action>` (as in `AUTH_PATTERNS.tokenVerify`) | `ORGANIZATION_PATTERNS.siteGet` |
 | Env var per data owner | `<OWNER>_DATABASE_URL` | `ATTENDANCE_DATABASE_URL` |
 | DI token | UPPER_SNAKE string in `config/services.ts` | `NATS_SERVICE` |
-| URL prefix | plural kebab-case under `/api` (core) or `/api/v1/telemetry` | `/api/sites` |
+| URL prefix | plural kebab-case under `/api/v1` (core) or `/api/v1/telemetry` | `/api/v1/sites` |
 | Explicit index | `<Model>_<fields>_idx` (Prisma default) or `map: "ix_<table>_<columns>"` | see teamworkflow-postgres |
 
 ---
@@ -991,8 +991,8 @@ describe('Sites (e2e)', () => {
 
   afterAll(() => app.close());
 
-  it('GET /api/sites/not-a-uuid returns 422', () =>
-    request(app.getHttpServer()).get('/api/sites/not-a-uuid').expect(422));
+  it('GET /api/v1/sites/not-a-uuid returns 422', () =>
+    request(app.getHttpServer()).get('/api/v1/sites/not-a-uuid').expect(422));
 });
 ```
 

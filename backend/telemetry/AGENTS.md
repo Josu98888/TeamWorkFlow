@@ -30,7 +30,7 @@ Out of scope (do NOT implement here):
 - Sites, employees and shifts: owned by the `organization` module of `core`. This service keeps a local copy of shift data (see Shift data) and never reads its tables.
 - Identity, tokens and tenant status: owned by the `auth` module of `core`. This service only verifies tokens through the NATS request `auth.token.verify`.
 - Sending notifications: owned by the `notifications` module of `core`, which consumes this service's alert events.
-- Routes of other domains (auth, organization, tasks, notifications, billing): served by `core` under `/api`.
+- Routes of other domains (auth, organization, tasks, notifications, billing): served by `core` under `/api/v1`.
 - Selfie on clock-in, continuous GPS tracking, configurable thresholds, night hours, holidays, period closing, payroll export, automatic emergency replacement. Future work; ask before adding.
 
 ## HTTP and WebSocket Layer

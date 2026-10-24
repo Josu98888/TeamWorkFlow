@@ -46,7 +46,7 @@
 | Sedes, empleados y turnos | Módulo `organization` de `core` |
 | Usuarios, tokens y estado del tenant | Módulo `auth` de `core` |
 | Envío de notificaciones (push, notificaciones en la app) | Módulo `notifications` de `core` |
-| Rutas de los demás dominios | `core`, bajo `/api` |
+| Rutas de los demás dominios | `core`, bajo `/api/v1` |
 | Selfie al fichar, GPS continuo, umbrales configurables, horas nocturnas, feriados, cierre de períodos | Trabajo futuro |
 
 ## Permisos

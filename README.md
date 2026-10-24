@@ -65,10 +65,10 @@ El MVP se construye con **2 servicios de backend** (los nombres de carpetas, los
 
 | Servicio del MVP | Carpeta | Contiene | Expone |
 |---|---|---|---|
-| `core` (monolito modular) | `backend/core/` (`auth` y capa HTTP implementados; el resto de módulos por crear) | Módulos `auth`, `organization`, `tasks`, `notifications` y `billing`, y la API HTTP pública (el antiguo `gateway`) | HTTP `/api`; responde las peticiones NATS de telemetría (`auth.token.verify`, `organization.*.get`) |
+| `core` (monolito modular) | `backend/core/` (`auth` y capa HTTP implementados; el resto de módulos por crear) | Módulos `auth`, `organization`, `tasks`, `notifications` y `billing`, y la API HTTP pública (el antiguo `gateway`) | HTTP `/api/v1`; responde las peticiones NATS de telemetría (`auth.token.verify`, `organization.*.get`) |
 | `telemetry` | `backend/telemetry/` (por crear) | Todo el dominio `attendance`: ingesta de fichadas, correcciones, jornadas, alertas en tiempo real y Torre de Control | HTTP `/api/v1/telemetry`; WebSocket (Socket.IO) de la Torre de Control |
 
-Un proxy inverso publica ambos servicios bajo el mismo origen y enruta por path (`/api` hacia `core`; `/api/v1/telemetry` y `/ws` hacia `telemetry`), de modo que el frontend sigue viendo una sola API y nunca se conecta a NATS.
+Un proxy inverso publica ambos servicios bajo el mismo origen y enruta por path (`/api/v1/telemetry` y `/ws` hacia `telemetry`, el resto de `/api/v1` hacia `core`; gana el prefijo más largo), de modo que el frontend sigue viendo una sola API y nunca se conecta a NATS.
 
 Qué grupo de la arquitectura objetivo implementa cada módulo del MVP:
 
@@ -103,7 +103,7 @@ El diseño de cada módulo y su contrato (operaciones y eventos) están en el `A
 
 En la arquitectura objetivo todos los microservicios se comunican por NATS; en el MVP, los módulos de `core` se comunican por eventos de JetStream (y por fachadas para lecturas dentro de una petición) y `telemetry` se comunica con `core` por NATS. HTTP solo existe en el borde: la app, la web y servicios externos como pagos y envío de push.
 
-La app y la web ingresan por la API HTTP pública (`core` en `/api`, `telemetry` en `/api/v1/telemetry`, detrás de un proxy inverso). NATS nunca se expone a internet. La Torre de Control no se conecta a NATS desde el navegador: abre un WebSocket (Socket.IO) hacia `telemetry`, que valida el token con `auth.token.verify` (respondido por `core`), se suscribe del lado del servidor a los eventos de las sedes permitidas y reenvía los mensajes (ver [tower](#14-tower) y [Inicio de sesión y acceso](#inicio-de-sesión-y-acceso)).
+La app y la web ingresan por la API HTTP pública (`core` en `/api/v1`, `telemetry` en `/api/v1/telemetry`, detrás de un proxy inverso). NATS nunca se expone a internet. La Torre de Control no se conecta a NATS desde el navegador: abre un WebSocket (Socket.IO) hacia `telemetry`, que valida el token con `auth.token.verify` (respondido por `core`), se suscribe del lado del servidor a los eventos de las sedes permitidas y reenvía los mensajes (ver [tower](#14-tower) y [Inicio de sesión y acceso](#inicio-de-sesión-y-acceso)).
 
 Compensación de este diseño: `telemetry` mantiene conexiones WebSocket abiertas, pero separadas de la API de `core`. Si eso se convierte en un problema de carga, la conexión puede pasar a un servicio `tower` dedicado sin cambiar el frontend. Si algún día muchos clientes necesitaran conectarse directamente a NATS, un auth callout de NATS es una opción; hoy no se usa.
 
@@ -349,7 +349,7 @@ El modelo de cada servicio (diagramas entidad-relación y el SQL de referencia o
 
 ### Inicio de sesión y acceso
 
-1. El usuario envía su correo y contraseña a la API de `core` (`/api`), que invoca `auth.login` del módulo `auth`.
+1. El usuario envía su correo y contraseña a la API de `core` (`/api/v1`), que invoca `auth.login` del módulo `auth`.
 2. `auth` valida las credenciales (bloqueando tras 5 intentos fallidos) y devuelve un token de acceso (15 minutos) y un token de refresco (7 días).
 3. En cada solicitud, la capa HTTP de `core` (y `telemetry`, por NATS) llama a `auth.token.verify` y obtiene `userId`, `tenantId`, `role`, `siteIds` (solo supervisores), `tenantStatus`, `plan` y `features`.
 4. Cuando el token de acceso vence, el cliente llama a `auth.token.refresh`, que rota el token de refresco.
