@@ -11,7 +11,7 @@
 | Tema | Decisión |
 |------|----------|
 | Forma | Un servicio NestJS 12 con un `Module` por dominio en `src/<módulo>/`. |
-| Servicios del backend | Dos: `core` y [`telemetry`](../telemetry/README.md) (todo el dominio `attendance`). Ambos se publican bajo el mismo origen con un proxy inverso por path: `/api/...` a `core`, `/api/telemetry/...` y `/ws` a `telemetry`. |
+| Servicios del backend | Dos: `core` y [`telemetry`](../telemetry/README.md) (todo el dominio `attendance`). Ambos se publican bajo el mismo origen con un proxy inverso por path: `/api/...` a `core`, `/api/v1/telemetry/...` y `/ws` a `telemetry`. |
 | Fronteras entre módulos | Cada módulo exporta solo un servicio público (fachada). Nunca se importa el cliente de Prisma ni las clases internas de otro módulo. |
 | Reacciones entre dominios | Por eventos, no por llamadas directas. Las llamadas a una fachada se reservan para lecturas que un request necesita. |
 | Bus de eventos | NATS JetStream es el único bus de eventos de dominio, dentro de `core` y entre `core` y `telemetry`. |

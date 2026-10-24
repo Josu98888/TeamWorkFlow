@@ -6,7 +6,7 @@ Guide for coding agents working on `backend/core`. Read it fully before making c
 
 `core` is the modular monolith of TeamWorkFlow, a multitenant SaaS for managing field staff across many sites. It contains the modules `auth`, `organization`, `tasks`, `notifications` and `billing`, and it is the public HTTP API (the role of the former `gateway`). The web app and the mobile app talk to it; NATS is never exposed to the internet. If this service has a bug, every tenant is exposed: treat every change as security-sensitive.
 
-The other backend service is `telemetry` (`backend/telemetry/AGENTS.md`): the whole `attendance` domain (clock-in ingestion, corrections, workdays, alerts, Torre de Control WebSocket). Both are published under one public origin by a reverse proxy: `/api/...` goes to `core`, `/api/telemetry/...` and `/ws` go to `telemetry`. `core` never registers routes under `/api/telemetry`.
+The other backend service is `telemetry` (`backend/telemetry/AGENTS.md`): the whole `attendance` domain (clock-in ingestion, corrections, workdays, alerts, Torre de Control WebSocket). Both are published under one public origin by a reverse proxy: `/api/...` goes to `core`, `/api/v1/telemetry/...` and `/ws` go to `telemetry`. `core` never registers routes under `/api/v1/telemetry`.
 
 ### Current status (READ FIRST)
 
@@ -151,7 +151,7 @@ Rules inherited from the former gateway design. They apply to every route of eve
 
 ## Route map
 
-Target map built from the operations documented in each module's `AGENTS.md`. Paths are the proposed REST shape under `/api/v1` (versioning vs the ADR's unversioned `/api/telemetry` is an open point); the operation name and the auth column are the contract. "any" means any authenticated tenant role (the module decides the rest). "billing" marks routes that stay open to `owner`/`admin` while the tenant is suspended or cancelled (see Tenant status). The attendance routes (clock events, workdays, alerts, tower snapshot) are NOT in `core`: they live in `backend/telemetry/AGENTS.md`.
+Target map built from the operations documented in each module's `AGENTS.md`. Paths are the proposed REST shape under `/api/v1`; the operation name and the auth column are the contract. "any" means any authenticated tenant role (the module decides the rest). "billing" marks routes that stay open to `owner`/`admin` while the tenant is suspended or cancelled (see Tenant status). The attendance routes (clock events, workdays, alerts, tower snapshot) are NOT in `core`: they live in `backend/telemetry/AGENTS.md`.
 
 ### auth
 
