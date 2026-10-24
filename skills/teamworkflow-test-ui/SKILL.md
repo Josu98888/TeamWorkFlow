@@ -28,7 +28,7 @@ The frontend is a fresh Next.js scaffold. **Playwright is not installed and no t
 - Check `frontend/package.json` for `@playwright/test`. If missing, do NOT write tests yet: ask the user to set up Playwright (see "Setup").
 - Before creating a Page Object or helper, search `frontend/tests/` for an existing one.
 - Auth is not implemented yet. Tests that need a logged-in user wait for it (`// TODO(auth):`).
-- Test data comes from the public HTTP API of the NestJS backend (`core`: global prefix `/api`, port 3000; `telemetry` routes under `/api/v1/telemetry`, port 3003; today `core` is still `backend/gateway`). NEVER run E2E tests against a production or shared database.
+- Test data comes from the public HTTP API of the NestJS backend (`core`: global prefix `/api`, port 3000; `telemetry` routes under `/api/v1/telemetry`, port 3003). NEVER run E2E tests against a production or shared database.
 
 ---
 
@@ -408,7 +408,7 @@ export async function deleteTeam(api: APIRequestContext, id: string) {
 }
 ```
 
-- Field names and endpoints mirror the backend controllers and DTOs (camelCase). Check `backend/core/src/` (or `backend/telemetry/src/`; until T6 `backend/gateway/src/`) before writing a helper. Failed requests return `{ detail, code }` (teamworkflow-nest): include both in the thrown error.
+- Field names and endpoints mirror the backend controllers and DTOs (camelCase). Check `backend/core/src/` (or `backend/telemetry/src/`) before writing a helper. Failed requests return `{ detail, code }` (teamworkflow-nest): include both in the thrown error.
 - Clean up what each test creates (`afterEach` / `afterAll`), or rely on a test DB reset if the backend provides one.
 - NEVER hardcode IDs of existing records.
 

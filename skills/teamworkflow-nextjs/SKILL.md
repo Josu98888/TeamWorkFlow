@@ -19,7 +19,7 @@ allowed-tools: Read, Edit, Write, Glob, Grep, Bash, WebFetch, WebSearch, Task
 
 ## Project Status (READ FIRST)
 
-The frontend is a fresh Next.js scaffold. The NestJS backend already exists in `backend/`. The target is 2 services behind one origin: `core` (public HTTP API under `/api`, modular monolith) and `telemetry` (`/api/v1/telemetry` and the `/ws` WebSocket). Today `core` is still the separate `backend/gateway` + `backend/auth` apps and `telemetry` has no code yet (see teamworkflow-nest).
+The frontend is a fresh Next.js scaffold. The NestJS backend already exists in `backend/`. The target is 2 services behind one origin: `core` (public HTTP API under `/api`, modular monolith) and `telemetry` (`/api/v1/telemetry` and the `/ws` WebSocket). `core` is real code (`auth` module and HTTP layer; the legacy `backend/gateway` and `backend/auth` apps were removed) and `telemetry` has no code yet (see teamworkflow-nest).
 Most files in this skill **do not exist yet**.
 
 - Before importing any module or library, check it exists (Glob/Grep, `frontend/package.json`).
@@ -161,7 +161,7 @@ export const authToken = process.env.BACKEND_AUTH_TOKEN; // exported secret
 
 When asked to implement a feature like "list projects" or "create a project":
 
-1. **Backend contract.** Grep `backend/core/src/<module>/` (or `backend/telemetry/src/<module>/` for attendance resources) for the controller and DTOs of the resource, and read the route map in `backend/core/AGENTS.md` / `backend/telemetry/AGENTS.md`; until T6 the code is in `backend/gateway/src/<domain>/` and `backend/auth/src/` (if it does not exist yet, agree the contract with the backend first, see teamworkflow-nest). Note paths, methods and field names.
+1. **Backend contract.** Grep `backend/core/src/<module>/` (or `backend/telemetry/src/<module>/` for attendance resources) for the controller and DTOs of the resource, and read the route map in `backend/core/AGENTS.md` / `backend/telemetry/AGENTS.md` (if it does not exist yet, agree the contract with the backend first, see teamworkflow-nest). Note paths, methods and field names.
 2. **Types** → `domains/<domain>/types.ts`, mirroring the backend response DTOs.
 3. **Backend calls** → `domains/<domain>/api.ts`, using `backendFetch`.
 4. **Server public API** → export what `app/` needs from `domains/<domain>/server.ts`.
