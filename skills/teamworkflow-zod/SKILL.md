@@ -58,7 +58,7 @@ Export schemas used outside the domain through `index.ts` (schemas are client-sa
 
 ## Mirroring DTO Constraints
 
-Before writing a schema, Grep `backend/core/src/<module>/dto/` (or `backend/telemetry/src/<module>/dto/`; until T6 `backend/gateway/src/<domain>/` and `backend/auth/src/`) for the request DTO (class-validator decorators) and copy its constraints. If the DTO does not exist yet, agree the contract with the backend first (teamworkflow-nest).
+Before writing a schema, Grep `backend/core/src/<module>/dto/` (or `backend/telemetry/src/<module>/dto/`) for the request DTO (class-validator decorators) and copy its constraints. If the DTO does not exist yet, agree the contract with the backend first (teamworkflow-nest).
 
 | class-validator | Zod 4 |
 |-----------------|-------|
