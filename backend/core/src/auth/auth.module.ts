@@ -4,7 +4,9 @@ import { envs } from '../config';
 import { AuthTokenResponder } from './auth-token.responder';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { ConsumedEventProcessor } from './events/consumed-event.processor';
 import { EventsModule } from './events/events.module';
+import { EmployeeCreatedHandlers } from './invitations/employee-created.handlers';
 import { InvitationAcceptService } from './invitations/invitation-accept.service';
 import { InvitationsController } from './invitations/invitations.controller';
 import { InvitationsService } from './invitations/invitations.service';
@@ -12,6 +14,9 @@ import { PasswordResetConfirmService } from './password-reset/password-reset-con
 import { PasswordResetCreateService } from './password-reset/password-reset-create.service';
 import { PasswordResetController } from './password-reset/password-reset.controller';
 import { PrismaService } from './prisma/prisma.service';
+import { TenantPlanHandlers } from './tenants/tenant-plan.handlers';
+import { TenantPurgeHandlers } from './tenants/tenant-purge.handlers';
+import { TenantStatusBillingHandlers } from './tenants/tenant-status.billing.handlers';
 import { TokenService } from './token.service';
 import { UserAssignSitesService } from './users/user-assign-sites.service';
 import { UserChangeRoleService } from './users/user-change-role.service';
@@ -49,6 +54,11 @@ import { UsersController } from './users/users.controller';
     UserListRecipientsService,
     PasswordResetCreateService,
     PasswordResetConfirmService,
+    ConsumedEventProcessor,
+    EmployeeCreatedHandlers,
+    TenantStatusBillingHandlers,
+    TenantPlanHandlers,
+    TenantPurgeHandlers,
   ],
   exports: [AuthService],
 })

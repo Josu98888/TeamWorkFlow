@@ -14,6 +14,7 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "oxlint --type-aware src/ test/",
+    "seed:platform-admin": "tsc -p tsconfig.build.json && node dist/auth/platform-admin/seed-platform-admin.main.js",
     "prisma:auth:generate": "prisma generate --config prisma.auth.config.ts",
     "prisma:auth:migrate:dev": "prisma migrate dev --config prisma.auth.config.ts",
     "prisma:auth:migrate:deploy": "prisma migrate deploy --config prisma.auth.config.ts",
