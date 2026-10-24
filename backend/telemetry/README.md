@@ -13,7 +13,7 @@
 | Tema | Decisión |
 |------|----------|
 | Forma | Un servicio NestJS 12 independiente con cuatro módulos internos: `clock-ins`, `workdays`, `alerts`, `tower`. |
-| Entradas públicas | HTTP en `/api/telemetry` y WebSocket Socket.IO en `/ws`, bajo el mismo origen que `core` mediante un proxy inverso. |
+| Entradas públicas | HTTP en `/api/v1/telemetry` y WebSocket Socket.IO en `/ws`, bajo el mismo origen que `core` mediante un proxy inverso. |
 | Autenticación | Verifica cada request y cada conexión WebSocket con la petición NATS `auth.token.verify`, que responde el módulo `auth` de `core`. |
 | Fichadas | `in`, `out`, `break_start`, `break_end`, por `gps`, `qr` o `manual` (manual lo crea un supervisor con motivo). |
 | Ventana de entrada | Una entrada se acepta desde 60 min antes del inicio del turno hasta el fin del turno. Fuera de esa ventana: `no_matching_shift`, y un supervisor puede cargar una fichada manual. |
@@ -114,7 +114,7 @@ sequenceDiagram
   participant T as telemetry
   participant C as core
   participant Web as Navegador
-  App->>T: POST /api/telemetry/clock-events
+  App->>T: POST /api/v1/telemetry/clock-events
   T->>C: auth.token.verify (NATS)
   C-->>T: actor
   T--)T: t.{tenant}.attendance.site_summary_updated
@@ -146,7 +146,7 @@ Con `t.{tenant}.billing.data_retention_expired` (90 días después de la cancela
 
 Las operaciones se llaman `attendance.<recurso>.<accion>` y no llevan tenant. Los eventos usan `t.<tenant>.attendance.<evento>` (JetStream, stream `ATTENDANCE_EVENTS`). El detalle de payloads está en [AGENTS.md](AGENTS.md#nats-contract).
 
-**Operaciones (expuestas por HTTP bajo `/api/telemetry`; las rutas son una propuesta, ver [AGENTS.md](AGENTS.md#route-map-proposed-shape-under-apitelemetry))**
+**Operaciones (expuestas por HTTP bajo `/api/v1/telemetry`; las rutas son una propuesta, ver [AGENTS.md](AGENTS.md#route-map-proposed-shape-under-apiv1telemetry))**
 
 | Operación | Quién la usa | Para qué |
 |---------|----------------|----------|
@@ -218,5 +218,5 @@ La carpeta contiene solo documentación (`AGENTS.md` y este `README.md`). Falta,
 - [ ] Implementar los módulos `clock-ins`, `workdays`, `alerts` y `tower`.
 - [ ] Implementar la capa HTTP (guard con `auth.token.verify`, roles, plan, estado del tenant) y la Torre de Control por Socket.IO.
 - [ ] Implementar los consumidores de eventos de `organization`, `auth` y `billing`.
-- [ ] Sumar el servicio a `backend/docker-compose.yml` y las rutas del proxy inverso (`/api/telemetry`, `/ws`).
+- [ ] Sumar el servicio a `backend/docker-compose.yml` y las rutas del proxy inverso (`/api/v1/telemetry`, `/ws`).
 - [ ] Crear los tests unitarios y la carpeta `test/` para e2e.

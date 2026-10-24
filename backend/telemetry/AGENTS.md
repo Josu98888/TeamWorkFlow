@@ -12,7 +12,7 @@ It is one NestJS 12 app with four internal modules: `clock-ins`, `workdays`, `al
 
 Public entrypoints (same public origin as `core`, routed by a reverse proxy; see `docs/architecture.md`):
 
-- HTTP under `/api/telemetry` (clock-in ingestion, corrections, workdays, alerts, tower snapshot).
+- HTTP under `/api/v1/telemetry` (clock-in ingestion, corrections, workdays, alerts, tower snapshot).
 - Socket.IO WebSocket of the Torre de Control (path `/ws`), moved here from the former gateway.
 
 Responsibilities:
@@ -48,7 +48,7 @@ This service has no gateway in front of it, so it applies the same HTTP rules as
 - **Error mapping:** a global filter maps errors `{ status, code, message }` to HTTP `{ detail, code }`; unknown errors answer 500 `{ detail: "Internal error", code: "internal_error" }`; the global `ValidationPipe` answers 422 `validation_error`.
 - **Never** log tokens, cookies, `Authorization` headers, QR values, or coordinates together with the employee name.
 
-### Route map (proposed shape, under `/api/telemetry`)
+### Route map (proposed shape, under `/api/v1/telemetry`)
 
 The operation names are the stable contract; the paths are proposed and move from the former gateway route map. "any" means any authenticated tenant role (the domain decides the rest). The documented caller for manual, correct, acknowledge, resolve and snapshot is supervisor/admin; `owner` is also let through (owner can do everything an admin can); confirm if this should change.
 
@@ -196,7 +196,7 @@ First tasks, in order (ask before each install):
 - [ ] Modules `clock-ins`, `workdays`, `alerts`, `tower`, with their HTTP controllers and operation-name constants.
 - [ ] Consumers of `organization`, `auth` and `billing` events, and the periodic check.
 - [ ] Socket.IO Torre de Control (moved from the former gateway design).
-- [ ] Add the service to `backend/docker-compose.yml` and the reverse-proxy routes (`/api/telemetry`, `/ws`).
+- [ ] Add the service to `backend/docker-compose.yml` and the reverse-proxy routes (`/api/v1/telemetry`, `/ws`).
 
 ## NATS Contract
 
