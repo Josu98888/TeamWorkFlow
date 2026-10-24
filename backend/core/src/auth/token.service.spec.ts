@@ -159,7 +159,10 @@ describe('TokenService', () => {
 
       await service.issueTokenPair(
         { id: USER_ID, tenantId: TENANT_ID, role: 'OWNER' },
-        { refreshToken: { create: txCreate } },
+        // Only `refreshToken.create` is used; the full delegate is not needed.
+        {
+          refreshToken: { create: txCreate },
+        } as unknown as Parameters<TokenService['issueTokenPair']>[1],
       );
 
       expect(txCreate).toHaveBeenCalledTimes(1);
