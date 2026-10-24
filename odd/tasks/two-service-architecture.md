@@ -48,6 +48,7 @@ Seven services mean seven deploys, pipelines and databases to operate, plus dist
 
 ## Delivery
 - Strategy: `ask-on-risk`. Docs tasks T1–T5 are large but passive; code tasks T6–T7 likely exceed ~400 lines (mostly moves).
+- Chain strategy (user, 2026-10-24): `feature-branch-chain`. Slice PRs chain onto `feat/backend/auth`; the whole branch merges into `develop` at the end, never into `main`.
 
 ## Progress
 - Created 2026-10-24. T2 done. T3 done. T4 partial (only `.env.example` pending, user-owned). T5 done. Next: T6.
