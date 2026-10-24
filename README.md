@@ -2,7 +2,7 @@
 
 6 oct 2026 · @josu
 
-> Documentos relacionados: [AGENTS.md](AGENTS.md) (guía para agentes y convenciones del repositorio) · [docs/architecture.md](docs/architecture.md) (decisión de arquitectura del MVP: monolito modular + telemetría) · [docs/database.md](docs/database.md) (modelo de datos con diagramas) · [backend/auth/AGENTS.md](backend/auth/AGENTS.md) (fuente de verdad del servicio `auth`).
+> Documentos relacionados: [AGENTS.md](AGENTS.md) (guía para agentes y convenciones del repositorio) · [docs/architecture.md](docs/architecture.md) (decisión de arquitectura del MVP: monolito modular + telemetría) · [docs/database.md](docs/database.md) (modelo de datos con diagramas) · [backend/core/AGENTS.md](backend/core/AGENTS.md) (reglas del servicio `core` y de sus módulos; fuente de verdad del módulo `auth`: [backend/core/src/auth/AGENTS.md](backend/core/src/auth/AGENTS.md)).
 
 ## Estado actual del repositorio
 
