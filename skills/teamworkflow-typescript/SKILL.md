@@ -2,7 +2,7 @@
 name: teamworkflow-typescript
 description: >
   TypeScript strict patterns for the TeamWorkFlow frontend.
-  Trigger: When writing or refactoring TypeScript in frontend/ (.ts/.tsx): types mirroring NestJS gateway
+  Trigger: When writing or refactoring TypeScript in frontend/ (.ts/.tsx): types mirroring NestJS backend
   DTOs, const values + derived types, unions, generics, type guards, removing any, tightening unknown,
   discriminated unions and exhaustiveness.
   Placement and no-duplication rules come from teamworkflow-frontend (source of truth).
@@ -37,7 +37,7 @@ The frontend is a fresh Next.js scaffold. Most domain types and helpers in this 
 - NEVER `@ts-ignore`. If unavoidable, use `@ts-expect-error` with a comment explaining why.
 - NEVER non-null assertions (`value!`) without a comment justifying why the value cannot be null.
 - `type` by default. `interface` only for declaration merging / module augmentation.
-- Types for backend data mirror the NestJS gateway response DTOs exactly (names, nullability, nesting).
+- Types for backend data mirror the NestJS backend response DTOs (`core` and `telemetry`) exactly (names, nullability, nesting).
 - Untrusted external data is validated with Zod, not hand-written guards.
 - `import type` for type-only imports.
 - Every union handled in a `switch` or map must be exhaustive.
@@ -48,7 +48,7 @@ The frontend is a fresh Next.js scaffold. Most domain types and helpers in this 
 
 | What | Location |
 |------|----------|
-| Backend data types (mirror gateway DTOs) | `domains/<domain>/types.ts` |
+| Backend data types (mirror backend DTOs) | `domains/<domain>/types.ts` |
 | Runtime values for backend enums (`as const` arrays) | `domains/<domain>/types.ts`, next to their type |
 | Input types from Zod | `domains/<domain>/schemas.ts` via `z.infer` |
 | Component props | Inline or local `type Props` in the component file |
@@ -59,9 +59,9 @@ Types used outside the domain are exported through the domain's `index.ts` (`exp
 
 ---
 
-## Mirroring Gateway DTOs (REQUIRED)
+## Mirroring Backend DTOs (REQUIRED)
 
-Before writing a domain type, Grep `backend/gateway/src/<domain>/dto/` for the response DTO and mirror it (see teamworkflow-nest). If it does not exist yet, agree the contract first; never invent fields.
+Before writing a domain type, Grep `backend/core/src/<module>/dto/` (or `backend/telemetry/src/<module>/dto/`; until T6 `backend/gateway/src/<domain>/` and `backend/auth/src/`) for the response DTO and mirror it (see teamworkflow-nest). If it does not exist yet, agree the contract first; never invent fields.
 
 | NestJS / Prisma (JSON) | TypeScript |
 |------------------------|------------|
@@ -69,7 +69,7 @@ Before writing a domain type, Grep `backend/gateway/src/<domain>/dto/` for the r
 | `number`, `Decimal` | `number` (Decimal serializes as `string`; check the API response) |
 | `boolean` | `boolean` |
 | `Date` (ISO-8601), uuid | `string` (JSON has no Date type) |
-| optional DTO field (`@IsOptional()`) | `X \| null` (the gateway sends `null`, the key is present) |
+| optional DTO field (`@IsOptional()`) | `X \| null` (the backend sends `null`, the key is present) |
 | `X[]` | `X[]` |
 | string-literal union / enum | union derived from an `as const` array |
 | Nested object DTO | Separate named type |
@@ -103,7 +103,7 @@ type Project = {
 };
 ```
 
-- Keep field names exactly as the API returns them (camelCase from the gateway).
+- Keep field names exactly as the API returns them (camelCase from the backend).
 - Convert dates to `Date` only at the point of use (formatting), never in the domain type.
 - If a DTO serializes with `@Exclude()` / `@Expose()` or an interceptor that strips `null`, fields can be absent: then use `field?: X`. Check the DTO and interceptors.
 
@@ -256,7 +256,7 @@ const data = JSON.parse(raw) as Project;   // unvalidated cast of untrusted data
 ```
 
 Validate with Zod at every untrusted boundary: webhooks, `JSON.parse`, `localStorage`, `searchParams`, `FormData`, third-party responses.
-Responses from our own NestJS gateway are typed at the single boundary `backendFetch<T>` (see teamworkflow-nextjs).
+Responses from our own NestJS backend are typed at the single boundary `backendFetch<T>` (see teamworkflow-nextjs).
 
 ---
 
@@ -405,7 +405,7 @@ import { Project } from "./types";
 - [ ] `strict` enabled in `tsconfig.json`
 - [ ] No `any`, no `enum`, no `@ts-ignore`
 - [ ] No `as` casts except `as const` and typed boundaries; no unjustified `!`
-- [ ] Domain types mirror gateway DTOs: `X | null` for Optional, `string` for dates/UUIDs
+- [ ] Domain types mirror backend DTOs: `X | null` for Optional, `string` for dates/UUIDs
 - [ ] Runtime values as `as const` arrays with derived types (single source)
 - [ ] Types derived (`Pick`, `Omit`, `z.infer`, indexed access), not redefined
 - [ ] Untrusted data validated with Zod

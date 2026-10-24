@@ -367,7 +367,7 @@ import { useActionState } from "react";
 import { submitProject, type ProjectFormState } from "../actions";
 
 // The form lives inside a team page, so the team is known; the owner is NOT sent:
-// the gateway takes it from the authenticated user (never trust an owner id from the client).
+// the backend takes it from the authenticated user (never trust an owner id from the client).
 type Props = { teamId: string };
 
 export function ProjectForm({ teamId }: Props) {
