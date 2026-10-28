@@ -6,6 +6,7 @@ import { GeofenceService } from '../geofence/geofence.service';
 import { EmployeeCacheService } from '../geofence/employee-cache.service';
 import { ShiftSnapshotService } from '../shifts/shift-snapshot.service';
 import { TenantStateService } from '../tenants/tenant-state.service';
+import { WorkdaysService } from '../workdays/workdays.service';
 import {
   ClockEventNotFoundException,
   ClockTooOldException,
@@ -64,6 +65,10 @@ describe('ClockInsService', () => {
     hasFeature: jest.fn(),
   };
 
+  const mockWorkdays = {
+    recomputeWorkday: jest.fn(),
+  };
+
   const mockActor: VerifiedActor = {
     userId: 'user-1',
     tenantId: 'tenant-1',
@@ -99,6 +104,7 @@ describe('ClockInsService', () => {
         { provide: EmployeeCacheService, useValue: mockEmployeeCache },
         { provide: ShiftSnapshotService, useValue: mockShifts },
         { provide: TenantStateService, useValue: mockTenantState },
+        { provide: WorkdaysService, useValue: mockWorkdays },
       ],
     }).compile();
 

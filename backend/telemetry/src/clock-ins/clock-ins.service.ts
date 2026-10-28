@@ -6,6 +6,7 @@ import { GeofenceService } from '../geofence/geofence.service';
 import { EmployeeCacheService } from '../geofence/employee-cache.service';
 import { ShiftSnapshotService } from '../shifts/shift-snapshot.service';
 import { TenantStateService } from '../tenants/tenant-state.service';
+import { WorkdaysService } from '../workdays/workdays.service';
 import {
   ClockEventNotFoundException,
   ClockTooOldException,
@@ -53,6 +54,7 @@ export class ClockInsService {
     private readonly employeeCache: EmployeeCacheService,
     private readonly shifts: ShiftSnapshotService,
     private readonly tenantState: TenantStateService,
+    private readonly workdaysService: WorkdaysService,
   ) {}
 
   /**
@@ -213,6 +215,9 @@ export class ClockInsService {
       },
     );
 
+    // 7. Recompute affected workday
+    await this.workdaysService.recomputeWorkday(actor.tenantId, matchedShiftId);
+
     return event;
   }
 
@@ -265,6 +270,9 @@ export class ClockInsService {
         occurredAt: event.receivedAt.toISOString(),
       },
     );
+
+    // 7. Recompute affected workday
+    await this.workdaysService.recomputeWorkday(actor.tenantId, shift.shiftId);
 
     return event;
   }
@@ -334,6 +342,8 @@ export class ClockInsService {
         occurredAt: new Date().toISOString(),
       },
     );
+
+    await this.workdaysService.recomputeWorkday(actor.tenantId, updated.shiftId);
 
     return updated;
   }
