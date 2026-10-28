@@ -1,0 +1,193 @@
+// Data model of the telemetry / attendance service (AGENTS.md § Data Model).
+// Lives in the `attendance` PostgreSQL schema of the shared `teamworkflow` database.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "./generated"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ClockEventType {
+  IN
+  OUT
+  BREAK_START
+  BREAK_END
+
+  @@map("clock_event_type")
+}
+
+enum ClockEventMethod {
+  GPS
+  QR
+  MANUAL
+
+  @@map("clock_event_method")
+}
+
+enum WorkdayStatus {
+  OPEN
+  CLOSED
+  MISSING_CLOCK_OUT
+
+  @@map("workday_status")
+}
+
+enum AlertType {
+  LATE
+  UNCOVERED_POST
+  OUT_OF_GEOFENCE
+  MISSING_CLOCK_OUT
+
+  @@map("alert_type")
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+
+  @@map("alert_status")
+}
+
+enum ShiftStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+
+  @@map("shift_status")
+}
+
+// Local snapshot of shifts replicated from the organization module in core.
+model ShiftSnapshot {
+  shiftId     String      @id @map("shift_id") @db.Uuid
+  tenantId    String      @map("tenant_id") @db.Uuid
+  siteId      String      @map("site_id") @db.Uuid
+  postId      String      @map("post_id") @db.Uuid
+  employeeId  String?     @map("employee_id") @db.Uuid
+  startsAt    DateTime    @map("starts_at") @db.Timestamptz(6)
+  endsAt      DateTime    @map("ends_at") @db.Timestamptz(6)
+  status      ShiftStatus @default(SCHEDULED)
+  version     Int         @default(1)
+
+  @@index([tenantId, siteId], map: "idx_shift_snapshot_tenant_site")
+  @@index([status, startsAt], map: "idx_shift_snapshot_status_starts_at")
+  @@map("shift_snapshots")
+}
+
+// Raw and verified clock events (in/out/breaks) created by workers or supervisors.
+model ClockEvent {
+  id              String           @id @default(uuid(7)) @db.Uuid
+  tenantId        String           @map("tenant_id") @db.Uuid
+  shiftId         String           @map("shift_id") @db.Uuid
+  employeeId      String           @map("employee_id") @db.Uuid
+  siteId          String           @map("site_id") @db.Uuid
+  type            ClockEventType
+  method          ClockEventMethod
+  latitude        Float?
+  longitude       Float?
+  distanceMeters  Float?           @map("distance_meters")
+  outOfGeofence   Boolean          @default(false) @map("out_of_geofence")
+  clientEventId   String           @map("client_event_id")
+  deviceTime      DateTime         @map("device_time") @db.Timestamptz(6)
+  receivedAt      DateTime         @default(now()) @map("received_at") @db.Timestamptz(6)
+  createdByUserId String?          @map("created_by_user_id") @db.Uuid
+  reason          String?
+
+  corrections     ClockEventCorrection[]
+  alerts          Alert[]
+
+  @@unique([tenantId, clientEventId], map: "uq_clock_event_tenant_client_event")
+  @@index([tenantId, shiftId, deviceTime], map: "idx_clock_event_lookup")
+  @@index([tenantId, employeeId, deviceTime], map: "idx_clock_event_employee")
+  @@map("clock_events")
+}
+
+// Non-destructive audit trail of supervisor corrections.
+model ClockEventCorrection {
+  id                String     @id @default(uuid(7)) @db.Uuid
+  tenantId          String     @map("tenant_id") @db.Uuid
+  clockEventId      String     @map("clock_event_id") @db.Uuid
+  before            Json
+  after             Json
+  reason            String
+  correctedByUserId String     @map("corrected_by_user_id") @db.Uuid
+  createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  clockEvent        ClockEvent @relation(fields: [clockEventId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, clockEventId], map: "idx_clock_correction_event")
+  @@map("clock_event_corrections")
+}
+
+// Aggregated workday per shift.
+model Workday {
+  id              String        @id @default(uuid(7)) @db.Uuid
+  tenantId        String        @map("tenant_id") @db.Uuid
+  shiftId         String        @map("shift_id") @db.Uuid
+  employeeId      String        @map("employee_id") @db.Uuid
+  siteId          String        @map("site_id") @db.Uuid
+  workedMinutes   Int           @default(0) @map("worked_minutes")
+  overtimeMinutes Int           @default(0) @map("overtime_minutes")
+  lateMinutes     Int           @default(0) @map("late_minutes")
+  status          WorkdayStatus @default(OPEN)
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, shiftId], map: "uq_workday_tenant_shift")
+  @@index([tenantId, employeeId, status], map: "idx_workday_employee_status")
+  @@map("workdays")
+}
+
+// Operational alerts (late arrival, uncovered post, out of geofence, missing clock-out).
+model Alert {
+  id              String      @id @default(uuid(7)) @db.Uuid
+  tenantId        String      @map("tenant_id") @db.Uuid
+  type            AlertType
+  status          AlertStatus @default(OPEN)
+  siteId          String      @map("site_id") @db.Uuid
+  shiftId         String      @map("shift_id") @db.Uuid
+  employeeId      String?     @map("employee_id") @db.Uuid
+  clockEventId    String?     @map("clock_event_id") @db.Uuid
+  acknowledgedBy  String?     @map("acknowledged_by") @db.Uuid
+  acknowledgedAt  DateTime?   @map("acknowledged_at") @db.Timestamptz(6)
+  resolvedBy      String?     @map("resolved_by")
+  resolvedAt      DateTime?   @map("resolved_at") @db.Timestamptz(6)
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  clockEvent      ClockEvent? @relation(fields: [clockEventId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, siteId, status], map: "idx_alert_tenant_site_status")
+  @@index([tenantId, shiftId, type], map: "idx_alert_shift_lookup")
+  @@map("alerts")
+}
+
+// Tenant lifecycle status mirror (skips suspended tenants during periodic checks).
+model TenantState {
+  tenantId    String   @id @map("tenant_id") @db.Uuid
+  isSuspended Boolean  @default(false) @map("is_suspended")
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("tenant_states")
+}
+
+// Local copy of tenant plan features (fail-closed: missing row means basic plan).
+model TenantFeatures {
+  tenantId    String   @id @map("tenant_id") @db.Uuid
+  features    Json
+  effectiveAt DateTime @map("effective_at") @db.Timestamptz(6)
+
+  @@map("tenant_features")
+}
+
+// JetStream event deduplication table within the same transaction.
+model ProcessedEvent {
+  eventId     String   @id @map("event_id")
+  eventType   String   @map("event_type")
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@map("processed_events")
+}
