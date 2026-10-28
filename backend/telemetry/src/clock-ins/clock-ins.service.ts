@@ -7,6 +7,7 @@ import { EmployeeCacheService } from '../geofence/employee-cache.service';
 import { ShiftSnapshotService } from '../shifts/shift-snapshot.service';
 import { TenantStateService } from '../tenants/tenant-state.service';
 import { WorkdaysService } from '../workdays/workdays.service';
+import { AlertsService } from '../alerts/alerts.service';
 import {
   ClockEventNotFoundException,
   ClockTooOldException,
@@ -55,6 +56,7 @@ export class ClockInsService {
     private readonly shifts: ShiftSnapshotService,
     private readonly tenantState: TenantStateService,
     private readonly workdaysService: WorkdaysService,
+    private readonly alertsService: AlertsService,
   ) {}
 
   /**
@@ -218,6 +220,20 @@ export class ClockInsService {
     // 7. Recompute affected workday
     await this.workdaysService.recomputeWorkday(actor.tenantId, matchedShiftId);
 
+    // 8. Auto-resolve alerts on clock in/out
+    if (dto.type === ClockEventTypeDto.IN) {
+      await this.alertsService.resolveAlertsOnClockIn(
+        actor.tenantId,
+        matchedShiftId,
+        employee.id,
+      );
+    } else if (dto.type === ClockEventTypeDto.OUT) {
+      await this.alertsService.resolveAlertsOnClockOut(
+        actor.tenantId,
+        matchedShiftId,
+      );
+    }
+
     return event;
   }
 
@@ -273,6 +289,20 @@ export class ClockInsService {
 
     // 7. Recompute affected workday
     await this.workdaysService.recomputeWorkday(actor.tenantId, shift.shiftId);
+
+    // 8. Auto-resolve alerts on clock in/out
+    if (dto.type === ClockEventTypeDto.IN) {
+      await this.alertsService.resolveAlertsOnClockIn(
+        actor.tenantId,
+        shift.shiftId,
+        dto.employeeId,
+      );
+    } else if (dto.type === ClockEventTypeDto.OUT) {
+      await this.alertsService.resolveAlertsOnClockOut(
+        actor.tenantId,
+        shift.shiftId,
+      );
+    }
 
     return event;
   }
