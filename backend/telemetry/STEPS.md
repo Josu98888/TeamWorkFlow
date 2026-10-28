@@ -156,12 +156,12 @@ flowchart TD
 
 ### Fase 3: Módulo `clock-ins` (Ingesta de Fichadas y Correcciones)
 
-- [ ] **TEL-3.1: DTOs de Fichada (`src/clock-ins/dto/`)**
+- [x] **TEL-3.1: DTOs de Fichada (`src/clock-ins/dto/`)**
   - `CreateClockEventDto`: `clientEventId`, `type` (`in`, `out`, `break_start`, `break_end`), `method` (`gps`, `qr`), `deviceTime`, `latitude`, `longitude`, `qrCode`.
   - `CreateManualClockEventDto`: `employeeId`, `shiftId`, `type`, `time`, `reason` (obligatorio).
   - `CorrectClockEventDto`: `clockEventId`, `type`, `time`, `reason` (obligatorio).
   - `ListClockEventsDto`: filtros por `shiftId`, `employeeId`, `siteId`, paginación.
-- [ ] **TEL-3.2: Lógica de Validación de Fichadas (`ClockInsService`)**
+- [x] **TEL-3.2: Lógica de Validación de Fichadas (`ClockInsService`)**
   - **Idempotencia y Antigüedad:** Si `clientEventId` ya existe para el tenant, devolver el registro existente. Si `deviceTime` tiene más de 24 horas, rechazar con 422 `clock_too_old`.
   - **Matching de Turno:**
     - Fichada `in`: emparejar con turno no cancelado entre 60 min antes del inicio (`CLOCK_IN_EARLY_MINUTES = 60`) y el fin del turno. Si no hay turno, rechazar con 404 `no_matching_shift`.
@@ -170,15 +170,15 @@ flowchart TD
     - Método `qr`: si coincide con el `qrCode` de la sede, válido (incluso sin GPS). Si no coincide, rechazar con 422 `invalid_qr`.
     - Método `gps`: calcular distancia con Haversine. Si está dentro del radio, válido. Si está fuera y no hay QR, **aceptar la fichada**, marcar `outOfGeofence = true`, registrar `distanceMeters` y gatillar apertura de alerta `out_of_geofence`.
     - Si no envía ni GPS ni QR válido: rechazar con 422 `validation_error`.
-- [ ] **TEL-3.3: Correcciones y Fichadas Manuales con Auditoría**
+- [x] **TEL-3.3: Correcciones y Fichadas Manuales con Auditoría**
   - Supervisores (limitados a `siteIds`) o admin/owner pueden crear fichadas manuales o corregir existentes.
   - Requisito estricto: campo `reason` no vacío.
   - Guardar historial en `ClockEventCorrection` con snapshots JSON `before` y `after`.
   - Recomputar automáticamente la jornada (`Workday`) y el resumen de la sede.
-- [ ] **TEL-3.4: Emisión de Eventos JetStream**
+- [x] **TEL-3.4: Emisión de Eventos JetStream**
   - Emitir `t.<tenant>.attendance.clock_event_recorded`.
   - Emitir `t.<tenant>.attendance.clock_event_corrected`.
-- [ ] **TEL-3.5: Controlador HTTP (`ClockInsController`)**
+- [x] **TEL-3.5: Controlador HTTP (`ClockInsController`)**
   - `POST /api/v1/telemetry/clock-events` (`attendance.clock-event.create` - solo empleado).
   - `POST /api/v1/telemetry/clock-events/manual` (`attendance.clock-event.create-manual` - supervisor/admin).
   - `PATCH /api/v1/telemetry/clock-events/:clockEventId` (`attendance.clock-event.correct` - supervisor/admin).
