@@ -112,14 +112,14 @@ flowchart TD
 
 ### Fase 1: Capa de Infraestructura, NATS RPC y Seguridad
 
-- [ ] **TEL-1.1: Cliente NATS RPC hacia `core` (`src/nats/nats-client.service.ts`)**
+- [x] **TEL-1.1: Cliente NATS RPC hacia `core` (`src/nats/nats-client.service.ts`)**
   - Implementar llamadas con timeout configurable a los endpoints de `core`:
     - `auth.token.verify`: verificación de token (cookie o Bearer) -> `{ userId, tenantId, role, siteIds, tenantStatus, plan, features }`.
     - `organization.employee.get`: resolución de `employeeId` a partir del `userId`.
     - `organization.site.get`: geocerca (`latitude`, `longitude`, `radiusMeters`) y `qrCode` oficial del sitio.
     - `organization.shift.get`: consulta de respaldo para turnos cuando no están en el snapshot local.
   - Manejo de fallos: responder 504 `upstream_timeout` o 503 `upstream_unavailable` si `core` no responde.
-- [ ] **TEL-1.2: Capa HTTP: Guards y Decoradores de Seguridad**
+- [x] **TEL-1.2: Capa HTTP: Guards y Decoradores de Seguridad**
   - `AuthGuard`:
     - Extrae access token de cookies o `Authorization: Bearer`.
     - Valida contra `auth.token.verify`.
@@ -130,10 +130,10 @@ flowchart TD
     - `@Roles('employee')`, `@Roles('supervisor', 'admin', 'owner')`.
     - `@RequireFeature('alerts')`, `@RequireFeature('tower')` -> retorna 403 `feature_not_in_plan` si el tenant no lo tiene.
   - Protección CSRF: doble submit token `X-CSRF-Token` para métodos mutantes autenticados por cookie.
-- [ ] **TEL-1.3: Filtro Global de Excepciones y Pipe de Validación**
+- [x] **TEL-1.3: Filtro Global de Excepciones y Pipe de Validación**
   - `HttpExceptionFilter`: mapea errores `{ status, code, message }` al formato público `{ detail, code }`.
   - Configurar `ValidationPipe` con whitelist, forbidNonWhitelisted y respuesta 422 `validation_error`.
-- [ ] **TEL-1.4: Servicio de Publicación JetStream (`src/nats/jetstream.service.ts`)**
+- [x] **TEL-1.4: Servicio de Publicación JetStream (`src/nats/jetstream.service.ts`)**
   - Wrapper para publicar en el stream `ATTENDANCE_EVENTS`.
   - Formato de subject: `t.<tenant>.attendance.<evento>`.
   - Helpers para publicar eventos de auditoría y negocio tras commits exitosos de base de datos.
