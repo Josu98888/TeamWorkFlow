@@ -9,6 +9,7 @@ export type AppErrorCode =
   | 'upstream_unavailable'
   | 'no_matching_shift'
   | 'clock_event_not_found'
+  | 'workday_not_found'
   | 'alert_not_found'
   | 'clock_too_old'
   | 'invalid_qr'
@@ -114,6 +115,12 @@ export class NoMatchingShiftException extends AppException {
 export class ClockEventNotFoundException extends AppException {
   constructor() {
     super(404, 'clock_event_not_found', 'Clock event not found');
+  }
+}
+
+export class WorkdayNotFoundException extends AppException {
+  constructor() {
+    super(404, 'workday_not_found', 'Workday not found');
   }
 }
 

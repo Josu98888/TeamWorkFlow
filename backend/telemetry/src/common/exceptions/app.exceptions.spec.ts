@@ -8,6 +8,7 @@ import {
   UpstreamTimeoutException,
   UpstreamUnavailableException,
   NoMatchingShiftException,
+  WorkdayNotFoundException,
   ValidationException,
 } from './app.exceptions';
 
@@ -69,6 +70,12 @@ describe('AppExceptions', () => {
     const exc = new NoMatchingShiftException();
     expect(exc.status).toBe(404);
     expect(exc.code).toBe('no_matching_shift');
+  });
+
+  it('creates WorkdayNotFoundException with status 404', () => {
+    const exc = new WorkdayNotFoundException();
+    expect(exc.status).toBe(404);
+    expect(exc.code).toBe('workday_not_found');
   });
 
   it('creates ValidationException with status 422 and errors list', () => {
