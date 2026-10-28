@@ -1,6 +1,7 @@
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { configureApp } from './app.config';
 import { envs } from './config';
 
 async function bootstrap() {
@@ -8,22 +9,16 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule);
 
-  app.setGlobalPrefix('api/v1/telemetry');
+  configureApp(app);
 
   app.enableCors({
     origin: envs.webOrigin,
     credentials: true,
   });
 
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    }),
-  );
-
   await app.listen(envs.port);
-  logger.log(`Telemetry service is running on: http://localhost:${envs.port}/api/v1/telemetry`);
+  logger.log(
+    `Telemetry service is running on: http://localhost:${envs.port}/api/v1/telemetry`,
+  );
 }
 void bootstrap();
