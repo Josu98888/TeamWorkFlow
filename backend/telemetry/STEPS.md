@@ -80,11 +80,11 @@ flowchart TD
 
 ### Fase 0: Scaffolding y Base de Datos (attendance schema)
 
-- [ ] **TEL-0.1: Inicialización del Proyecto NestJS 12**
+- [x] **TEL-0.1: Inicialización del Proyecto NestJS 12**
   - Crear `backend/telemetry/package.json` con dependencias: `@nestjs/common`, `@nestjs/core`, `@nestjs/platform-express`, `@nestjs/websockets`, `@nestjs/platform-socket.io`, `socket.io`, `@prisma/client`, `prisma`, `nats`, `joi`, `class-validator`, `class-transformer`, `@nestjs/throttler`, `@nestjs/schedule`.
   - Crear `tsconfig.json` con modo estricto alineado al resto del monorepo.
   - Crear `nest-cli.json` configurado para compilar en `dist/`.
-- [ ] **TEL-0.2: Variables de Entorno y Configuración (`src/config/envs.ts`)**
+- [x] **TEL-0.2: Variables de Entorno y Configuración (`src/config/envs.ts`)**
   - Validar con Joi al inicio:
     - `PORT`: default `3003`.
     - `ATTENDANCE_DATABASE_URL`: URL PostgreSQL conectando al schema `attendance` (rol `attendance_svc`).
@@ -93,8 +93,8 @@ flowchart TD
     - `WEB_ORIGIN`: origen permitido para CORS y Socket.IO (con credentials).
     - `RATE_LIMIT_AUTH_TTL_MS` y `RATE_LIMIT_AUTH_LIMIT`.
   - Crear archivo `.env.example`.
-- [ ] **TEL-0.3: Modelado Prisma (`prisma/schema.prisma`)**
-  - Configurar datasource PostgreSQL con schema `attendance` y cliente en `src/prisma/attendance-client`.
+- [x] **TEL-0.3: Modelado Prisma (`src/prisma/schema.prisma`)**
+  - Configurar datasource PostgreSQL con schema `attendance` y cliente generado.
   - Definir los 8 modelos especificados en `AGENTS.md`:
     - `ShiftSnapshot`: `shiftId`, `tenantId`, `siteId`, `postId`, `employeeId`, `startsAt`, `endsAt`, `status`, `version`.
     - `ClockEvent`: `id`, `tenantId`, `shiftId`, `employeeId`, `siteId`, `type` (`IN`, `OUT`, `BREAK_START`, `BREAK_END`), `method` (`GPS`, `QR`, `MANUAL`), `latitude`, `longitude`, `distanceMeters`, `outOfGeofence`, `clientEventId`, `deviceTime`, `receivedAt`, `createdByUserId`, `reason`.
@@ -105,7 +105,7 @@ flowchart TD
     - `TenantFeatures`: `tenantId`, `features` (json), `effectiveAt`.
     - `ProcessedEvent`: `eventId` (unique), `processedAt`.
   - Índices: `(tenantId, shiftId, deviceTime)`, `(status, startsAt)`, `(tenantId, siteId, status)`, y unicidad parcial para alertas.
-- [ ] **TEL-0.4: Servicio Prisma (`src/prisma/prisma.service.ts`)**
+- [x] **TEL-0.4: Servicio Prisma (`src/prisma/attendance-prisma.service.ts`)**
   - Implementar extensión `PrismaClient` con lifecycle hooks (`onModuleInit`, `onModuleDestroy`).
 
 ---
