@@ -142,13 +142,13 @@ flowchart TD
 
 ### Fase 2: Motor Geoespacial y Gestión de Estado Local
 
-- [ ] **TEL-2.1: Algoritmos Geoespaciales (`src/common/geo.utils.ts`)**
+- [x] **TEL-2.1: Algoritmos Geoespaciales (`src/common/geo.utils.ts`)**
   - Implementar cálculo de distancia con fórmula de **Haversine** (en metros) entre la coordenada del empleado y la sede.
   - Comparar contra `radiusMeters` de la sede.
-- [ ] **TEL-2.2: Caché en Memoria de Sedes y Empleados**
+- [x] **TEL-2.2: Caché en Memoria de Sedes y Empleados**
   - Cachear resultado de `organization.site.get` con TTL corto (invalorable ante evento `organization.site_updated`).
   - Cachear relación `(tenantId, userId) -> employeeId` de `organization.employee.get`.
-- [ ] **TEL-2.3: Gestión de `ShiftSnapshot` y `TenantFeatures`**
+- [x] **TEL-2.3: Gestión de `ShiftSnapshot` y `TenantFeatures`**
   - Métodos para consultar turnos locales y recuperar de `core` (`organization.shift.get`) en caso de cache miss.
   - Mecanismo "Fail-Closed" para features: si no existe registro en `TenantFeatures`, se asume plan `basic` (sin alertas ni Torre de Control).
 
