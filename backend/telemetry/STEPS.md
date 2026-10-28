@@ -209,22 +209,22 @@ flowchart TD
 
 ### Fase 5: Módulo `alerts` (Detección y Ciclo de Vida de Alertas)
 
-- [ ] **TEL-5.1: Máquina de Estados de Alertas (`AlertsService`)**
+- [x] **TEL-5.1: Máquina de Estados de Alertas (`AlertsService`)**
   - Tipos: `late`, `uncovered_post`, `out_of_geofence`, `missing_clock_out`.
   - Estados: `open` -> `acknowledged` -> `resolved`.
   - Unicidad idempotente: máximo 1 alerta por `(tenantId, shiftId, type)` para tardanza, puesto sin cubrir y salida faltante; 1 por `(tenantId, clockEventId)` para fuera de geocerca.
-- [ ] **TEL-5.2: Tarea Periódica de Chequeo (`@Cron('* * * * *')`)**
+- [x] **TEL-5.2: Tarea Periódica de Chequeo (`@Cron('* * * * *')`)**
   - Ejecutar cada minuto sobre turnos en curso:
     - Omitir tenants suspendidos/cancelados o sin feature `alerts`.
     - **Tardanza (`late`):** Turno con empleado asignado sin `in` a los 10 minutos de inicio.
     - **Puesto sin cubrir (`uncovered_post`):** Turno sin ningún `in` a los 15 minutos de inicio.
     - **Salida faltante (`missing_clock_out`):** Turno finalizado hace 2 horas con `in` sin `out`.
-- [ ] **TEL-5.3: Resolución Automática de Alertas**
+- [x] **TEL-5.3: Resolución Automática de Alertas**
   - Alerta `late`: se resuelve automáticamente al registrarse el `in` del empleado.
   - Alerta `uncovered_post`: se resuelve automáticamente al registrarse cualquier `in` en el turno.
   - Alerta `missing_clock_out`: se resuelve al registrarse el `out`.
   - Alerta `out_of_geofence`: **nunca** se resuelve sola (requiere acción de supervisor).
-- [ ] **TEL-5.4: Controlador HTTP de Alertas**
+- [x] **TEL-5.4: Controlador HTTP de Alertas**
   - Gated con `@RequireFeature('alerts')`:
     - `GET /api/v1/telemetry/alerts` (`attendance.alert.list`).
     - `POST /api/v1/telemetry/alerts/:alertId/acknowledge` (supervisor/admin).
