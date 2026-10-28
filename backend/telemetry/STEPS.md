@@ -188,20 +188,20 @@ flowchart TD
 
 ### Fase 4: Módulo `workdays` (Jornadas Laborales)
 
-- [ ] **TEL-4.1: Motor de Cálculo de Jornada (`WorkdaysService`)**
+- [x] **TEL-4.1: Motor de Cálculo de Jornada (`WorkdaysService`)**
   - Mantener exactamente un `Workday` por turno.
   - Reglas de cómputo:
     - `workedMinutes`: tiempo entre cada `in` y su respectivo `out`, restando el tiempo transcurrido en breaks (`break_start` a `break_end`).
     - `overtimeMinutes`: `max(0, workedMinutes - shiftDurationMinutes)`.
     - `lateMinutes`: `max(0, firstIn - shiftStart)`.
-- [ ] **TEL-4.2: Gestión de Salidas Faltantes (Missing Clock-Out)**
+- [x] **TEL-4.2: Gestión de Salidas Faltantes (Missing Clock-Out)**
   - Si el turno finalizó hace más de 2 horas (`MISSING_CLOCK_OUT_HOURS = 2`) y tiene `in` sin `out`:
     - Marcar estado del `Workday` como `MISSING_CLOCK_OUT`.
     - Asignar `workedMinutes = 0` y `overtimeMinutes = 0`.
     - Abrir alerta `missing_clock_out` para supervisores de la sede.
   - Si llega una fichada `out` tardía (manual de supervisor o del empleado dentro de 24h offline):
     - Recomputar minutos reales, pasar jornada a `CLOSED` y auto-resolver la alerta `missing_clock_out`.
-- [ ] **TEL-4.3: Controlador HTTP y Eventos**
+- [x] **TEL-4.3: Controlador HTTP y Eventos**
   - `GET /api/v1/telemetry/workdays/:shiftId` y `GET /api/v1/telemetry/workdays`.
   - Emitir evento `t.<tenant>.attendance.workday_closed` al cerrar la jornada.
 
