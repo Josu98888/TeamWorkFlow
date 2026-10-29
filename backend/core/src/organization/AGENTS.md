@@ -84,6 +84,8 @@ A job runs every minute (all tenants, skipping suspended ones) and:
 
 Each transition is applied once (compare-and-set on the status or on a marker column) and the job tolerates being late: if it was down, it catches up on the next run. Emitting is at-least-once; consumers are idempotent.
 
+As built (T6): `ShiftLifecycleService` (`src/organization/shifts/shift-lifecycle.service.ts`) runs `@Cron(EVERY_MINUTE)` (`ScheduleModule.forRoot()` is registered once in `AppModule`) and delegates to `tick(now)`, a plain method that tests drive with a fixed clock. Phases run in order: `shift_starting` (`SCHEDULED`, start in the next 15 minutes, marker `startingEmittedAt` still null, which the transition sets), `shift_started` (`SCHEDULED` with the start time reached -> `IN_PROGRESS`), `shift_ended` (`IN_PROGRESS` with the end time reached -> `FINISHED`). Each transition is one `updateMany` compare-and-set on `id`, `tenantId`, `status` and `version`, and the event is published only when exactly one row changed, so a repeated tick, a second instance or a concurrent edit cannot double-emit (the loser emits nothing and the next tick retries with the fresh row). `shift_started` and `shift_ended` bump `version`; `shift_starting` does not (it only sets the marker). A shift missed entirely emits `shift_started` and then `shift_ended` in the same tick; a shift whose start already passed gets no `shift_starting`. Cancelled and finished shifts are never touched. Tenants with `TenantState.isSuspended` are skipped (the `tenant_*` consumers that write that row are not built yet, so no tenant is skipped today). Each phase reads up to 200 rows per batch and at most 5 batches per tick. Logs carry only the error name. `telemetry` reads only `shiftId` (and `siteId` on `shift_ended`) from `shift_starting|started|ended` and sets `IN_PROGRESS` / `COMPLETED` itself, so the payload stays the organization snapshot (`status` `FINISHED` on `shift_ended`) with no mapping. Not verified against a real PostgreSQL or NATS (unit tests use an in-memory Prisma double); it needs the T7 docker smoke.
+
 ### Tenant suspension and cancellation
 
 Consume `t.<tenant>.auth.tenant_suspended`, `tenant_cancelled` and `tenant_reactivated`. While a tenant is suspended or cancelled: the generator and the lifecycle job skip it (no `shift_*` events). Interactive requests are not blocked here (the HTTP layer of `core` does that). Data is kept. After reactivation the jobs resume and the lifecycle job catches up.
@@ -97,7 +99,7 @@ Consume `t.<tenant>.billing.data_retention_expired` (emitted 90 days after the t
 - NestJS 12 module inside `backend/core`; HTTP controllers for this module's endpoints live in `src/organization/` (see `backend/core/AGENTS.md`). NATS is used for JetStream events and for the request responders that `telemetry` needs (see NATS Contract).
 - PostgreSQL + Prisma 7 with its own `prisma/schema.prisma` in the `organization` schema of the shared `teamworkflow` database, accessed through its own Prisma client with its own `organization_svc` role that cannot read other schemas (see `backend/STEPS.md` S1.1). Not installed yet.
 - `class-validator` + `class-transformer` with the global `ValidationPipe` of `core` (422 `validation_error`). Not installed yet.
-- Scheduling for the jobs (for example `@nestjs/schedule`). Not installed yet.
+- Scheduling for the jobs with `@nestjs/schedule` (installed in T1, used by the lifecycle job since T6).
 - Env validation with joi in `src/config/envs.ts`, same pattern as the rest of `core`.
 - Jest for tests.
 
@@ -105,14 +107,14 @@ Ask before installing any dependency.
 
 ## Current Status (READ FIRST)
 
-`backend/core` exists (scaffold, HTTP layer and `auth` module) but this module is not built. This folder contains only this `AGENTS.md`: there is no `OrganizationModule`, no Prisma schema, no controllers.
+`backend/core` exists (scaffold, HTTP layer and `auth` module). The organization scaffold is in place (T1 of `odd/tasks/organization-module.md`): `OrganizationModule` (registered in `AppModule`, exports only `OrganizationService`, an empty facade), the Prisma schema and first migration (`src/organization/prisma/`), `OrganizationPrismaService`, `organization.patterns.ts` and `OrganizationEventsService` (`src/organization/events/`, owns the `ORGANIZATION_EVENTS` stream and publishing). Since T2 the `sites` sub-module is built (`src/organization/sites/`: `SitesService`, `PostsService`, `SitesController` with the site and post routes of the route map, DTOs, `site-policy.ts`) and exposed through the `OrganizationService` facade; Since T3 the `employees` sub-module is built (`src/organization/employees/`: `EmployeesService`, `EmployeesController` with `POST /employees`, `PATCH /employees/:employeeId`, `GET /employees/:employeeId`, `GET /employees`, DTOs, `employee-policy.ts`, and the `UserCreatedHandler` consumer) and exposed through the facade (`createEmployee`, `updateEmployee`, `getEmployee`, `getEmployeeByUserId`, `getEmployeeForTenant(tenantId, { employeeId | userId })` for the NATS responder of T5, `listEmployees`); Since T4 the `shifts` sub-module is built (`src/organization/shifts/`: `ShiftsService`, `ShiftsController` with `POST /shifts`, `PATCH /shifts/:shiftId`, `POST /shifts/:shiftId/reassign`, `POST /shifts/:shiftId/cancel`, `GET /shifts/:shiftId`, `GET /shifts`, DTOs, `shift-policy.ts`, `shift-time.ts`) and exposed through the facade (`createShift`, `updateShift`, `reassignShift`, `cancelShift`, `getShift`, `getShiftForTenant(tenantId, shiftId)` for the NATS responder of T5, `listShifts`); Since T5 the NATS responders for `telemetry` are built (see NATS responders for telemetry below; `getSiteForTenant(tenantId, siteId)` was added to the facade); Since T6 the shift lifecycle job is built (see Shift lifecycle job); the shift templates and the other consumers are not built yet. Shift rules as built: owner/admin act on every site, a supervisor only inside `siteIds` (create on a site outside answers 404 `site_not_found`; get, update, reassign and cancel on a shift outside answer 404 `shift_not_found`), an employee reads only their own shifts and cannot write (403). Writes carry the `version` the caller read; the update is a compare-and-set on `version` (and on a non-final status), so a stale or concurrent write answers 409 `version_conflict`. The overlap check runs in the write transaction after a per-employee `pg_advisory_xact_lock`, so two concurrent writes for the same employee cannot both pass (no new database constraint). The four warnings are computed with the same employee and post data: rest is checked 12 hours around the shift, the weekly total counts non-cancelled shifts that start in the Monday to Sunday week of the site timezone, skills match case-insensitively. `GET /shifts` filters by `siteId`, `employeeId` and `day` (`YYYY-MM-DD` in the site timezone, which requires `siteId`). Assigned employees must be active (422 `validation_error`). Employee visibility: owner/admin see the whole tenant, a supervisor only employees enabled in one of `siteIds` (404 `employee_not_found` otherwise), an employee only their own profile (list returns just them); the national id is hidden from supervisors. Email and legajo duplicates answer 409 `email_taken`; enabled `siteIds` must exist in the tenant (422 `validation_error`). The `auth.user_created` consumer is the durable `organization-auth` on stream `AUTH_EVENTS` (filter `t.*.auth.user_created`), run by `OrganizationEventsService`; handling goes through `ConsumedEventProcessor` (tenant check, `ProcessedEvent` dedupe in the same transaction). Employee actors get an empty site list and 404 `site_not_found` on site/post reads (never 403, never `qrCode`); supervisors are limited to `siteIds` (404 outside); writes are owner/admin only (403 `forbidden`).
 
 First tasks, in order (ask before each install):
 
-- [ ] Create `OrganizationModule` in `backend/core/src/organization/` (needs `backend/core` from T6), its config in `src/config/envs.ts` and `.env.example`.
-- [ ] Prisma schema and first migration for `sites`.
-- [ ] Sub-modules `sites`, `employees`, `shifts`, with their HTTP controllers, the exported facade service and the pattern constants for the NATS responders.
-- [ ] Consumers of `auth` events and the jobs.
+- [x] Create `OrganizationModule` in `backend/core/src/organization/`, its config (`ORGANIZATION_DATABASE_URL`) in `src/config/envs.ts` and `.env.example`.
+- [x] Prisma schema and first migration (`prisma:organization:*` scripts, `prisma.organization.config.ts`). `ShiftTemplate` comes with the template feature.
+- [x] Sub-modules `sites` (done in T2), `employees` (done in T3), `shifts` (done in T4), with their HTTP controllers, the exported facade service and the pattern constants for the NATS responders.
+- [ ] Consumers of `auth` events (`user_created` done in T3; `user_deactivated`, tenant status and purge pending) and the jobs.
 - [ ] Expose the module routes through its HTTP controllers in `core` (no separate service, no extra compose entry).
 
 ## NATS Contract
@@ -127,7 +129,7 @@ In `core` the operations below are **in-process calls** to the module's facade s
 
 | Operation | Caller | Payload | Returns |
 |---------|--------|---------|---------|
-| `organization.site.create` / `update` | HTTP controller (owner/admin) | actor, site fields (and `siteId` on update) | site |
+| `organization.site.create` / `update` | HTTP controller (owner/admin) | actor, site fields (and `siteId` on update) | site (employees never see `qrCode`) |
 | `organization.site.get` | HTTP controller; `telemetry` (NATS responder) | actor, `siteId` | site with geofence and `qrCode` |
 | `organization.site.list` | HTTP controller | actor, `page`, `pageSize` | sites visible to the actor |
 | `organization.site.rotate-qr` | HTTP controller (owner/admin) | actor, `siteId` | site with the new `qrCode` |
@@ -147,13 +149,29 @@ In `core` the operations below are **in-process calls** to the module's facade s
 
 Calls from other modules or from `telemetry` (for example `telemetry` asking `organization.shift.get` over NATS) carry the same actor the HTTP layer got, or, for background work without a user, an explicit `tenantId` in the payload. Never accept a tenant from a client.
 
+### NATS responders for telemetry (built in T5)
+
+`src/organization/responders/` (`OrganizationResponder`, bound with `NatsErrorFilter` and the validation pipe) answers the three patterns. Requests carry an explicit tenant and no actor: `{ tenantId, siteId }`, `{ tenantId, userId }` (employee lookup is by `userId` only) and `{ tenantId, shiftId }`; ids must be UUIDs and extra fields are rejected (422 `validation_error`). The responders call the tenant-scoped facade operations (`getSiteForTenant`, `getEmployeeForTenant`, `getShiftForTenant`), so an id of another tenant answers like a missing one: 404 `site_not_found`, `employee_not_found` or `shift_not_found`, as `{ status, code, message }`. Any other error answers 500 `internal_error` without its message. Nothing is logged by the responders (no PII). Explicit mappers in `telemetry-wire.ts` shape the answer to `backend/telemetry/src/nats/dto/nats-contracts.ts`:
+
+| Organization model | Telemetry wire |
+|--------------------|----------------|
+| `Site.geofenceRadiusMeters` | `SiteDto.radiusMeters` |
+| `Site.qrCode` (always sent: the caller is the trusted attendance service) | `SiteDto.qrCode` |
+| `Site.address`, `timezone`, `isActive`, dates | not sent |
+| `Employee` | `EmployeeDto` with only `id`, `userId`, `tenantId`, `firstName`, `lastName` (no email, phone, national id) |
+| `Employee.userId` nullable | required on the wire: the lookup is by `userId`, so the found employee always has it; employees without a linked user are never returned by this responder |
+| `Shift.status` `FINISHED` | `ShiftDto.status` `COMPLETED` (other statuses unchanged) |
+| `Shift.employeeId` null | field omitted |
+| `Shift.startsAt` / `endsAt` (`Date`) | ISO 8601 strings |
+| `Shift.templateId`, `createdAt`, `updatedAt` | not sent |
+
 ### Events emitted (JetStream)
 
 | Event subject | Payload |
 |---------------|---------|
 | `t.<tenant>.organization.employee_created` | `eventId`, `employeeId`, `tenantId`, `email`, `firstName`, `lastName`, `occurredAt` |
-| `t.<tenant>.organization.site_updated` | `eventId`, `siteId`, `tenantId`, `latitude`, `longitude`, `geofenceRadiusMeters`, `qrRotated`, `occurredAt` |
-| `t.<tenant>.organization.shift_created` | shift snapshot |
+| `t.<tenant>.organization.site_updated` | `eventId`, `siteId`, `tenantId`, `latitude`, `longitude`, `geofenceRadiusMeters`, `qrRotated`, `occurredAt`. Emitted on create, update (any field, including deactivation) and QR rotation (`qrRotated: true`). `telemetry` only reads `siteId` (cache invalidation) |
+| `t.<tenant>.organization.shift_created` | shift snapshot (built in T4) |
 | `t.<tenant>.organization.shift_updated` | shift snapshot (edit, reassign, unassign) |
 | `t.<tenant>.organization.shift_cancelled` | shift snapshot |
 | `t.<tenant>.organization.shift_starting` | shift snapshot (15 min before start) |
@@ -212,7 +230,7 @@ The jobs are the only code that reads across tenants. They still process one ten
 | Variable | Description |
 |----------|-------------|
 | `NATS_SERVER` | Comma-separated NATS URLs (shared by all of `core`) |
-| `DATABASE_URL` | PostgreSQL connection string for this module (its own role and schema) |
+| `ORGANIZATION_DATABASE_URL` | PostgreSQL connection string for the `teamworkflow` database, `organization` schema (`?schema=organization`), `organization_svc` role |
 | `SHIFT_HORIZON_DAYS` | Days ahead the generator fills. Default `14` |
 
 Variable names are provisional until the shared `core` config exists (T4/T6): in `core` each module has its own database URL for its own role. Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Never commit `.env`.

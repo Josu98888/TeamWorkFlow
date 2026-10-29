@@ -5,9 +5,11 @@ WORKDIR /usr/src/app
 
 RUN npm install -g pnpm@11.5.2
 
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-RUN pnpm install --frozen-lockfile
+# The pnpm store lives in a BuildKit cache, so a retried build reuses what was already downloaded
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm install --frozen-lockfile --store-dir /pnpm/store
 
 COPY . .
 
@@ -23,9 +25,10 @@ ENV NODE_ENV=production
 
 RUN npm install -g pnpm@11.5.2
 
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-RUN pnpm install --prod --frozen-lockfile
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm install --prod --frozen-lockfile --store-dir /pnpm/store
 
 COPY --from=builder /usr/src/app/src/prisma/generated ./src/prisma/generated
 COPY --from=builder /usr/src/app/dist ./dist

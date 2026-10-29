@@ -12,3 +12,7 @@ export const JETSTREAM_STREAMS = {
 export function buildAttendanceSubject(tenantId: string, eventName: string): string {
   return `t.${tenantId}.attendance.${eventName}`;
 }
+
+// DI token of the Nest NATS ClientProxy used for request/reply to core.
+// Kept here because telemetry has no config/services.ts.
+export const NATS_SERVICE = 'NATS_SERVICE';

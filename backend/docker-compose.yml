@@ -48,6 +48,7 @@ services:
       - PORT=3000
       - NATS_SERVER=nats://nats-server:4222
       - AUTH_DATABASE_URL=postgresql://auth_svc:${AUTH_DB_PASSWORD}@postgres:5432/teamworkflow?schema=auth
+      - ORGANIZATION_DATABASE_URL=postgresql://organization_svc:${ORGANIZATION_DB_PASSWORD}@postgres:5432/teamworkflow?schema=organization
       - JWT_SECRET=${JWT_SECRET:?set JWT_SECRET in backend/.env}
       - ACCESS_TOKEN_TTL=${ACCESS_TOKEN_TTL:-15m}
       - REFRESH_TOKEN_TTL=${REFRESH_TOKEN_TTL:-7d}
