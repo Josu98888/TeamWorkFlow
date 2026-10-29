@@ -10,6 +10,7 @@ import { WorkdaysModule } from './workdays/workdays.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { ClockInsModule } from './clock-ins/clock-ins.module';
 import { TowerModule } from './tower/tower.module';
+import { ConsumersModule } from './consumers/consumers.module';
 import { AuthGuard } from './http/guards/auth.guard';
 
 @Module({
@@ -24,6 +25,7 @@ import { AuthGuard } from './http/guards/auth.guard';
     AlertsModule,
     TowerModule,
     ClockInsModule,
+    ConsumersModule,
   ],
   controllers: [],
   providers: [
