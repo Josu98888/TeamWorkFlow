@@ -6,6 +6,7 @@ import { ConsumedEventProcessor } from './events/consumed-event.processor';
 import { OrganizationEventsModule } from './events/organization-events.module';
 import { OrganizationService } from './organization.service';
 import { OrganizationPrismaService } from './prisma/prisma.service';
+import { OrganizationResponder } from './responders/organization.responder';
 import { PostsService } from './sites/posts.service';
 import { SitesController } from './sites/sites.controller';
 import { SitesService } from './sites/sites.service';
@@ -16,7 +17,12 @@ import { ShiftsService } from './shifts/shifts.service';
 // service and the sub-module services stay private.
 @Module({
   imports: [OrganizationEventsModule],
-  controllers: [SitesController, EmployeesController, ShiftsController],
+  controllers: [
+    SitesController,
+    EmployeesController,
+    ShiftsController,
+    OrganizationResponder,
+  ],
   providers: [
     OrganizationPrismaService,
     SitesService,

@@ -22,7 +22,7 @@ import type {
   UpdateShiftBodyDto,
 } from './shifts/dto/shift.dto';
 import { ShiftsService } from './shifts/shifts.service';
-import { SitesService } from './sites/sites.service';
+import { SitesService, type SiteView } from './sites/sites.service';
 
 // Public facade of the module (the only export of OrganizationModule).
 // Operations are added by the sites, employees and shifts sub-modules; each
@@ -49,6 +49,12 @@ export class OrganizationService {
   // organization.site.get
   getSite(actor: OrganizationActor, siteId: string) {
     return this.sites.get(actor, siteId);
+  }
+
+  // organization.site.get with an explicit tenant and no actor: the
+  // background-style call behind the NATS responder (T5). Includes `qrCode`.
+  getSiteForTenant(tenantId: string, siteId: string): Promise<SiteView> {
+    return this.sites.getForTenant(tenantId, siteId);
   }
 
   // organization.site.list
