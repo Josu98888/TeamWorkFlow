@@ -6,6 +6,7 @@ import { JetStreamService } from '../nats/jetstream.service';
 import { TenantStateService } from '../tenants/tenant-state.service';
 import { ShiftSnapshotService } from '../shifts/shift-snapshot.service';
 import { WorkdaysService } from '../workdays/workdays.service';
+import { TowerService } from '../tower/tower.service';
 import {
   AlertNotFoundException,
   AlertInvalidTransitionException,
@@ -44,6 +45,7 @@ export class AlertsService {
     private readonly tenantState: TenantStateService,
     private readonly shifts: ShiftSnapshotService,
     private readonly workdays: WorkdaysService,
+    private readonly tower: TowerService,
   ) {}
 
   /**
@@ -103,6 +105,8 @@ export class AlertsService {
       occurredAt: alert.createdAt.toISOString(),
     });
 
+    await this.tower.emitSiteSummaryUpdated(tenantId, alert.siteId);
+
     return alert;
   }
 
@@ -144,6 +148,8 @@ export class AlertsService {
       acknowledgedBy: actor.userId,
       occurredAt: acknowledgedAt.toISOString(),
     });
+
+    await this.tower.emitSiteSummaryUpdated(actor.tenantId, updated.siteId);
 
     return updated;
   }
@@ -188,6 +194,8 @@ export class AlertsService {
       resolvedBy: actor.userId,
       occurredAt: resolvedAt.toISOString(),
     });
+
+    await this.tower.emitSiteSummaryUpdated(actor.tenantId, updated.siteId);
 
     return updated;
   }
@@ -261,6 +269,13 @@ export class AlertsService {
         occurredAt: resolvedAt.toISOString(),
       });
     }
+
+    if (uncoveredAlerts.length > 0 || lateAlerts.length > 0) {
+      const siteId = uncoveredAlerts[0]?.siteId ?? lateAlerts[0]?.siteId;
+      if (siteId) {
+        await this.tower.emitSiteSummaryUpdated(tenantId, siteId);
+      }
+    }
   }
 
   /**
@@ -297,6 +312,13 @@ export class AlertsService {
         resolvedBy: 'system',
         occurredAt: resolvedAt.toISOString(),
       });
+    }
+
+    if (missingOutAlerts.length > 0 && missingOutAlerts[0]?.siteId) {
+      await this.tower.emitSiteSummaryUpdated(
+        tenantId,
+        missingOutAlerts[0].siteId,
+      );
     }
   }
 

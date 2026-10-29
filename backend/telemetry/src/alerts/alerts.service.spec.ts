@@ -5,6 +5,7 @@ import { JetStreamService } from '../nats/jetstream.service';
 import { TenantStateService } from '../tenants/tenant-state.service';
 import { ShiftSnapshotService } from '../shifts/shift-snapshot.service';
 import { WorkdaysService } from '../workdays/workdays.service';
+import { TowerService } from '../tower/tower.service';
 import {
   AlertNotFoundException,
   AlertInvalidTransitionException,
@@ -50,6 +51,10 @@ describe('AlertsService', () => {
     recomputeWorkday: jest.fn(),
   };
 
+  const mockTower = {
+    emitSiteSummaryUpdated: jest.fn(),
+  };
+
   const mockSupervisorActor: VerifiedActor = {
     userId: 'user-sup',
     tenantId: 'tenant-1',
@@ -71,6 +76,7 @@ describe('AlertsService', () => {
         { provide: TenantStateService, useValue: mockTenantState },
         { provide: ShiftSnapshotService, useValue: mockShifts },
         { provide: WorkdaysService, useValue: mockWorkdays },
+        { provide: TowerService, useValue: mockTower },
       ],
     }).compile();
 
