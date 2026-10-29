@@ -4,6 +4,7 @@ import { ShiftsModule } from '../shifts/shifts.module';
 import { TenantsModule } from '../tenants/tenants.module';
 import { WorkdaysModule } from '../workdays/workdays.module';
 import { AlertsModule } from '../alerts/alerts.module';
+import { TowerModule } from '../tower/tower.module';
 import { ClockInsController } from './clock-ins.controller';
 import { ClockInsService } from './clock-ins.service';
 
@@ -14,6 +15,7 @@ import { ClockInsService } from './clock-ins.service';
     TenantsModule,
     WorkdaysModule,
     AlertsModule,
+    TowerModule,
   ],
   controllers: [ClockInsController],
   providers: [ClockInsService],
