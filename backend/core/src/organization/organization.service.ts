@@ -1,4 +1,10 @@
 import { Injectable } from '@nestjs/common';
+import type {
+  CreateEmployeeBodyDto,
+  ListEmployeesQueryDto,
+  UpdateEmployeeBodyDto,
+} from './employees/dto/employee.dto';
+import { EmployeesService } from './employees/employees.service';
 import type { OrganizationActor } from './organization-actor';
 import type {
   CreatePostBodyDto,
@@ -18,6 +24,7 @@ export class OrganizationService {
   constructor(
     private readonly sites: SitesService,
     private readonly posts: PostsService,
+    private readonly employees: EmployeesService,
   ) {}
 
   // organization.site.create
@@ -58,5 +65,43 @@ export class OrganizationService {
   // organization.post.list
   listPosts(actor: OrganizationActor, siteId: string, query: PageQueryDto) {
     return this.posts.list(actor, siteId, query);
+  }
+
+  // organization.employee.create
+  createEmployee(actor: OrganizationActor, dto: CreateEmployeeBodyDto) {
+    return this.employees.create(actor, dto);
+  }
+
+  // organization.employee.update
+  updateEmployee(
+    actor: OrganizationActor,
+    employeeId: string,
+    dto: UpdateEmployeeBodyDto,
+  ) {
+    return this.employees.update(actor, employeeId, dto);
+  }
+
+  // organization.employee.get (by `employeeId`)
+  getEmployee(actor: OrganizationActor, employeeId: string) {
+    return this.employees.get(actor, { employeeId });
+  }
+
+  // organization.employee.get (by `userId`, for other core modules)
+  getEmployeeByUserId(actor: OrganizationActor, userId: string) {
+    return this.employees.get(actor, { userId });
+  }
+
+  // organization.employee.get with an explicit tenant and no actor: the
+  // background-style call behind the NATS responder (T5).
+  getEmployeeForTenant(
+    tenantId: string,
+    lookup: { employeeId: string } | { userId: string },
+  ) {
+    return this.employees.getForTenant(tenantId, lookup);
+  }
+
+  // organization.employee.list
+  listEmployees(actor: OrganizationActor, query: ListEmployeesQueryDto) {
+    return this.employees.list(actor, query);
   }
 }

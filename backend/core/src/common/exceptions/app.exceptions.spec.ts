@@ -3,6 +3,7 @@ import { HttpException } from '@nestjs/common';
 import {
   AppException,
   EmailTakenException,
+  EmployeeNotFoundException,
   ForbiddenException,
   InvalidCredentialsException,
   InvalidTokenException,
@@ -19,6 +20,7 @@ describe('app.exceptions', () => {
     [new TenantSuspendedException(), 403, 'tenant_suspended'],
     [new TenantCancelledException(), 403, 'tenant_cancelled'],
     [new EmailTakenException(), 409, 'email_taken'],
+    [new EmployeeNotFoundException(), 404, 'employee_not_found'],
     [new ValidationException([]), 422, 'validation_error'],
   ])(
     '%p carries status %i and code %s',

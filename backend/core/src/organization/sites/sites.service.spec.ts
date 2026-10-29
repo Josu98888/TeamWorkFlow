@@ -394,4 +394,25 @@ describe('SitesService', () => {
       expect(publish).not.toHaveBeenCalled();
     });
   });
+
+  describe('findExistingSiteIds', () => {
+    it('returns only the ids that exist in the given tenant', async () => {
+      findMany.mockResolvedValueOnce([{ id: SITE_1 }]);
+      const ids = await service.findExistingSiteIds(TENANT_A, [
+        SITE_1,
+        SITE_B,
+        'missing',
+      ]);
+      expect(findMany).toHaveBeenCalledWith({
+        where: { tenantId: TENANT_A, id: { in: [SITE_1, SITE_B, 'missing'] } },
+        select: { id: true },
+      });
+      expect(ids).toEqual([SITE_1]);
+    });
+
+    it('does not query for an empty list', async () => {
+      expect(await service.findExistingSiteIds(TENANT_A, [])).toEqual([]);
+      expect(findMany).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -176,6 +176,20 @@ export class SitesService {
     return this.findOrThrow(actor, siteId);
   }
 
+  // For the employees sub-module (enabled sites): which of `siteIds` exist in
+  // the tenant. Returns only the matching ids; it does not check actor scope.
+  async findExistingSiteIds(
+    tenantId: string,
+    siteIds: string[],
+  ): Promise<string[]> {
+    if (siteIds.length === 0) return [];
+    const rows = await this.prisma.site.findMany({
+      where: { tenantId, id: { in: siteIds } },
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
+  }
+
   private async findOrThrow(
     actor: TenantActor,
     siteId: string,

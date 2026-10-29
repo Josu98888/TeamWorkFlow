@@ -7,6 +7,7 @@ export type AppErrorCode =
   | 'email_taken'
   | 'site_not_found'
   | 'post_not_found'
+  | 'employee_not_found'
   | 'validation_error';
 
 export interface ValidationErrorItem {
@@ -97,6 +98,12 @@ export class SiteNotFoundException extends AppException {
 export class PostNotFoundException extends AppException {
   constructor() {
     super(404, 'post_not_found', 'Post not found');
+  }
+}
+
+export class EmployeeNotFoundException extends AppException {
+  constructor() {
+    super(404, 'employee_not_found', 'Employee not found');
   }
 }
 
