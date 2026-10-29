@@ -186,8 +186,10 @@ model TenantFeatures {
 // JetStream event deduplication table within the same transaction.
 model ProcessedEvent {
   eventId     String   @id @map("event_id")
+  tenantId    String?  @map("tenant_id") @db.Uuid
   eventType   String   @map("event_type")
   processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
 
+  @@index([tenantId], map: "idx_processed_event_tenant")
   @@map("processed_events")
 }
