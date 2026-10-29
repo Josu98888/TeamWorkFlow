@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { AttendancePrismaService } from '../prisma/attendance-prisma.service';
 import { NatsClientService } from '../nats/nats-client.service';
 import type { ShiftDto } from '../nats/dto/nats-contracts';
-import type { ShiftSnapshot } from '../prisma/generated/client';
+import type { Prisma, ShiftSnapshot, ShiftStatus } from '../prisma/generated/client';
 
 export const CLOCK_IN_EARLY_MINUTES = 60;
 
@@ -61,8 +61,9 @@ export class ShiftSnapshotService {
   /**
    * Upserts a shift snapshot only if the incoming version is greater than or equal to the stored one.
    */
-  async upsertShift(remote: ShiftDto): Promise<void> {
-    const existing = await this.prisma.shiftSnapshot.findFirst({
+  async upsertShift(remote: ShiftDto, tx?: Prisma.TransactionClient): Promise<void> {
+    const client = tx ?? this.prisma;
+    const existing = await client.shiftSnapshot.findFirst({
       where: { shiftId: remote.id },
     });
 
@@ -73,7 +74,7 @@ export class ShiftSnapshotService {
       return;
     }
 
-    await this.prisma.shiftSnapshot.upsert({
+    await client.shiftSnapshot.upsert({
       where: { shiftId: remote.id },
       update: {
         status: remote.status,
@@ -93,6 +94,22 @@ export class ShiftSnapshotService {
         status: remote.status,
         version: remote.version,
       },
+    });
+  }
+
+  /**
+   * Updates shift status when shift starts, ends, or is cancelled.
+   */
+  async updateShiftStatus(
+    tenantId: string,
+    shiftId: string,
+    status: ShiftStatus,
+    tx?: Prisma.TransactionClient,
+  ): Promise<void> {
+    const client = tx ?? this.prisma;
+    await client.shiftSnapshot.updateMany({
+      where: { tenantId, shiftId },
+      data: { status },
     });
   }
 

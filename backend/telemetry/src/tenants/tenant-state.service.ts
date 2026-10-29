@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AttendancePrismaService } from '../prisma/attendance-prisma.service';
+import type { Prisma } from '../prisma/generated/client';
 
 @Injectable()
 export class TenantStateService {
@@ -21,8 +22,9 @@ export class TenantStateService {
   /**
    * Sets suspension state when receiving tenant_suspended, tenant_cancelled or tenant_reactivated.
    */
-  async setSuspended(tenantId: string, isSuspended: boolean): Promise<void> {
-    await this.prisma.tenantState.upsert({
+  async setSuspended(tenantId: string, isSuspended: boolean, tx?: Prisma.TransactionClient): Promise<void> {
+    const client = tx ?? this.prisma;
+    await client.tenantState.upsert({
       where: { tenantId },
       update: { isSuspended },
       create: { tenantId, isSuspended },
@@ -55,8 +57,10 @@ export class TenantStateService {
     tenantId: string,
     features: Record<string, boolean>,
     effectiveAt: Date,
+    tx?: Prisma.TransactionClient,
   ): Promise<void> {
-    const existing = await this.prisma.tenantFeatures.findFirst({
+    const client = tx ?? this.prisma;
+    const existing = await client.tenantFeatures.findFirst({
       where: { tenantId },
     });
 
@@ -67,7 +71,7 @@ export class TenantStateService {
       return;
     }
 
-    await this.prisma.tenantFeatures.upsert({
+    await client.tenantFeatures.upsert({
       where: { tenantId },
       update: {
         features,
