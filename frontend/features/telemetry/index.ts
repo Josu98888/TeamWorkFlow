@@ -15,3 +15,4 @@ export type {
   SiteSummarySnapshot,
   TowerSnapshotResponse,
 } from './types';
+export { TowerView } from './components/TowerView';
