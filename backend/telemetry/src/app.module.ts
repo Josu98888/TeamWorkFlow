@@ -9,6 +9,7 @@ import { TenantsModule } from './tenants/tenants.module';
 import { WorkdaysModule } from './workdays/workdays.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { ClockInsModule } from './clock-ins/clock-ins.module';
+import { TowerModule } from './tower/tower.module';
 import { AuthGuard } from './http/guards/auth.guard';
 
 @Module({
@@ -21,6 +22,7 @@ import { AuthGuard } from './http/guards/auth.guard';
     TenantsModule,
     WorkdaysModule,
     AlertsModule,
+    TowerModule,
     ClockInsModule,
   ],
   controllers: [],
