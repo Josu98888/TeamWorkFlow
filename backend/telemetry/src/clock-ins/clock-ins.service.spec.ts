@@ -8,6 +8,7 @@ import { ShiftSnapshotService } from '../shifts/shift-snapshot.service';
 import { TenantStateService } from '../tenants/tenant-state.service';
 import { WorkdaysService } from '../workdays/workdays.service';
 import { AlertsService } from '../alerts/alerts.service';
+import { TowerService } from '../tower/tower.service';
 import {
   ClockEventNotFoundException,
   ClockTooOldException,
@@ -75,6 +76,10 @@ describe('ClockInsService', () => {
     resolveAlertsOnClockOut: jest.fn(),
   };
 
+  const mockTower = {
+    emitSiteSummaryUpdated: jest.fn(),
+  };
+
   const mockActor: VerifiedActor = {
     userId: 'user-1',
     tenantId: 'tenant-1',
@@ -112,6 +117,7 @@ describe('ClockInsService', () => {
         { provide: TenantStateService, useValue: mockTenantState },
         { provide: WorkdaysService, useValue: mockWorkdays },
         { provide: AlertsService, useValue: mockAlerts },
+        { provide: TowerService, useValue: mockTower },
       ],
     }).compile();
 

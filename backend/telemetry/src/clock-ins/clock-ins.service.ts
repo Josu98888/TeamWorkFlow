@@ -8,6 +8,7 @@ import { ShiftSnapshotService } from '../shifts/shift-snapshot.service';
 import { TenantStateService } from '../tenants/tenant-state.service';
 import { WorkdaysService } from '../workdays/workdays.service';
 import { AlertsService } from '../alerts/alerts.service';
+import { TowerService } from '../tower/tower.service';
 import {
   ClockEventNotFoundException,
   ClockTooOldException,
@@ -57,6 +58,7 @@ export class ClockInsService {
     private readonly tenantState: TenantStateService,
     private readonly workdaysService: WorkdaysService,
     private readonly alertsService: AlertsService,
+    private readonly towerService: TowerService,
   ) {}
 
   /**
@@ -234,6 +236,9 @@ export class ClockInsService {
       );
     }
 
+    // 9. Update real-time site summary
+    await this.towerService.emitSiteSummaryUpdated(actor.tenantId, siteId);
+
     return event;
   }
 
@@ -303,6 +308,9 @@ export class ClockInsService {
         shift.shiftId,
       );
     }
+
+    // 9. Update real-time site summary
+    await this.towerService.emitSiteSummaryUpdated(actor.tenantId, shift.siteId);
 
     return event;
   }
@@ -374,6 +382,9 @@ export class ClockInsService {
     );
 
     await this.workdaysService.recomputeWorkday(actor.tenantId, updated.shiftId);
+
+    // 8. Update real-time site summary
+    await this.towerService.emitSiteSummaryUpdated(actor.tenantId, updated.siteId);
 
     return updated;
   }
