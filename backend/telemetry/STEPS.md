@@ -264,7 +264,7 @@ flowchart TD
 
 ### Fase 7: Consumo de Eventos JetStream (Sync y Purga)
 
-- [ ] **TEL-7.1: Suscripciones con Durable Consumer y Ack Explícito**
+- [x] **TEL-7.1: Suscripciones con Durable Consumer y Ack Explícito**
   - Consumir eventos del módulo `organization`:
     - `shift_created`, `shift_updated`, `shift_cancelled`: actualizar `ShiftSnapshot` si `version` es mayor.
     - `shift_started`, `shift_ended`: actualizar estado y cerrar jornada si terminó.
@@ -274,7 +274,7 @@ flowchart TD
   - Consumir eventos del módulo `billing`:
     - `subscription_created`, `plan_changed`: actualizar `TenantFeatures`.
     - `data_retention_expired`: purga transaccional irreversible de todos los datos del tenant.
-- [ ] **TEL-7.2: Deduplicación Idempotente con `ProcessedEvent`**
+- [x] **TEL-7.2: Deduplicación Idempotente con `ProcessedEvent`**
   - Verificar y registrar `eventId` dentro de la transacción de procesamiento.
 
 ---
