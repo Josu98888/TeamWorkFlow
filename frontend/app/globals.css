@@ -73,5 +73,11 @@
     background-color: var(--bg-main);
     color: var(--text-body);
     min-height: 100vh;
+
+*,
+*::before,
+*::after {
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.2s ease;
+}
   }
 }
