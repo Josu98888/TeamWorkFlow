@@ -281,15 +281,15 @@ flowchart TD
 
 ### Fase 8: Integración Docker, Proxy Inverso y Suite de Pruebas
 
-- [ ] **TEL-8.1: Dockerfile y `backend/docker-compose.yml`**
+- [x] **TEL-8.1: Dockerfile y `backend/docker-compose.yml`**
   - Crear `backend/telemetry/Dockerfile` multi-stage (build y producción).
   - Añadir servicio `telemetry` en `docker-compose.yml` (puerto 3003, red interna con NATS y Postgres).
-- [ ] **TEL-8.2: Reglas de Enrutamiento en Reverse Proxy**
+- [x] **TEL-8.2: Reglas de Enrutamiento en Reverse Proxy**
   - Publicar bajo el mismo origen del backend:
     - `/api/v1/telemetry/*` -> `telemetry:3003/api/v1/telemetry/*`
     - `/ws/*` -> `telemetry:3003/ws` (con headers de WebSocket upgrade)
     - Resto de `/api/v1/*` -> `core:3000/api/v1/*`
-- [ ] **TEL-8.3: Suite de Pruebas Unitarias y E2E**
+- [x] **TEL-8.3: Suite de Pruebas Unitarias y E2E**
   - Pruebas unitarias de Haversine, cálculo de jornadas y reglas de ventana de fichada.
   - Mock de cliente NATS para pruebas de Guards y controladores.
   - Pruebas de integración E2E sobre base de datos de test (`attendance` schema).
