@@ -95,4 +95,16 @@ export class PostsService {
     ]);
     return { items, total };
   }
+
+  // For the shifts sub-module: a post of `tenantId`, no actor scope check (the
+  // caller already authorized the site). 404 `post_not_found` otherwise.
+  async getForTenant(tenantId: string, postId: string): Promise<PostView> {
+    const post = await this.prisma.post.findFirst({
+      where: { id: postId, tenantId },
+    });
+    if (!post) {
+      throw new PostNotFoundException();
+    }
+    return post;
+  }
 }

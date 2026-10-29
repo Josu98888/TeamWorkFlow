@@ -9,18 +9,20 @@ import { OrganizationPrismaService } from './prisma/prisma.service';
 import { PostsService } from './sites/posts.service';
 import { SitesController } from './sites/sites.controller';
 import { SitesService } from './sites/sites.service';
+import { ShiftsController } from './shifts/shifts.controller';
+import { ShiftsService } from './shifts/shifts.service';
 
 // Only the facade (OrganizationService) is exported; Prisma, the events
-// service and the sub-module services stay private. The shifts sub-module is
-// added by its own task.
+// service and the sub-module services stay private.
 @Module({
   imports: [OrganizationEventsModule],
-  controllers: [SitesController, EmployeesController],
+  controllers: [SitesController, EmployeesController, ShiftsController],
   providers: [
     OrganizationPrismaService,
     SitesService,
     PostsService,
     EmployeesService,
+    ShiftsService,
     ConsumedEventProcessor,
     UserCreatedHandler,
     OrganizationService,

@@ -14,6 +14,14 @@ import type {
   UpdateSiteBodyDto,
 } from './sites/dto/site.dto';
 import { PostsService } from './sites/posts.service';
+import type {
+  CancelShiftBodyDto,
+  CreateShiftBodyDto,
+  ListShiftsQueryDto,
+  ReassignShiftBodyDto,
+  UpdateShiftBodyDto,
+} from './shifts/dto/shift.dto';
+import { ShiftsService } from './shifts/shifts.service';
 import { SitesService } from './sites/sites.service';
 
 // Public facade of the module (the only export of OrganizationModule).
@@ -25,6 +33,7 @@ export class OrganizationService {
     private readonly sites: SitesService,
     private readonly posts: PostsService,
     private readonly employees: EmployeesService,
+    private readonly shifts: ShiftsService,
   ) {}
 
   // organization.site.create
@@ -103,5 +112,53 @@ export class OrganizationService {
   // organization.employee.list
   listEmployees(actor: OrganizationActor, query: ListEmployeesQueryDto) {
     return this.employees.list(actor, query);
+  }
+
+  // organization.shift.create
+  createShift(actor: OrganizationActor, dto: CreateShiftBodyDto) {
+    return this.shifts.create(actor, dto);
+  }
+
+  // organization.shift.update
+  updateShift(
+    actor: OrganizationActor,
+    shiftId: string,
+    dto: UpdateShiftBodyDto,
+  ) {
+    return this.shifts.update(actor, shiftId, dto);
+  }
+
+  // organization.shift.reassign
+  reassignShift(
+    actor: OrganizationActor,
+    shiftId: string,
+    dto: ReassignShiftBodyDto,
+  ) {
+    return this.shifts.reassign(actor, shiftId, dto);
+  }
+
+  // organization.shift.cancel
+  cancelShift(
+    actor: OrganizationActor,
+    shiftId: string,
+    dto: CancelShiftBodyDto,
+  ) {
+    return this.shifts.cancel(actor, shiftId, dto);
+  }
+
+  // organization.shift.get
+  getShift(actor: OrganizationActor, shiftId: string) {
+    return this.shifts.get(actor, shiftId);
+  }
+
+  // organization.shift.get with an explicit tenant and no actor: the
+  // background-style call behind the NATS responder (T5).
+  getShiftForTenant(tenantId: string, shiftId: string) {
+    return this.shifts.getForTenant(tenantId, shiftId);
+  }
+
+  // organization.shift.list
+  listShifts(actor: OrganizationActor, query: ListShiftsQueryDto) {
+    return this.shifts.list(actor, query);
   }
 }

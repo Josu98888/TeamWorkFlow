@@ -7,9 +7,13 @@ import {
   ForbiddenException,
   InvalidCredentialsException,
   InvalidTokenException,
+  ShiftNotEditableException,
+  ShiftNotFoundException,
+  ShiftOverlapException,
   TenantCancelledException,
   TenantSuspendedException,
   ValidationException,
+  VersionConflictException,
 } from './app.exceptions';
 
 describe('app.exceptions', () => {
@@ -21,6 +25,10 @@ describe('app.exceptions', () => {
     [new TenantCancelledException(), 403, 'tenant_cancelled'],
     [new EmailTakenException(), 409, 'email_taken'],
     [new EmployeeNotFoundException(), 404, 'employee_not_found'],
+    [new ShiftNotFoundException(), 404, 'shift_not_found'],
+    [new ShiftOverlapException(), 409, 'shift_overlap'],
+    [new VersionConflictException(), 409, 'version_conflict'],
+    [new ShiftNotEditableException(), 409, 'shift_not_editable'],
     [new ValidationException([]), 422, 'validation_error'],
   ])(
     '%p carries status %i and code %s',

@@ -8,6 +8,10 @@ export type AppErrorCode =
   | 'site_not_found'
   | 'post_not_found'
   | 'employee_not_found'
+  | 'shift_not_found'
+  | 'shift_overlap'
+  | 'version_conflict'
+  | 'shift_not_editable'
   | 'validation_error';
 
 export interface ValidationErrorItem {
@@ -104,6 +108,42 @@ export class PostNotFoundException extends AppException {
 export class EmployeeNotFoundException extends AppException {
   constructor() {
     super(404, 'employee_not_found', 'Employee not found');
+  }
+}
+
+export class ShiftNotFoundException extends AppException {
+  constructor() {
+    super(404, 'shift_not_found', 'Shift not found');
+  }
+}
+
+export class ShiftOverlapException extends AppException {
+  constructor() {
+    super(
+      409,
+      'shift_overlap',
+      'The employee already has an overlapping shift',
+    );
+  }
+}
+
+export class VersionConflictException extends AppException {
+  constructor() {
+    super(
+      409,
+      'version_conflict',
+      'The resource was modified by someone else; reload and retry',
+    );
+  }
+}
+
+export class ShiftNotEditableException extends AppException {
+  constructor() {
+    super(
+      409,
+      'shift_not_editable',
+      'A cancelled or finished shift cannot be edited',
+    );
   }
 }
 

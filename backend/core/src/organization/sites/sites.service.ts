@@ -176,6 +176,18 @@ export class SitesService {
     return this.findOrThrow(actor, siteId);
   }
 
+  // For the shifts sub-module: a site of `tenantId`, no actor scope check (the
+  // caller already authorized the access). 404 `site_not_found` otherwise.
+  async getForTenant(tenantId: string, siteId: string): Promise<SiteRow> {
+    const site = await this.prisma.site.findFirst({
+      where: { id: siteId, tenantId },
+    });
+    if (!site) {
+      throw new SiteNotFoundException();
+    }
+    return site;
+  }
+
   // For the employees sub-module (enabled sites): which of `siteIds` exist in
   // the tenant. Returns only the matching ids; it does not check actor scope.
   async findExistingSiteIds(
