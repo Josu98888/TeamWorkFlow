@@ -1,17 +1,14 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleDestroy,
-  OnModuleInit,
-} from '@nestjs/common';
-import { connect, NatsConnection } from '@nats-io/transport-node';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+import { firstValueFrom, TimeoutError, timeout } from 'rxjs';
 import { envs } from '../config';
-import { NATS_PATTERNS } from './nats.constants';
+import { NATS_PATTERNS, NATS_SERVICE } from './nats.constants';
 import {
   AppException,
   AppErrorCode,
   UpstreamTimeoutException,
   UpstreamUnavailableException,
+  ValidationErrorItem,
 } from '../common/exceptions';
 import type {
   EmployeeDto,
@@ -20,101 +17,71 @@ import type {
   VerifiedActor,
 } from './dto/nats-contracts';
 
-function encodeJson(data: unknown): Uint8Array {
-  return Buffer.from(JSON.stringify(data));
+// Error body that core's NatsErrorFilter sends back; the Nest client rejects with it as is.
+interface RemoteErrorBody {
+  status: number;
+  code: AppErrorCode;
+  message: string;
+  errors?: ValidationErrorItem[];
 }
 
-function decodeJson(data: Uint8Array): unknown {
-  return JSON.parse(Buffer.from(data).toString('utf-8'));
+function isRemoteErrorBody(value: unknown): value is RemoteErrorBody {
+  if (!value || typeof value !== 'object') return false;
+  const body = value as Partial<RemoteErrorBody>;
+  return (
+    typeof body.status === 'number' &&
+    body.status >= 400 &&
+    typeof body.code === 'string' &&
+    typeof body.message === 'string'
+  );
+}
+
+function toAppException(body: RemoteErrorBody): AppException {
+  return new AppException(body.status, body.code, body.message, body.errors);
 }
 
 @Injectable()
-export class NatsClientService implements OnModuleInit, OnModuleDestroy {
+export class NatsClientService {
   private readonly logger = new Logger(NatsClientService.name);
-  private connection?: NatsConnection;
 
-  async onModuleInit() {
-    try {
-      this.connection = await connect({
-        servers: envs.natsServers,
-        name: 'telemetry-rpc',
-        timeout: envs.natsTimeoutMs,
-      });
-      this.logger.log(`NATS connected to ${envs.natsServers.join(', ')}`);
-    } catch (err) {
-      this.logger.warn(
-        `Could not connect to NATS on init: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-
-  async onModuleDestroy() {
-    await this.connection?.drain().catch(() => undefined);
-  }
+  constructor(@Inject(NATS_SERVICE) private readonly client: ClientProxy) {}
 
   async request<TReq, TRes>(
     subject: string,
     data: TReq,
     timeoutMs?: number,
   ): Promise<TRes> {
-    if (!this.connection) {
-      try {
-        this.connection = await connect({
-          servers: envs.natsServers,
-          name: 'telemetry-rpc',
-          timeout: timeoutMs ?? envs.natsTimeoutMs,
-        });
-      } catch {
-        throw new UpstreamUnavailableException('NATS broker');
-      }
-    }
-
     try {
-      const response = await this.connection.request(
-        subject,
-        encodeJson(data),
-        { timeout: timeoutMs ?? envs.natsTimeoutMs },
+      const response = await firstValueFrom(
+        this.client
+          .send<TRes, TReq>(subject, data)
+          .pipe(timeout(timeoutMs ?? envs.natsTimeoutMs)),
       );
 
-      const decoded = decodeJson(response.data) as unknown;
-
-      if (
-        decoded &&
-        typeof decoded === 'object' &&
-        'status' in decoded &&
-        'code' in decoded &&
-        'message' in decoded &&
-        typeof (decoded as { status: number }).status === 'number' &&
-        (decoded as { status: number }).status >= 400
-      ) {
-        const errorBody = decoded as {
-          status: number;
-          code: AppErrorCode;
-          message: string;
-          errors?: import('../common/exceptions').ValidationErrorItem[];
-        };
-        throw new AppException(
-          errorBody.status,
-          errorBody.code,
-          errorBody.message,
-          errorBody.errors,
-        );
+      // Defensive: a responder that returns an error body as a normal reply.
+      if (isRemoteErrorBody(response)) {
+        throw toAppException(response);
       }
 
-      return decoded as TRes;
+      return response;
     } catch (error: unknown) {
       if (error instanceof AppException) {
         throw error;
       }
+      if (isRemoteErrorBody(error)) {
+        throw toAppException(error);
+      }
+      if (error instanceof TimeoutError) {
+        throw new UpstreamTimeoutException(subject);
+      }
 
       const err = error as { code?: string; name?: string; message?: string };
       const code = err?.code || err?.name;
-      if (code === 'TIMEOUT' || err?.message?.toLowerCase().includes('timeout')) {
-        throw new UpstreamTimeoutException(subject);
-      }
+      // With no responder the Nest client gets an empty reply (EmptyResponseException).
       if (
         code === 'NO_RESPONDERS' ||
         code === 'CONNECTION_REFUSED' ||
+        code === 'EmptyResponseException' ||
         err?.message?.toLowerCase().includes('no responders')
       ) {
         throw new UpstreamUnavailableException(subject);
