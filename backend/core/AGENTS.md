@@ -74,7 +74,8 @@ Synchronous cross-process calls use NATS request-reply with patterns `<module>.<
 
 Rules:
 
-- Responders are thin: they call the module facade and return its result. No extra logic.
+- Responders are thin: they call the module facade and return its result. No extra logic. The `organization.*.get` responders (`src/organization/responders/`) only add an explicit mapper to the `telemetry` wire shape (`radiusMeters`, `COMPLETED`, ISO dates; see the module guide).
+- Requests of the `organization.*.get` responders carry `{ tenantId, ... }` and no actor; a resource of another tenant answers 404 `<resource>_not_found`.
 - Never add a responder without updating this table, `docs/architecture.md` and the consuming service's docs.
 - Never expose `auth.user.list-recipients` or any internal-only operation as a responder or HTTP route.
 - Open decision (gap): the Torre de Control needs the list of all sites of a tenant for owner/admin rooms; `organization.site.list` is not in the ADR's responder list. Decide whether to add it or derive the sites in `telemetry`.
