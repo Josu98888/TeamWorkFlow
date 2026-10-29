@@ -81,3 +81,43 @@
 }
   }
 }
+
+/*
+ * Tailwind utilities for the design tokens above (additive).
+ * The variables stay the single source of truth; these only expose them as
+ * classes, e.g. `bg-card`, `text-muted`, `border-line`, `bg-success/10`.
+ * They resolve at runtime, so the `data-theme` switch keeps working.
+ */
+@theme inline {
+  /* Surfaces */
+  --color-page: var(--bg-main);
+  --color-card: var(--bg-card);
+  --color-sidebar: var(--bg-sidebar);
+  --color-alt: var(--bg-alt);
+  --color-hover: var(--bg-hover);
+  --color-line: var(--border-main);
+
+  /* Brand */
+  --color-brand: var(--brand-primary);
+  --color-brand-dark: var(--brand-dark);
+  --color-brand-medium: var(--brand-medium);
+  --color-brand-lavender: var(--brand-lavender);
+  --color-brand-petroleum: var(--brand-petroleum);
+  --color-brand-teal: var(--brand-teal);
+  --color-brand-mint: var(--brand-mint);
+
+  /* Text */
+  --color-title: var(--text-title);
+  --color-subtitle: var(--text-subtitle);
+  --color-body: var(--text-body);
+  --color-muted: var(--text-muted);
+  --color-disabled: var(--text-disabled);
+  --color-link: var(--text-link);
+
+  /* Functional states */
+  --color-success: var(--status-success);
+  --color-warning: var(--status-warning);
+  --color-danger: var(--status-danger);
+  --color-info: var(--status-info);
+  --color-process: var(--status-process);
+}

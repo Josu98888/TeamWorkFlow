@@ -14,6 +14,7 @@ export function Sidebar({ userRole = 'owner' }: { userRole?: string }) {
   };
 
   const navItems = [
+    { label: 'Panel Principal', href: '/' },
     { label: 'Torre de Control', href: '/torre-control' },
     { label: 'Sedes y Geocercas', href: '/sedes' },
     { label: 'Tareas y Reportes', href: '/tareas' },
@@ -37,7 +38,7 @@ export function Sidebar({ userRole = 'owner' }: { userRole?: string }) {
 
         <nav className="space-y-1">
           {navItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
             return (
               <Link
                 key={item.href}
