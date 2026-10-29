@@ -6,6 +6,8 @@ describe('envs', () => {
     NATS_SERVER: 'nats://localhost:4222',
     AUTH_DATABASE_URL:
       'postgresql://auth_svc:secret@localhost:5432/teamworkflow?schema=auth',
+    ORGANIZATION_DATABASE_URL:
+      'postgresql://organization_svc:secret@localhost:5432/teamworkflow?schema=organization',
     JWT_SECRET: 'a-secret-with-at-least-32-characters!',
   };
 
@@ -14,6 +16,7 @@ describe('envs', () => {
       port: 3000,
       natsServers: ['nats://localhost:4222'],
       authDatabaseUrl: validEnv.AUTH_DATABASE_URL,
+      organizationDatabaseUrl: validEnv.ORGANIZATION_DATABASE_URL,
       jwtSecret: validEnv.JWT_SECRET,
       accessTokenTtl: '15m',
       refreshTokenTtl: '7d',
@@ -50,6 +53,18 @@ describe('envs', () => {
     expect(() =>
       validateEnvs({ ...validEnv, AUTH_DATABASE_URL: 'mysql://localhost/db' }),
     ).toThrow('AUTH_DATABASE_URL');
+  });
+
+  it('throws when ORGANIZATION_DATABASE_URL is missing or not a postgres URI', () => {
+    const { ORGANIZATION_DATABASE_URL: _omitted, ...env } = validEnv;
+
+    expect(() => validateEnvs(env)).toThrow('ORGANIZATION_DATABASE_URL');
+    expect(() =>
+      validateEnvs({
+        ...validEnv,
+        ORGANIZATION_DATABASE_URL: 'mysql://localhost/db',
+      }),
+    ).toThrow('ORGANIZATION_DATABASE_URL');
   });
 
   it('throws when JWT_SECRET is missing or shorter than 32 characters', () => {

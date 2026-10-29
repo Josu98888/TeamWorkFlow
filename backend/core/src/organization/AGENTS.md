@@ -105,12 +105,12 @@ Ask before installing any dependency.
 
 ## Current Status (READ FIRST)
 
-`backend/core` exists (scaffold, HTTP layer and `auth` module) but this module is not built. This folder contains only this `AGENTS.md`: there is no `OrganizationModule`, no Prisma schema, no controllers.
+`backend/core` exists (scaffold, HTTP layer and `auth` module). The organization scaffold is in place (T1 of `odd/tasks/organization-module.md`): `OrganizationModule` (registered in `AppModule`, exports only `OrganizationService`, an empty facade), the Prisma schema and first migration (`src/organization/prisma/`), `OrganizationPrismaService`, `organization.patterns.ts` and `OrganizationEventsService` (`src/organization/events/`, owns the `ORGANIZATION_EVENTS` stream and publishing). Sites, employees, shifts, controllers and consumers are not built yet.
 
 First tasks, in order (ask before each install):
 
-- [ ] Create `OrganizationModule` in `backend/core/src/organization/` (needs `backend/core` from T6), its config in `src/config/envs.ts` and `.env.example`.
-- [ ] Prisma schema and first migration for `sites`.
+- [x] Create `OrganizationModule` in `backend/core/src/organization/`, its config (`ORGANIZATION_DATABASE_URL`) in `src/config/envs.ts` and `.env.example`.
+- [x] Prisma schema and first migration (`prisma:organization:*` scripts, `prisma.organization.config.ts`). `ShiftTemplate` comes with the template feature.
 - [ ] Sub-modules `sites`, `employees`, `shifts`, with their HTTP controllers, the exported facade service and the pattern constants for the NATS responders.
 - [ ] Consumers of `auth` events and the jobs.
 - [ ] Expose the module routes through its HTTP controllers in `core` (no separate service, no extra compose entry).
@@ -212,7 +212,7 @@ The jobs are the only code that reads across tenants. They still process one ten
 | Variable | Description |
 |----------|-------------|
 | `NATS_SERVER` | Comma-separated NATS URLs (shared by all of `core`) |
-| `DATABASE_URL` | PostgreSQL connection string for this module (its own role and schema) |
+| `ORGANIZATION_DATABASE_URL` | PostgreSQL connection string for the `teamworkflow` database, `organization` schema (`?schema=organization`), `organization_svc` role |
 | `SHIFT_HORIZON_DAYS` | Days ahead the generator fills. Default `14` |
 
 Variable names are provisional until the shared `core` config exists (T4/T6): in `core` each module has its own database URL for its own role. Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Never commit `.env`.

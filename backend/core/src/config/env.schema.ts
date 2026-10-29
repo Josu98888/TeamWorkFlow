@@ -7,6 +7,7 @@ export interface Envs {
   port: number;
   natsServers: string[];
   authDatabaseUrl: string;
+  organizationDatabaseUrl: string;
   jwtSecret: string;
   accessTokenTtl: string;
   refreshTokenTtl: string;
@@ -16,6 +17,7 @@ interface EnvVars {
   PORT: number;
   NATS_SERVER: string[];
   AUTH_DATABASE_URL: string;
+  ORGANIZATION_DATABASE_URL: string;
   JWT_SECRET: string;
   ACCESS_TOKEN_TTL: string;
   REFRESH_TOKEN_TTL: string;
@@ -26,6 +28,10 @@ const envsSchema = joi
     PORT: joi.number().port().required(),
     NATS_SERVER: joi.array().items(joi.string().uri()).min(1).required(),
     AUTH_DATABASE_URL: joi
+      .string()
+      .uri({ scheme: ['postgresql', 'postgres'] })
+      .required(),
+    ORGANIZATION_DATABASE_URL: joi
       .string()
       .uri({ scheme: ['postgresql', 'postgres'] })
       .required(),
@@ -59,6 +65,7 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
     port: envVars.PORT,
     natsServers: envVars.NATS_SERVER,
     authDatabaseUrl: envVars.AUTH_DATABASE_URL,
+    organizationDatabaseUrl: envVars.ORGANIZATION_DATABASE_URL,
     jwtSecret: envVars.JWT_SECRET,
     accessTokenTtl: envVars.ACCESS_TOKEN_TTL,
     refreshTokenTtl: envVars.REFRESH_TOKEN_TTL,

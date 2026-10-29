@@ -37,17 +37,22 @@ export default async function globalSetup() {
     );
   }
 
-  // Test database only: applyTestEnv() just pinned AUTH_DATABASE_URL to port
-  // 5433. The Prisma config of the auth module lives in the core root.
-  execFileSync(
-    process.execPath,
-    [
-      require.resolve('prisma/build/index.js'),
-      'migrate',
-      'deploy',
-      '--config',
-      'prisma.auth.config.ts',
-    ],
-    { cwd: resolve(__dirname, '../..'), env: process.env, stdio: 'inherit' },
-  );
+  // Test database only: applyTestEnv() just pinned the database URLs to port
+  // 5433. The Prisma config of each module lives in the core root.
+  for (const config of [
+    'prisma.auth.config.ts',
+    'prisma.organization.config.ts',
+  ]) {
+    execFileSync(
+      process.execPath,
+      [
+        require.resolve('prisma/build/index.js'),
+        'migrate',
+        'deploy',
+        '--config',
+        config,
+      ],
+      { cwd: resolve(__dirname, '../..'), env: process.env, stdio: 'inherit' },
+    );
+  }
 }

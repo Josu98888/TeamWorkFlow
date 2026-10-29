@@ -11,7 +11,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 
 # The Prisma Clients are generated code (src/<module>/prisma/generated, gitignored): build them before nest build
-RUN pnpm run prisma:auth:generate
+RUN pnpm run prisma:auth:generate && pnpm run prisma:organization:generate
 
 EXPOSE 3000
 
