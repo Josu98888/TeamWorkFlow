@@ -10,6 +10,7 @@ import { OrganizationResponder } from './responders/organization.responder';
 import { PostsService } from './sites/posts.service';
 import { SitesController } from './sites/sites.controller';
 import { SitesService } from './sites/sites.service';
+import { ShiftLifecycleService } from './shifts/shift-lifecycle.service';
 import { ShiftsController } from './shifts/shifts.controller';
 import { ShiftsService } from './shifts/shifts.service';
 
@@ -29,6 +30,7 @@ import { ShiftsService } from './shifts/shifts.service';
     PostsService,
     EmployeesService,
     ShiftsService,
+    ShiftLifecycleService,
     ConsumedEventProcessor,
     UserCreatedHandler,
     OrganizationService,
