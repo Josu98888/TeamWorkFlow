@@ -50,7 +50,7 @@ Decision: organization keeps its documented model; the three NATS responders map
 ## Tasks
 
 - [x] T1 Scaffold: `OrganizationModule`, `ORGANIZATION_DATABASE_URL` in `src/config/envs.ts` + `.env.example`, `prisma.organization.config.ts` + `prisma:organization:*` scripts, Prisma schema (Site, Post, Employee, EmployeeSite, Shift, TenantState, ProcessedEvent) with indexes, first migration, `OrganizationPrismaService`, `organization.patterns.ts`, `ORGANIZATION_EVENTS` stream setup. Route: delegated (writer trigger, 4+ files).
-- [ ] T2 Sites and posts: facade operations, HTTP controllers (route map), QR generation/rotation, role and site-scope checks, `site_updated` event, unit tests. Route: delegated.
+- [x] T2 Sites and posts: facade operations, HTTP controllers (route map), QR generation/rotation, role and site-scope checks, `site_updated` event, unit tests. Route: delegated.
 - [ ] T3 Employees: facade operations, HTTP controllers, `employee_created` event, `auth.user_created` consumer (idempotent, `ProcessedEvent`), unit tests. Route: delegated.
 - [ ] T4 Shifts: facade operations, HTTP controllers, overlap check in transaction + warnings, optimistic locking, `shift_*` events, unit tests. Route: delegated.
 - [ ] T5 NATS responders for telemetry with wire mapping, responder tests, docs (`backend/core/AGENTS.md`, `docs/architecture.md`, `backend/telemetry/AGENTS.md` if contracts change). Route: delegated.
@@ -66,7 +66,9 @@ Decision: organization keeps its documented model; the three NATS responders map
 
 - 2026-10-29: feature branch created from `develop` (`a6ff74b`). Document created.
 - 2026-10-29: T1 done on slice branch feat/backend/org-scaffold, route delegated (writer trigger). Commits 0ed7461 (@nestjs/schedule dep), 2ae2fb6 (scaffold). Checks: prisma:organization:generate ok, lint ok, tsc ok, jest src/config ok (14 tests). Events: organization-owned OrganizationEventsService (auth JetStreamService is auth-specific, not shared). `.env.example` files not updated (read/edit denied in this session): add ORGANIZATION_DATABASE_URL manually.
+- 2026-10-29: parent spot check: `tsc --noEmit` ok; `pnpm test:smoke` 2 suites / 21 tests passed (121 s; the writer's 150 s timeout killed it before, not a hang).
 
 ## Next step
 
 T2.
+- 2026-10-29: T2 done on slice branch feat/backend/org-sites (stacked on org-scaffold), route delegated (writer trigger). Commit fb0103e (sites and posts). Checks: lint ok, tsc ok, jest src/organization 3 suites / 49 tests ok. Decisions: employees get empty list / 404 site_not_found on site and post reads (never 403, never qrCode); posts writes owner/admin only; site_updated also emitted on create; telemetry's site_updated consumer reads only siteId, so the documented payload is compatible unchanged. Unstaged .env.example change (ORGANIZATION_DATABASE_URL) left for the user.

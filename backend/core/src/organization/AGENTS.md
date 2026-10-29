@@ -105,13 +105,13 @@ Ask before installing any dependency.
 
 ## Current Status (READ FIRST)
 
-`backend/core` exists (scaffold, HTTP layer and `auth` module). The organization scaffold is in place (T1 of `odd/tasks/organization-module.md`): `OrganizationModule` (registered in `AppModule`, exports only `OrganizationService`, an empty facade), the Prisma schema and first migration (`src/organization/prisma/`), `OrganizationPrismaService`, `organization.patterns.ts` and `OrganizationEventsService` (`src/organization/events/`, owns the `ORGANIZATION_EVENTS` stream and publishing). Sites, employees, shifts, controllers and consumers are not built yet.
+`backend/core` exists (scaffold, HTTP layer and `auth` module). The organization scaffold is in place (T1 of `odd/tasks/organization-module.md`): `OrganizationModule` (registered in `AppModule`, exports only `OrganizationService`, an empty facade), the Prisma schema and first migration (`src/organization/prisma/`), `OrganizationPrismaService`, `organization.patterns.ts` and `OrganizationEventsService` (`src/organization/events/`, owns the `ORGANIZATION_EVENTS` stream and publishing). Since T2 the `sites` sub-module is built (`src/organization/sites/`: `SitesService`, `PostsService`, `SitesController` with the site and post routes of the route map, DTOs, `site-policy.ts`) and exposed through the `OrganizationService` facade; employees, shifts and consumers are not built yet. Employee actors get an empty site list and 404 `site_not_found` on site/post reads (never 403, never `qrCode`); supervisors are limited to `siteIds` (404 outside); writes are owner/admin only (403 `forbidden`).
 
 First tasks, in order (ask before each install):
 
 - [x] Create `OrganizationModule` in `backend/core/src/organization/`, its config (`ORGANIZATION_DATABASE_URL`) in `src/config/envs.ts` and `.env.example`.
 - [x] Prisma schema and first migration (`prisma:organization:*` scripts, `prisma.organization.config.ts`). `ShiftTemplate` comes with the template feature.
-- [ ] Sub-modules `sites`, `employees`, `shifts`, with their HTTP controllers, the exported facade service and the pattern constants for the NATS responders.
+- [ ] Sub-modules `sites` (done in T2), `employees`, `shifts`, with their HTTP controllers, the exported facade service and the pattern constants for the NATS responders.
 - [ ] Consumers of `auth` events and the jobs.
 - [ ] Expose the module routes through its HTTP controllers in `core` (no separate service, no extra compose entry).
 
@@ -127,7 +127,7 @@ In `core` the operations below are **in-process calls** to the module's facade s
 
 | Operation | Caller | Payload | Returns |
 |---------|--------|---------|---------|
-| `organization.site.create` / `update` | HTTP controller (owner/admin) | actor, site fields (and `siteId` on update) | site |
+| `organization.site.create` / `update` | HTTP controller (owner/admin) | actor, site fields (and `siteId` on update) | site (employees never see `qrCode`) |
 | `organization.site.get` | HTTP controller; `telemetry` (NATS responder) | actor, `siteId` | site with geofence and `qrCode` |
 | `organization.site.list` | HTTP controller | actor, `page`, `pageSize` | sites visible to the actor |
 | `organization.site.rotate-qr` | HTTP controller (owner/admin) | actor, `siteId` | site with the new `qrCode` |
@@ -152,7 +152,7 @@ Calls from other modules or from `telemetry` (for example `telemetry` asking `or
 | Event subject | Payload |
 |---------------|---------|
 | `t.<tenant>.organization.employee_created` | `eventId`, `employeeId`, `tenantId`, `email`, `firstName`, `lastName`, `occurredAt` |
-| `t.<tenant>.organization.site_updated` | `eventId`, `siteId`, `tenantId`, `latitude`, `longitude`, `geofenceRadiusMeters`, `qrRotated`, `occurredAt` |
+| `t.<tenant>.organization.site_updated` | `eventId`, `siteId`, `tenantId`, `latitude`, `longitude`, `geofenceRadiusMeters`, `qrRotated`, `occurredAt`. Emitted on create, update (any field, including deactivation) and QR rotation (`qrRotated: true`). `telemetry` only reads `siteId` (cache invalidation) |
 | `t.<tenant>.organization.shift_created` | shift snapshot |
 | `t.<tenant>.organization.shift_updated` | shift snapshot (edit, reassign, unassign) |
 | `t.<tenant>.organization.shift_cancelled` | shift snapshot |
