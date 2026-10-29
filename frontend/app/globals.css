@@ -1,26 +1,123 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Superficies y Neutros - Modo Claro */
+    --bg-main: #F5F3F0;
+    --bg-card: #FFFFFF;
+    --bg-sidebar: #35243B;
+    --bg-alt: #F0ECF1;
+    --bg-hover: #E9E0EB;
+    --border-main: #DCD6DE;
+
+    /* Marca */
+    --brand-primary: #49334F;
+    --brand-dark: #35243B;
+    --brand-medium: #735879;
+    --brand-lavender: #C8B5CE;
+    --brand-petroleum: #24313A;
+    --brand-teal: #2E7D6B;
+    --brand-mint: #A9DCCF;
+
+    /* Textos */
+    --text-title: #29272B;
+    --text-subtitle: #35243B;
+    --text-body: #29272B;
+    --text-muted: #625C66;
+    --text-disabled: #8D8790;
+    --text-link: #49334F;
+
+    /* Estados Funcionales */
+    --status-success: #287A52;
+    --status-warning: #855600;
+    --status-danger: #B42332;
+    --status-info: #315F86;
+    --status-process: #65476D;
+  }
+
+  [data-theme='dark'] {
+    /* Superficies y Neutros - Modo Oscuro */
+    --bg-main: #121214;
+    --bg-card: #1E1E22;
+    --bg-sidebar: #231E2A;
+    --bg-alt: #2B2335;
+    --bg-hover: #3E324D;
+    --border-main: #4B3D5F;
+
+    /* Marca */
+    --brand-primary: #53334F;
+    --brand-dark: #423447;
+    --brand-medium: #8C7194;
+    --brand-lavender: #BFAAC5;
+    --brand-petroleum: #2A3D4A;
+    --brand-teal: #4B7D6A;
+    --brand-mint: #68988B;
+
+    /* Textos */
+    --text-title: #FFFFFF;
+    --text-subtitle: #BFAAC5;
+    --text-body: #F5F3F0;
+    --text-muted: #8D8790;
+    --text-disabled: #625C66;
+    --text-link: #BFAAC5;
+
+    /* Estados Funcionales */
+    --status-success: #287A52;
+    --status-warning: #855600;
+    --status-danger: #B42332;
+    --status-info: #315F86;
+    --status-process: #65476D;
+  }
+
+  body {
+    background-color: var(--bg-main);
+    color: var(--text-body);
+    min-height: 100vh;
+
+*,
+*::before,
+*::after {
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.2s ease;
+}
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/*
+ * Tailwind utilities for the design tokens above (additive).
+ * The variables stay the single source of truth; these only expose them as
+ * classes, e.g. `bg-card`, `text-muted`, `border-line`, `bg-success/10`.
+ * They resolve at runtime, so the `data-theme` switch keeps working.
+ */
+@theme inline {
+  /* Surfaces */
+  --color-page: var(--bg-main);
+  --color-card: var(--bg-card);
+  --color-sidebar: var(--bg-sidebar);
+  --color-alt: var(--bg-alt);
+  --color-hover: var(--bg-hover);
+  --color-line: var(--border-main);
+
+  /* Brand */
+  --color-brand: var(--brand-primary);
+  --color-brand-dark: var(--brand-dark);
+  --color-brand-medium: var(--brand-medium);
+  --color-brand-lavender: var(--brand-lavender);
+  --color-brand-petroleum: var(--brand-petroleum);
+  --color-brand-teal: var(--brand-teal);
+  --color-brand-mint: var(--brand-mint);
+
+  /* Text */
+  --color-title: var(--text-title);
+  --color-subtitle: var(--text-subtitle);
+  --color-body: var(--text-body);
+  --color-muted: var(--text-muted);
+  --color-disabled: var(--text-disabled);
+  --color-link: var(--text-link);
+
+  /* Functional states */
+  --color-success: var(--status-success);
+  --color-warning: var(--status-warning);
+  --color-danger: var(--status-danger);
+  --color-info: var(--status-info);
+  --color-process: var(--status-process);
 }
