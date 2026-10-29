@@ -235,17 +235,17 @@ flowchart TD
 
 ### Fase 6: Módulo `tower` y WebSocket Gateway (Torre de Control)
 
-- [ ] **TEL-6.1: Generación de Resúmenes de Sede (`TowerService`)**
+- [x] **TEL-6.1: Generación de Resúmenes de Sede (`TowerService`)**
   - Calcular métricas en tiempo real por sede:
     - `expected`: empleados asignados a turnos en curso.
     - `present`: empleados con `in` abierto (incluyendo breaks).
     - `openAlerts`: cantidad de alertas `open` o `acknowledged`.
   - Disparar emisión de evento JetStream `t.<tenant>.attendance.site_summary_updated` ante cambios en fichadas o alertas (solo si `features.tower` es true).
-- [ ] **TEL-6.2: Snapshot Inicial HTTP**
+- [x] **TEL-6.2: Snapshot Inicial HTTP**
   - `GET /api/v1/telemetry/tower/snapshot` (`attendance.tower.snapshot`).
   - Gated con `@RequireFeature('tower')` y roles supervisor/admin/owner.
   - Filtra sedes: owner/admin reciben todas las sedes del tenant; supervisor solo sus `siteIds`.
-- [ ] **TEL-6.3: Gateway Socket.IO (`src/tower/tower.gateway.ts`)**
+- [x] **TEL-6.3: Gateway Socket.IO (`src/tower/tower.gateway.ts`)**
   - Montar en path `/ws` con origin `WEB_ORIGIN` y credenciales.
   - **Handshake y Auth:**
     - Extraer token de cookies o `auth.token`.
