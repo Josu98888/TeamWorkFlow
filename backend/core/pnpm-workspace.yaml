@@ -1,3 +1,7 @@
+# Slow registry downloads (e.g. two Docker builds in parallel) must retry instead of aborting the install
+fetchTimeout: 300000
+fetchRetries: 5
+
 allowBuilds:
   '@parcel/watcher': false
   '@prisma/engines': true
