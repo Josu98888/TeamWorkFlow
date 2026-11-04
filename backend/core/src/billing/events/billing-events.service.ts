@@ -24,6 +24,14 @@ import type {
 import { connect } from '@nats-io/transport-node';
 import type { NatsConnection } from '@nats-io/transport-node';
 import {
+  InMemoryOutboxStore,
+  OutboxRelay,
+} from '../../common/outbox/outbox-relay.service';
+import {
+  outboxBackoffMs,
+  type OutboxStore,
+} from '../../common/outbox/outbox.types';
+import {
   BILLING_STREAM,
   BILLING_STREAM_SUBJECTS,
 } from '../billing.patterns';
@@ -80,6 +88,8 @@ export class BillingEventsService implements OnModuleInit, OnModuleDestroy {
   private connection?: NatsConnection;
   private js?: JetStreamClient;
   private jsm?: JetStreamManager;
+  private outboxStore: OutboxStore = new InMemoryOutboxStore();
+  private outboxRelay = new OutboxRelay('billing', this.outboxStore);
 
   constructor(
     @Inject(BILLING_EVENTS_OPTIONS)
@@ -111,6 +121,44 @@ export class BillingEventsService implements OnModuleInit, OnModuleDestroy {
     this.handlers.push({ filter, run });
   }
 
+  setOutboxStore(store: OutboxStore) {
+    this.outboxStore = store;
+    this.outboxRelay = new OutboxRelay('billing', this.outboxStore);
+  }
+
+  getOutboxStore(): OutboxStore {
+    return this.outboxStore;
+  }
+
+  async enqueueOutbox(
+    tenantId: string,
+    event: BillingEventName,
+    payload: Record<string, unknown>,
+    customEventId?: string,
+    txStore?: OutboxStore,
+  ): Promise<string> {
+    const eventId = customEventId ?? randomUUID();
+    const now = new Date();
+    const subject = billingEventSubject(tenantId, event);
+    const serialized = JSON.stringify({
+      ...payload,
+      eventId,
+      occurredAt: now.toISOString(),
+    });
+    await this.outboxRelay.enqueue(
+      { eventId, tenantId, subject, payload: serialized, now },
+      txStore,
+    );
+    return eventId;
+  }
+
+  async flushOutbox(now: Date = new Date()): Promise<number> {
+    return this.outboxRelay.flushPending((subject, payload, opts) => {
+      if (!this.js) throw new Error('JetStream is not connected');
+      return this.js.publish(subject, payload, opts);
+    }, now);
+  }
+
   async publish(
     tenantId: string,
     event: BillingEventName,
@@ -118,20 +166,35 @@ export class BillingEventsService implements OnModuleInit, OnModuleDestroy {
     customEventId?: string,
   ) {
     try {
-      if (!this.js) {
-        throw new Error('JetStream is not connected');
-      }
       const eventId = customEventId ?? randomUUID();
-      const body = {
+      const now = new Date();
+      const subject = billingEventSubject(tenantId, event);
+      const serialized = JSON.stringify({
         ...payload,
         eventId,
-        occurredAt: new Date().toISOString(),
-      };
-      await this.js.publish(
-        billingEventSubject(tenantId, event),
-        JSON.stringify(body),
-        { msgID: eventId },
-      );
+        occurredAt: now.toISOString(),
+      });
+      try {
+        if (!this.js) {
+          throw new Error('JetStream is not connected');
+        }
+        await this.js.publish(subject, serialized, { msgID: eventId });
+      } catch (publishErr) {
+        await this.outboxStore
+          .save({
+            eventId,
+            tenantId,
+            subject,
+            payload: serialized,
+            status: 'PENDING',
+            attempts: 1,
+            nextRetryAt: new Date(now.getTime() + outboxBackoffMs(1)),
+            createdAt: now,
+            publishedAt: null,
+          })
+          .catch(() => undefined);
+        throw publishErr;
+      }
     } catch (error) {
       this.logger.error(`Failed to publish ${event} event: ${errorMessage(error)}`);
     }
@@ -147,23 +210,38 @@ export class BillingEventsService implements OnModuleInit, OnModuleDestroy {
     },
   ) {
     try {
-      if (!this.js) {
-        throw new Error('JetStream is not connected');
-      }
       const eventId = notification.eventId ?? randomUUID();
-      const body = {
+      const now = new Date();
+      const subject = notificationSendSubject(tenantId);
+      const serialized = JSON.stringify({
         eventId,
         tenantId,
         recipientUserIds: notification.recipientUserIds,
         templateCode: notification.templateCode,
         data: notification.data,
-        occurredAt: new Date().toISOString(),
-      };
-      await this.js.publish(
-        notificationSendSubject(tenantId),
-        JSON.stringify(body),
-        { msgID: eventId },
-      );
+        occurredAt: now.toISOString(),
+      });
+      try {
+        if (!this.js) {
+          throw new Error('JetStream is not connected');
+        }
+        await this.js.publish(subject, serialized, { msgID: eventId });
+      } catch (publishErr) {
+        await this.outboxStore
+          .save({
+            eventId,
+            tenantId,
+            subject,
+            payload: serialized,
+            status: 'PENDING',
+            attempts: 1,
+            nextRetryAt: new Date(now.getTime() + outboxBackoffMs(1)),
+            createdAt: now,
+            publishedAt: null,
+          })
+          .catch(() => undefined);
+        throw publishErr;
+      }
     } catch (error) {
       this.logger.error(
         `Failed to publish notification ${notification.templateCode}: ${errorMessage(error)}`,

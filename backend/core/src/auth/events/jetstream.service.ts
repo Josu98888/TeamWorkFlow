@@ -24,6 +24,14 @@ import type {
 import { connect } from '@nats-io/transport-node';
 import type { NatsConnection } from '@nats-io/transport-node';
 import {
+  InMemoryOutboxStore,
+  OutboxRelay,
+} from '../../common/outbox/outbox-relay.service';
+import {
+  outboxBackoffMs,
+  type OutboxStore,
+} from '../../common/outbox/outbox.types';
+import {
   AUTH_DURABLE_CONSUMERS,
   AUTH_STREAM,
   AUTH_STREAM_SUBJECTS,
@@ -99,6 +107,8 @@ export class JetStreamService implements OnModuleInit, OnModuleDestroy {
   private connection?: NatsConnection;
   private js?: JetStreamClient;
   private jsm?: JetStreamManager;
+  private outboxStore: OutboxStore = new InMemoryOutboxStore();
+  private outboxRelay = new OutboxRelay('auth', this.outboxStore);
 
   constructor(
     @Inject(JETSTREAM_OPTIONS)
@@ -134,29 +144,81 @@ export class JetStreamService implements OnModuleInit, OnModuleDestroy {
     this.handlers.push({ filter, run });
   }
 
-  // Publishes `t.<tenantId>.auth.<event>` and waits for the stream ack. Per
-  // DEFAULT(auth) a failure is logged without the payload and not retried; it
-  // never throws, so a use case that already committed is not rolled back.
+  setOutboxStore(store: OutboxStore) {
+    this.outboxStore = store;
+    this.outboxRelay = new OutboxRelay('auth', this.outboxStore);
+  }
+
+  getOutboxStore(): OutboxStore {
+    return this.outboxStore;
+  }
+
+  async enqueueOutbox<E extends AuthEventName>(
+    tenantId: string,
+    event: E,
+    payload: AuthEventPayloads[E],
+    txStore?: OutboxStore,
+  ): Promise<string> {
+    const eventId = randomUUID();
+    const now = new Date();
+    const subject = authEventSubject(tenantId, event);
+    const serialized = JSON.stringify({
+      ...payload,
+      eventId,
+      occurredAt: now.toISOString(),
+    });
+    await this.outboxRelay.enqueue(
+      { eventId, tenantId, subject, payload: serialized, now },
+      txStore,
+    );
+    return eventId;
+  }
+
+  async flushOutbox(now: Date = new Date()): Promise<number> {
+    return this.outboxRelay.flushPending((subject, payload, opts) => {
+      if (!this.js) throw new Error('JetStream is not connected');
+      return this.js.publish(subject, payload, opts);
+    }, now);
+  }
+
+  // Publishes `t.<tenantId>.auth.<event>` and waits for the stream ack.
+  // If JetStream is unreachable or fails, persists the event in the transactional
+  // outbox store for automatic background retry and logs without the payload.
   async publish<E extends AuthEventName>(
     tenantId: string,
     event: E,
     payload: AuthEventPayloads[E],
   ) {
     try {
-      if (!this.js) {
-        throw new Error('JetStream is not connected');
-      }
       const eventId = randomUUID();
-      const body = {
+      const now = new Date();
+      const subject = authEventSubject(tenantId, event);
+      const serialized = JSON.stringify({
         ...payload,
         eventId,
-        occurredAt: new Date().toISOString(),
-      };
-      await this.js.publish(
-        authEventSubject(tenantId, event),
-        JSON.stringify(body),
-        { msgID: eventId },
-      );
+        occurredAt: now.toISOString(),
+      });
+      try {
+        if (!this.js) {
+          throw new Error('JetStream is not connected');
+        }
+        await this.js.publish(subject, serialized, { msgID: eventId });
+      } catch (publishErr) {
+        await this.outboxStore
+          .save({
+            eventId,
+            tenantId,
+            subject,
+            payload: serialized,
+            status: 'PENDING',
+            attempts: 1,
+            nextRetryAt: new Date(now.getTime() + outboxBackoffMs(1)),
+            createdAt: now,
+            publishedAt: null,
+          })
+          .catch(() => undefined);
+        throw publishErr;
+      }
     } catch (error) {
       this.logger.error(
         `Failed to publish ${event} event: ${errorMessage(error)}`,

@@ -24,6 +24,14 @@ import type {
 import { connect } from '@nats-io/transport-node';
 import type { NatsConnection } from '@nats-io/transport-node';
 import {
+  InMemoryOutboxStore,
+  OutboxRelay,
+} from '../../common/outbox/outbox-relay.service';
+import {
+  outboxBackoffMs,
+  type OutboxStore,
+} from '../../common/outbox/outbox.types';
+import {
   ORGANIZATION_STREAM,
   ORGANIZATION_STREAM_SUBJECTS,
   organizationEventSubject,
@@ -89,6 +97,8 @@ export class OrganizationEventsService
   private connection?: NatsConnection;
   private js?: JetStreamClient;
   private jsm?: JetStreamManager;
+  private outboxStore: OutboxStore = new InMemoryOutboxStore();
+  private outboxRelay = new OutboxRelay('organization', this.outboxStore);
 
   constructor(
     @Inject(ORGANIZATION_EVENTS_OPTIONS)
@@ -123,29 +133,80 @@ export class OrganizationEventsService
     this.handlers.push({ filter, run });
   }
 
-  // Publishes and waits for the stream ack. A failure is logged without the
-  // payload and never thrown, so a use case that already committed is not
-  // rolled back (AGENTS § Events emitted).
+  setOutboxStore(store: OutboxStore) {
+    this.outboxStore = store;
+    this.outboxRelay = new OutboxRelay('organization', this.outboxStore);
+  }
+
+  getOutboxStore(): OutboxStore {
+    return this.outboxStore;
+  }
+
+  async enqueueOutbox(
+    tenantId: string,
+    event: OrganizationEventName,
+    payload: Record<string, unknown>,
+    txStore?: OutboxStore,
+  ): Promise<string> {
+    const eventId = randomUUID();
+    const now = new Date();
+    const subject = organizationEventSubject(tenantId, event);
+    const serialized = JSON.stringify({
+      ...payload,
+      eventId,
+      occurredAt: now.toISOString(),
+    });
+    await this.outboxRelay.enqueue(
+      { eventId, tenantId, subject, payload: serialized, now },
+      txStore,
+    );
+    return eventId;
+  }
+
+  async flushOutbox(now: Date = new Date()): Promise<number> {
+    return this.outboxRelay.flushPending((subject, payload, opts) => {
+      if (!this.js) throw new Error('JetStream is not connected');
+      return this.js.publish(subject, payload, opts);
+    }, now);
+  }
+
+  // Publishes and waits for the stream ack. If JetStream fails or is disconnected,
+  // persists the event in the transactional outbox store for automatic retry.
   async publish(
     tenantId: string,
     event: OrganizationEventName,
     payload: Record<string, unknown>,
   ) {
     try {
-      if (!this.js) {
-        throw new Error('JetStream is not connected');
-      }
       const eventId = randomUUID();
-      const body = {
+      const now = new Date();
+      const subject = organizationEventSubject(tenantId, event);
+      const serialized = JSON.stringify({
         ...payload,
         eventId,
-        occurredAt: new Date().toISOString(),
-      };
-      await this.js.publish(
-        organizationEventSubject(tenantId, event),
-        JSON.stringify(body),
-        { msgID: eventId },
-      );
+        occurredAt: now.toISOString(),
+      });
+      try {
+        if (!this.js) {
+          throw new Error('JetStream is not connected');
+        }
+        await this.js.publish(subject, serialized, { msgID: eventId });
+      } catch (publishErr) {
+        await this.outboxStore
+          .save({
+            eventId,
+            tenantId,
+            subject,
+            payload: serialized,
+            status: 'PENDING',
+            attempts: 1,
+            nextRetryAt: new Date(now.getTime() + outboxBackoffMs(1)),
+            createdAt: now,
+            publishedAt: null,
+          })
+          .catch(() => undefined);
+        throw publishErr;
+      }
     } catch (error) {
       this.logger.error(
         `Failed to publish ${event} event: ${errorMessage(error)}`,
