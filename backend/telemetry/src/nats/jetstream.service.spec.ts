@@ -141,6 +141,54 @@ describe('JetStreamService', () => {
     );
   });
 
+  it('queues failed publish into outbox and flushes when JetStream recovers', async () => {
+    await ctx.service.onModuleInit();
+    ctx.js.publish.mockRejectedValueOnce(new Error('NATS timeout'));
+
+    await ctx.service.publish('tenant-1', 'clock_event_recorded', {
+      eventId: 'evt-outbox-1',
+      siteId: 'site-1',
+    });
+
+    expect(ctx.service.getOutboxEntries()).toHaveLength(1);
+    expect(ctx.service.getOutboxEntries()[0]?.id).toBe('evt-outbox-1');
+
+    ctx.js.publish.mockResolvedValueOnce({ seq: 2 });
+    const flushed = await ctx.service.flushOutbox(Date.now() + 10_000);
+    expect(flushed).toBe(1);
+    expect(ctx.service.getOutboxEntries()).toHaveLength(0);
+    expect(ctx.js.publish).toHaveBeenLastCalledWith(
+      't.tenant-1.attendance.clock_event_recorded',
+      expect.stringContaining('evt-outbox-1'),
+      { msgID: 'evt-outbox-1' },
+    );
+  });
+
+  it('dispatches broadcast messages to registered broadcast handlers', async () => {
+    const broadcastHandler = jest.fn().mockResolvedValue(undefined);
+    ctx.service.registerBroadcastHandler(
+      't.*.attendance.site_summary_updated',
+      broadcastHandler,
+    );
+
+    await ctx.service.dispatchBroadcastMessage(
+      't.tenant-42.attendance.site_summary_updated',
+      { tenantId: 'tenant-42', siteId: 'site-9', expected: 3, present: 2, openAlerts: 1 },
+    );
+
+    expect(broadcastHandler).toHaveBeenCalledWith({
+      subject: 't.tenant-42.attendance.site_summary_updated',
+      tenantId: 'tenant-42',
+      payload: {
+        tenantId: 'tenant-42',
+        siteId: 'site-9',
+        expected: 3,
+        present: 2,
+        openAlerts: 1,
+      },
+    });
+  });
+
   it('starts durable consumers and dispatches messages to registered handlers', async () => {
     const handler = jest.fn().mockResolvedValue(undefined);
     ctx.service.registerHandler(CONSUMED_SUBJECTS.SHIFT_CREATED, handler);

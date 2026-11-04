@@ -1,14 +1,22 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TowerGateway } from './tower.gateway';
+import { JetStreamService, type EventHandler } from '../nats/jetstream.service';
 import { NatsClientService } from '../nats/nats-client.service';
 import type { Socket } from 'socket.io';
 import type { VerifiedActor } from '../nats/dto/nats-contracts';
 
 describe('TowerGateway', () => {
   let gateway: TowerGateway;
+  let registeredBroadcastHandler: EventHandler | undefined;
 
   const mockNatsClient = {
     verifyToken: jest.fn(),
+  };
+
+  const mockJetStream = {
+    registerBroadcastHandler: jest.fn((_filter: string, handler: EventHandler) => {
+      registeredBroadcastHandler = handler;
+    }),
   };
 
   interface MockSocket {
@@ -38,15 +46,18 @@ describe('TowerGateway', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    registeredBroadcastHandler = undefined;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TowerGateway,
         { provide: NatsClientService, useValue: mockNatsClient },
+        { provide: JetStreamService, useValue: mockJetStream },
       ],
     }).compile();
 
     gateway = module.get<TowerGateway>(TowerGateway);
+    gateway.onModuleInit();
   });
 
   describe('handleConnection', () => {
@@ -181,7 +192,7 @@ describe('TowerGateway', () => {
     });
   });
 
-  describe('broadcastSiteSummary', () => {
+  describe('broadcastSiteSummary & multi-replica NATS fanout', () => {
     it('emits site_summary_updated to site room and tenant room', () => {
       const mockServer = {
         to: jest.fn().mockReturnThis(),
@@ -204,6 +215,85 @@ describe('TowerGateway', () => {
         'site_summary_updated',
         summary,
       );
+    });
+
+    it('forwards site_summary_updated received over NATS from another replica to local rooms', async () => {
+      const mockServer = {
+        to: jest.fn().mockReturnThis(),
+        emit: jest.fn(),
+      };
+      gateway.server = mockServer as any;
+
+      expect(registeredBroadcastHandler).toBeDefined();
+      await registeredBroadcastHandler!({
+        subject: 't.tenant-1.attendance.site_summary_updated',
+        tenantId: 'tenant-1',
+        payload: {
+          eventId: 'evt-remote-1',
+          tenantId: 'tenant-1',
+          siteId: 'site-2',
+          expected: 5,
+          present: 4,
+          openAlerts: 1,
+        },
+      });
+
+      expect(mockServer.to).toHaveBeenCalledWith('tenant-1:site-2');
+      expect(mockServer.to).toHaveBeenCalledWith('tenant-1:all');
+      expect(mockServer.emit).toHaveBeenCalledWith('site_summary_updated', {
+        siteId: 'site-2',
+        expected: 5,
+        present: 4,
+        openAlerts: 1,
+      });
+    });
+
+    it('discards NATS site_summary_updated when subject tenantId mismatches payload tenantId', async () => {
+      const mockServer = {
+        to: jest.fn().mockReturnThis(),
+        emit: jest.fn(),
+      };
+      gateway.server = mockServer as any;
+
+      await registeredBroadcastHandler!({
+        subject: 't.tenant-1.attendance.site_summary_updated',
+        tenantId: 'tenant-1',
+        payload: {
+          eventId: 'evt-spoofed',
+          tenantId: 'tenant-2',
+          siteId: 'site-2',
+          expected: 5,
+          present: 4,
+          openAlerts: 1,
+        },
+      });
+
+      expect(mockServer.emit).not.toHaveBeenCalled();
+    });
+
+    it('deduplicates NATS site_summary_updated when eventId was already broadcast locally', async () => {
+      const mockServer = {
+        to: jest.fn().mockReturnThis(),
+        emit: jest.fn(),
+      };
+      gateway.server = mockServer as any;
+
+      gateway.recordLocalBroadcast('evt-local-1');
+
+      await registeredBroadcastHandler!({
+        subject: 't.tenant-1.attendance.site_summary_updated',
+        tenantId: 'tenant-1',
+        payload: {
+          eventId: 'evt-local-1',
+          tenantId: 'tenant-1',
+          siteId: 'site-1',
+          expected: 2,
+          present: 2,
+          openAlerts: 0,
+        },
+      });
+
+      expect(mockServer.emit).not.toHaveBeenCalled();
     });
   });
 });
