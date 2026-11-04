@@ -11,6 +11,7 @@ export const TEST_ENV = {
   NATS_SERVER: `nats://localhost:${TEST_NATS_PORT}`,
   AUTH_DATABASE_URL: `postgresql://auth_svc:test@localhost:${TEST_DB_PORT}/teamworkflow?schema=auth`,
   ORGANIZATION_DATABASE_URL: `postgresql://organization_svc:test@localhost:${TEST_DB_PORT}/teamworkflow?schema=organization`,
+  BILLING_DATABASE_URL: `postgresql://billing_svc:test@localhost:${TEST_DB_PORT}/teamworkflow?schema=billing`,
   JWT_SECRET: 'e2e-only-jwt-secret-not-used-anywhere-else-0123456789',
   ACCESS_TOKEN_TTL: '15m',
   REFRESH_TOKEN_TTL: '7d',
