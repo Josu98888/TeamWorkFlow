@@ -185,7 +185,7 @@ export class BillingService {
     amount: string | number,
     paidAt: Date | string,
     reference: string,
-  ): Promise<{ id: string; status: string }> {
+  ): Promise<PaymentDto> {
     this.assertPlatformAdmin(actor);
     return this.payments.adminRegisterPayment(actor, {
       invoiceId,

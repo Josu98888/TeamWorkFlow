@@ -1,4 +1,4 @@
-import { calculateInvoice, toDecimal } from './money-calculator';
+import { calculateInvoice } from './money-calculator';
 
 describe('money-calculator', () => {
   it('calculates full calendar month correctly', () => {
