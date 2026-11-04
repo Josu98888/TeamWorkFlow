@@ -29,8 +29,8 @@ export class TenantCreatedHandler implements OnModuleInit {
     tx,
     tenantId,
   }: ConsumedEventContext): Promise<PostCommitEffect[]> {
-    const existing = await tx.subscription.findUnique({
-      where: { tenantId },
+    const existing = await tx.subscription.findFirst({
+      where: { tenantId, status: { not: 'CANCELLED' } },
     });
     if (existing) {
       return [];
@@ -52,10 +52,10 @@ export class TenantCreatedHandler implements OnModuleInit {
 
     return [
       async () => {
-        await this.events.publish({
+        await this.events.publish(
           tenantId,
-          event: 'subscription_created',
-          payload: {
+          'subscription_created',
+          {
             plan: 'pro',
             features: {
               tasks: true,
@@ -65,7 +65,7 @@ export class TenantCreatedHandler implements OnModuleInit {
             status: 'trial',
             trialEndsAt: trialEndsAt.toISOString(),
           },
-        });
+        );
       },
     ];
   }

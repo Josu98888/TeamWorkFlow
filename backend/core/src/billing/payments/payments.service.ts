@@ -30,6 +30,11 @@ export interface RegisterPaymentInput {
   reference: string;
 }
 
+export interface PaymentDto {
+  id: string;
+  status: string;
+}
+
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);

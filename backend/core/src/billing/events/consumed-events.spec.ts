@@ -46,7 +46,7 @@ describe('Billing Consumed Events Handlers', () => {
     it('creates PRO trial subscription and returns post-commit effect to publish event', async () => {
       const mockTx = {
         subscription: {
-          findUnique: jest.fn().mockResolvedValue(null),
+          findFirst: jest.fn().mockResolvedValue(null),
           create: jest.fn().mockResolvedValue({ id: 'sub-1' }),
         },
       };
@@ -72,10 +72,10 @@ describe('Billing Consumed Events Handlers', () => {
       expect(effects).toHaveLength(1);
       await effects[0]();
 
-      expect(mockEvents.publish).toHaveBeenCalledWith({
+      expect(mockEvents.publish).toHaveBeenCalledWith(
         tenantId,
-        event: 'subscription_created',
-        payload: {
+        'subscription_created',
+        {
           plan: 'pro',
           features: {
             tasks: true,
@@ -85,13 +85,13 @@ describe('Billing Consumed Events Handlers', () => {
           status: 'trial',
           trialEndsAt: expectedTrialEnd.toISOString(),
         },
-      });
+      );
     });
 
     it('is a no-op when subscription already exists for tenant', async () => {
       const mockTx = {
         subscription: {
-          findUnique: jest.fn().mockResolvedValue({ id: 'sub-1', tenantId }),
+          findFirst: jest.fn().mockResolvedValue({ id: 'sub-1', tenantId }),
           create: jest.fn(),
         },
       };
