@@ -22,7 +22,8 @@ export type AppErrorCode =
   | 'invoice_not_payable'
   | 'invoice_exists'
   | 'invalid_webhook_signature'
-  | 'payment_provider_error';
+  | 'payment_provider_error'
+  | 'feature_not_in_plan';
 
 export interface ValidationErrorItem {
   field: string;
@@ -232,5 +233,11 @@ export class InvalidWebhookSignatureException extends AppException {
 export class PaymentProviderErrorException extends AppException {
   constructor(message = 'Payment provider communication error') {
     super(502, 'payment_provider_error', message);
+  }
+}
+
+export class FeatureNotInPlanException extends AppException {
+  constructor() {
+    super(403, 'feature_not_in_plan', 'Feature not included in current plan');
   }
 }
