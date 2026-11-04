@@ -8,6 +8,17 @@ export interface Envs {
   natsServers: string[];
   authDatabaseUrl: string;
   organizationDatabaseUrl: string;
+  billingDatabaseUrl: string;
+  paymentProvider: 'mercadopago' | 'fake';
+  mpAccessToken?: string;
+  mpWebhookSecret?: string;
+  billingTz: string;
+  vatPercent: number;
+  trialDays: number;
+  dueDays: number;
+  graceDays: number;
+  dataRetentionDays: number;
+  appUrl: string;
   jwtSecret: string;
   accessTokenTtl: string;
   refreshTokenTtl: string;
@@ -18,6 +29,17 @@ interface EnvVars {
   NATS_SERVER: string[];
   AUTH_DATABASE_URL: string;
   ORGANIZATION_DATABASE_URL: string;
+  BILLING_DATABASE_URL: string;
+  PAYMENT_PROVIDER: 'mercadopago' | 'fake';
+  MP_ACCESS_TOKEN?: string;
+  MP_WEBHOOK_SECRET?: string;
+  BILLING_TZ: string;
+  VAT_PERCENT: number;
+  TRIAL_DAYS: number;
+  DUE_DAYS: number;
+  GRACE_DAYS: number;
+  DATA_RETENTION_DAYS: number;
+  APP_URL: string;
   JWT_SECRET: string;
   ACCESS_TOKEN_TTL: string;
   REFRESH_TOKEN_TTL: string;
@@ -35,6 +57,31 @@ const envsSchema = joi
       .string()
       .uri({ scheme: ['postgresql', 'postgres'] })
       .required(),
+    BILLING_DATABASE_URL: joi
+      .string()
+      .uri({ scheme: ['postgresql', 'postgres'] })
+      .required(),
+    PAYMENT_PROVIDER: joi
+      .string()
+      .valid('mercadopago', 'fake')
+      .default('fake'),
+    MP_ACCESS_TOKEN: joi.string().when('PAYMENT_PROVIDER', {
+      is: 'mercadopago',
+      then: joi.required(),
+      otherwise: joi.optional(),
+    }),
+    MP_WEBHOOK_SECRET: joi.string().when('PAYMENT_PROVIDER', {
+      is: 'mercadopago',
+      then: joi.required(),
+      otherwise: joi.optional(),
+    }),
+    BILLING_TZ: joi.string().default('America/Argentina/Buenos_Aires'),
+    VAT_PERCENT: joi.number().default(21),
+    TRIAL_DAYS: joi.number().integer().positive().default(14),
+    DUE_DAYS: joi.number().integer().positive().default(10),
+    GRACE_DAYS: joi.number().integer().positive().default(7),
+    DATA_RETENTION_DAYS: joi.number().integer().positive().default(90),
+    APP_URL: joi.string().uri().default('http://localhost:3002'),
     JWT_SECRET: joi.string().min(32).required(),
     ACCESS_TOKEN_TTL: joi.string().pattern(DURATION_PATTERN).default('15m'),
     REFRESH_TOKEN_TTL: joi.string().pattern(DURATION_PATTERN).default('7d'),
@@ -66,6 +113,17 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
     natsServers: envVars.NATS_SERVER,
     authDatabaseUrl: envVars.AUTH_DATABASE_URL,
     organizationDatabaseUrl: envVars.ORGANIZATION_DATABASE_URL,
+    billingDatabaseUrl: envVars.BILLING_DATABASE_URL,
+    paymentProvider: envVars.PAYMENT_PROVIDER,
+    mpAccessToken: envVars.MP_ACCESS_TOKEN,
+    mpWebhookSecret: envVars.MP_WEBHOOK_SECRET,
+    billingTz: envVars.BILLING_TZ,
+    vatPercent: envVars.VAT_PERCENT,
+    trialDays: envVars.TRIAL_DAYS,
+    dueDays: envVars.DUE_DAYS,
+    graceDays: envVars.GRACE_DAYS,
+    dataRetentionDays: envVars.DATA_RETENTION_DAYS,
+    appUrl: envVars.APP_URL,
     jwtSecret: envVars.JWT_SECRET,
     accessTokenTtl: envVars.ACCESS_TOKEN_TTL,
     refreshTokenTtl: envVars.REFRESH_TOKEN_TTL,
