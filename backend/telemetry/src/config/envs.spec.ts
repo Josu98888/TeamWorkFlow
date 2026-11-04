@@ -18,6 +18,8 @@ describe('telemetry envs', () => {
       natsTimeoutMs: 5000,
       rateLimitAuthTtlMs: 60000,
       rateLimitAuthLimit: 100,
+      jwtSecret: undefined,
+      authCacheTtlMs: 5000,
     });
   });
 
@@ -27,11 +29,15 @@ describe('telemetry envs', () => {
       PORT: '3099',
       NATS_TIMEOUT_MS: '8000',
       RATE_LIMIT_AUTH_LIMIT: '500',
+      JWT_SECRET: 'super-secret-jwt-key-1234',
+      AUTH_CACHE_TTL_MS: '10000',
     });
 
     expect(envs.port).toBe(3099);
     expect(envs.natsTimeoutMs).toBe(8000);
     expect(envs.rateLimitAuthLimit).toBe(500);
+    expect(envs.jwtSecret).toBe('super-secret-jwt-key-1234');
+    expect(envs.authCacheTtlMs).toBe(10000);
   });
 
   it('throws when ATTENDANCE_DATABASE_URL is missing', () => {
