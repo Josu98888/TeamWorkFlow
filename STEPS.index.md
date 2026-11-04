@@ -27,7 +27,7 @@ Rows map to the 2-service MVP (`docs/architecture.md`): B1–B4, B6, B7 are modu
 | B0 | backend foundation | `backend/STEPS.md` | — | done | — |
 | B1 | core: auth module | `backend/core/src/auth/STEPS.md` | B0 | in progress | S8.1 (S9.1, S9.2 blocked; S10.3, S11 pending) |
 | B2 | core: HTTP layer (former gateway) | `backend/core/src/http/STEPS.md` (not created) | B1 | not planned | — |
-| B3 | core: billing module | `backend/core/src/billing/STEPS.md` (not created) | B1, B2 | not planned | — |
+| B3 | core: billing module | `backend/core/src/billing/STEPS.md` | B1, B2 | done | — |
 | B4 | core: organization module | `backend/core/src/organization/STEPS.md` (not created) | B1, B2, B3 | not planned | — |
 | B5 | telemetry (attendance domain) | `backend/telemetry/STEPS.md` (not created) | B4 | not planned | — |
 | B6 | core: tasks module | `backend/core/src/tasks/STEPS.md` (not created) | B4 | not planned | — |
