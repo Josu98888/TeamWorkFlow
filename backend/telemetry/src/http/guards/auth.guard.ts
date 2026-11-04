@@ -3,6 +3,7 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
+  Optional,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import {
@@ -15,6 +16,7 @@ import {
 } from '../../common/exceptions';
 import { NatsClientService } from '../../nats/nats-client.service';
 import type { Role } from '../../nats/dto/nats-contracts';
+import { TenantStateService } from '../../tenants/tenant-state.service';
 import type { AuthenticatedRequest } from '../authenticated-request';
 import { REQUIRE_FEATURE_KEY } from '../decorators/features.decorator';
 import { ROLES_KEY } from '../decorators/roles.decorator';
@@ -51,6 +53,7 @@ export class AuthGuard implements CanActivate {
   constructor(
     private readonly natsClient: NatsClientService,
     private readonly reflector: Reflector,
+    @Optional() private readonly tenantState?: TenantStateService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -67,7 +70,11 @@ export class AuthGuard implements CanActivate {
     }
 
     // 2. CSRF check for cookie-authenticated mutating requests
-    if (!bearerToken && cookieToken && MUTATING_METHODS.has(request.method.toUpperCase())) {
+    if (
+      !bearerToken &&
+      cookieToken &&
+      MUTATING_METHODS.has(request.method.toUpperCase())
+    ) {
       const csrfHeader = request.headers['x-csrf-token'];
       const csrfCookie = cookies['csrf_token'];
       const headerVal = Array.isArray(csrfHeader) ? csrfHeader[0] : csrfHeader;
@@ -77,15 +84,31 @@ export class AuthGuard implements CanActivate {
       }
     }
 
-    // 3. Verify token with core via NATS
+    // 3. Verify token (with short-TTL cache and local HS256 fallback if core NATS is down)
     const actor = await this.natsClient.verifyToken(token);
 
     // 4. Refuse platform_admin on every telemetry route
     if (actor.role === 'platform_admin') {
-      throw new ForbiddenException('Platform admin access is not allowed on telemetry routes');
+      throw new ForbiddenException(
+        'Platform admin access is not allowed on telemetry routes',
+      );
     }
 
-    // 5. Tenant status check
+    // 5. Enrich / enforce tenant status from local TenantState projection when available
+    if (
+      this.tenantState &&
+      actor.tenantId &&
+      actor.tenantStatus !== 'suspended' &&
+      actor.tenantStatus !== 'cancelled'
+    ) {
+      const locallySuspended = await this.tenantState.isSuspended(
+        actor.tenantId,
+      );
+      if (locallySuspended) {
+        actor.tenantStatus = 'suspended';
+      }
+    }
+
     if (actor.tenantStatus === 'suspended') {
       throw new TenantSuspendedException();
     }
@@ -102,13 +125,27 @@ export class AuthGuard implements CanActivate {
       throw new ForbiddenException();
     }
 
-    // 7. Plan gating check
-    const requiredFeature = this.reflector.getAllAndOverride<string | undefined>(
-      REQUIRE_FEATURE_KEY,
-      [context.getHandler(), context.getClass()],
-    );
+    // 7. Plan gating check (consulting local TenantFeatures projection if fallback actor lacked feature flags)
+    const requiredFeature = this.reflector.getAllAndOverride<
+      string | undefined
+    >(REQUIRE_FEATURE_KEY, [context.getHandler(), context.getClass()]);
     if (requiredFeature && !actor.features?.[requiredFeature]) {
-      throw new FeatureNotInPlanException(requiredFeature);
+      if (
+        this.tenantState &&
+        actor.tenantId &&
+        (requiredFeature === 'alerts' || requiredFeature === 'tower')
+      ) {
+        const hasLocalFeature = await this.tenantState.hasFeature(
+          actor.tenantId,
+          requiredFeature,
+        );
+        if (hasLocalFeature) {
+          actor.features = { ...actor.features, [requiredFeature]: true };
+        }
+      }
+      if (!actor.features?.[requiredFeature]) {
+        throw new FeatureNotInPlanException(requiredFeature);
+      }
     }
 
     request.actor = actor;

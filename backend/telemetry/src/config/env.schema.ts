@@ -8,6 +8,8 @@ export interface Envs {
   natsTimeoutMs: number;
   rateLimitAuthTtlMs: number;
   rateLimitAuthLimit: number;
+  jwtSecret?: string;
+  authCacheTtlMs: number;
 }
 
 interface EnvVars {
@@ -18,12 +20,18 @@ interface EnvVars {
   NATS_TIMEOUT_MS: number;
   RATE_LIMIT_AUTH_TTL_MS: number;
   RATE_LIMIT_AUTH_LIMIT: number;
+  JWT_SECRET?: string;
+  AUTH_CACHE_TTL_MS: number;
 }
 
 const envsSchema = joi
   .object<EnvVars>({
     PORT: joi.number().port().default(3003),
-    NATS_SERVER: joi.array().items(joi.string().uri()).min(1).default(['nats://localhost:4222']),
+    NATS_SERVER: joi
+      .array()
+      .items(joi.string().uri())
+      .min(1)
+      .default(['nats://localhost:4222']),
     ATTENDANCE_DATABASE_URL: joi
       .string()
       .uri({ scheme: ['postgresql', 'postgres'] })
@@ -32,6 +40,8 @@ const envsSchema = joi
     NATS_TIMEOUT_MS: joi.number().positive().default(5000),
     RATE_LIMIT_AUTH_TTL_MS: joi.number().positive().default(60000),
     RATE_LIMIT_AUTH_LIMIT: joi.number().positive().default(100),
+    JWT_SECRET: joi.string().min(16).optional(),
+    AUTH_CACHE_TTL_MS: joi.number().min(0).default(5000),
   })
   .unknown(true);
 
@@ -43,9 +53,19 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
       NATS_SERVER: raw.NATS_SERVER
         ? raw.NATS_SERVER.split(',').map((server) => server.trim())
         : ['nats://localhost:4222'],
-      NATS_TIMEOUT_MS: raw.NATS_TIMEOUT_MS ? Number(raw.NATS_TIMEOUT_MS) : 5000,
-      RATE_LIMIT_AUTH_TTL_MS: raw.RATE_LIMIT_AUTH_TTL_MS ? Number(raw.RATE_LIMIT_AUTH_TTL_MS) : 60000,
-      RATE_LIMIT_AUTH_LIMIT: raw.RATE_LIMIT_AUTH_LIMIT ? Number(raw.RATE_LIMIT_AUTH_LIMIT) : 100,
+      NATS_TIMEOUT_MS: raw.NATS_TIMEOUT_MS
+        ? Number(raw.NATS_TIMEOUT_MS)
+        : 5000,
+      RATE_LIMIT_AUTH_TTL_MS: raw.RATE_LIMIT_AUTH_TTL_MS
+        ? Number(raw.RATE_LIMIT_AUTH_TTL_MS)
+        : 60000,
+      RATE_LIMIT_AUTH_LIMIT: raw.RATE_LIMIT_AUTH_LIMIT
+        ? Number(raw.RATE_LIMIT_AUTH_LIMIT)
+        : 100,
+      AUTH_CACHE_TTL_MS:
+        raw.AUTH_CACHE_TTL_MS !== undefined
+          ? Number(raw.AUTH_CACHE_TTL_MS)
+          : 5000,
     },
     { abortEarly: false },
   );
@@ -67,5 +87,7 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
     natsTimeoutMs: envVars.NATS_TIMEOUT_MS,
     rateLimitAuthTtlMs: envVars.RATE_LIMIT_AUTH_TTL_MS,
     rateLimitAuthLimit: envVars.RATE_LIMIT_AUTH_LIMIT,
+    jwtSecret: envVars.JWT_SECRET,
+    authCacheTtlMs: envVars.AUTH_CACHE_TTL_MS,
   };
 }
