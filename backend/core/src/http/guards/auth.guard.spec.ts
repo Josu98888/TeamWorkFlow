@@ -9,7 +9,7 @@ import {
 import type { AuthenticatedRequest } from '../authenticated-request';
 import { CurrentActor } from '../decorators/current-actor.decorator';
 import { Public } from '../decorators/public.decorator';
-import { AuthGuard } from './auth.guard';
+import { AuthGuard, CsrfInvalidException } from './auth.guard';
 
 jest.mock('../../config', () => ({
   envs: {
@@ -95,6 +95,38 @@ describe('AuthGuard', () => {
 
     expect(verify).toHaveBeenCalledWith({ accessToken: 'tok' });
     expect(request.actor).toBe(ACTOR);
+  });
+
+  it('authenticates via access_token cookie and validates CSRF on mutating methods', async () => {
+    verify.mockResolvedValue(ACTOR);
+
+    const getReq = {
+      method: 'GET',
+      headers: { cookie: 'access_token=cookie-jwt' },
+    } as unknown as AuthenticatedRequest;
+    await expect(guard.canActivate(contextFor(Plain, getReq))).resolves.toBe(
+      true,
+    );
+    expect(verify).toHaveBeenCalledWith({ accessToken: 'cookie-jwt' });
+
+    const postMissingCsrf = {
+      method: 'POST',
+      headers: { cookie: 'access_token=cookie-jwt; csrf_token=abc123' },
+    } as unknown as AuthenticatedRequest;
+    await expect(
+      guard.canActivate(contextFor(Plain, postMissingCsrf)),
+    ).rejects.toBeInstanceOf(CsrfInvalidException);
+
+    const postValidCsrf = {
+      method: 'POST',
+      headers: {
+        cookie: 'access_token=cookie-jwt; csrf_token=abc123',
+        'x-csrf-token': 'abc123',
+      },
+    } as unknown as AuthenticatedRequest;
+    await expect(
+      guard.canActivate(contextFor(Plain, postValidCsrf)),
+    ).resolves.toBe(true);
   });
 
   it('propagates domain errors from verify unchanged', async () => {
