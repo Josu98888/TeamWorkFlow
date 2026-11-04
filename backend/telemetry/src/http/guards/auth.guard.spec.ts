@@ -2,6 +2,7 @@ import { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from './auth.guard';
 import { NatsClientService } from '../../nats/nats-client.service';
+import { TenantStateService } from '../../tenants/tenant-state.service';
 import {
   CsrfInvalidException,
   FeatureNotInPlanException,
@@ -16,6 +17,7 @@ describe('AuthGuard', () => {
   let guard: AuthGuard;
   let mockNatsClient: { verifyToken: jest.Mock };
   let mockReflector: { getAllAndOverride: jest.Mock };
+  let mockTenantState: { isSuspended: jest.Mock; hasFeature: jest.Mock };
 
   const validActor: VerifiedActor = {
     userId: 'user-1',
@@ -27,7 +29,10 @@ describe('AuthGuard', () => {
     features: { alerts: true, tower: true },
   };
 
-  const createMockContext = (headers: Record<string, string>, method = 'GET'): ExecutionContext => {
+  const createMockContext = (
+    headers: Record<string, string>,
+    method = 'GET',
+  ): ExecutionContext => {
     return {
       switchToHttp: () => ({
         getRequest: () => ({
@@ -43,9 +48,14 @@ describe('AuthGuard', () => {
   beforeEach(() => {
     mockNatsClient = { verifyToken: jest.fn() };
     mockReflector = { getAllAndOverride: jest.fn() };
+    mockTenantState = {
+      isSuspended: jest.fn().mockResolvedValue(false),
+      hasFeature: jest.fn().mockResolvedValue(false),
+    };
     guard = new AuthGuard(
       mockNatsClient as unknown as NatsClientService,
       mockReflector as unknown as Reflector,
+      mockTenantState as unknown as TenantStateService,
     );
   });
 
@@ -92,13 +102,44 @@ describe('AuthGuard', () => {
     });
     const ctx = createMockContext({ authorization: 'Bearer test-token' });
 
-    await expect(guard.canActivate(ctx)).rejects.toThrow(TenantSuspendedException);
+    await expect(guard.canActivate(ctx)).rejects.toThrow(
+      TenantSuspendedException,
+    );
 
     mockNatsClient.verifyToken.mockResolvedValueOnce({
       ...validActor,
       tenantStatus: 'cancelled',
     });
-    await expect(guard.canActivate(ctx)).rejects.toThrow(TenantCancelledException);
+    await expect(guard.canActivate(ctx)).rejects.toThrow(
+      TenantCancelledException,
+    );
+  });
+
+  it('enforces local TenantState suspension and TenantFeatures when using local JWT fallback', async () => {
+    mockNatsClient.verifyToken.mockResolvedValueOnce({
+      ...validActor,
+      tenantStatus: 'active',
+      features: {},
+    });
+    mockTenantState.isSuspended.mockResolvedValueOnce(true);
+
+    const ctx = createMockContext({ authorization: 'Bearer fallback-jwt' });
+    await expect(guard.canActivate(ctx)).rejects.toThrow(
+      TenantSuspendedException,
+    );
+
+    mockNatsClient.verifyToken.mockResolvedValueOnce({
+      ...validActor,
+      tenantStatus: 'active',
+      features: {},
+    });
+    mockTenantState.isSuspended.mockResolvedValueOnce(false);
+    mockTenantState.hasFeature.mockResolvedValueOnce(true);
+    mockReflector.getAllAndOverride
+      .mockReturnValueOnce(undefined)
+      .mockReturnValueOnce('alerts');
+
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
   });
 
   it('enforces @Roles decorator', async () => {
@@ -106,7 +147,10 @@ describe('AuthGuard', () => {
       ...validActor,
       role: 'employee',
     });
-    mockReflector.getAllAndOverride.mockReturnValueOnce(['supervisor', 'admin']);
+    mockReflector.getAllAndOverride.mockReturnValueOnce([
+      'supervisor',
+      'admin',
+    ]);
     const ctx = createMockContext({ authorization: 'Bearer test-token' });
 
     await expect(guard.canActivate(ctx)).rejects.toThrow(ForbiddenException);
@@ -123,6 +167,8 @@ describe('AuthGuard', () => {
       .mockReturnValueOnce('alerts');
 
     const ctx = createMockContext({ authorization: 'Bearer test-token' });
-    await expect(guard.canActivate(ctx)).rejects.toThrow(FeatureNotInPlanException);
+    await expect(guard.canActivate(ctx)).rejects.toThrow(
+      FeatureNotInPlanException,
+    );
   });
 });
