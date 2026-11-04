@@ -1,8 +1,14 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  clearLegacyTokenStorage,
+  scheduleProactiveRefresh,
+} from '../../shared/lib/http';
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -16,6 +22,7 @@ export default function LoginPage() {
     try {
       const response = await fetch('/api/v1/auth/login', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -40,14 +47,14 @@ export default function LoginPage() {
         throw new Error(data.detail || data.message || 'Credenciales inválidas. Verificá tu correo y contraseña.');
       }
 
-      // Guardamos el token en localStorage para las llamadas protegidas
-      if (data.accessToken) {
-        localStorage.setItem('accessToken', data.accessToken);
-        localStorage.setItem('refreshToken', data.refreshToken);
-      }
+      // La sesión se gestiona mediante cookies httpOnly + CSRF; limpiamos cualquier token legado en localStorage.
+      clearLegacyTokenStorage();
+      scheduleProactiveRefresh(
+        typeof data.expiresIn === 'number' ? data.expiresIn : undefined,
+      );
 
       // Redirigir a la pantalla principal
-      window.location.href = '/';
+      router.push('/');
     } catch (err: unknown) {
       if (err instanceof Error) {
         setErrorMessage(err.message);

@@ -1,8 +1,14 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  clearLegacyTokenStorage,
+  scheduleProactiveRefresh,
+} from '../../shared/lib/http';
 
 export default function RegisterPage() {
+  const router = useRouter();
   const [tenantName, setTenantName] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -18,6 +24,7 @@ export default function RegisterPage() {
     try {
       const response = await fetch('/api/v1/auth/register', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -38,14 +45,14 @@ export default function RegisterPage() {
         throw new Error(data.detail || data.message || 'No se pudo completar el registro.');
       }
 
-      // Guardamos el token recibido
-      if (data.accessToken) {
-        localStorage.setItem('accessToken', data.accessToken);
-        localStorage.setItem('refreshToken', data.refreshToken);
-      }
+      // La sesión se gestiona mediante cookies httpOnly + CSRF; limpiamos cualquier token legado en localStorage.
+      clearLegacyTokenStorage();
+      scheduleProactiveRefresh(
+        typeof data.expiresIn === 'number' ? data.expiresIn : undefined,
+      );
 
       // Redirigir a la app principal
-      window.location.href = '/';
+      router.push('/');
     } catch (err: unknown) {
       if (err instanceof Error) {
         setErrorMessage(err.message);
