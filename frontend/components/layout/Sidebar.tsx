@@ -3,13 +3,13 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { logoutSession } from '../../shared/lib/http';
 
 export function Sidebar({ userRole = 'owner' }: { userRole?: string }) {
   const pathname = usePathname();
 
-  const handleLogout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
+  const handleLogout = async () => {
+    await logoutSession();
     window.location.href = '/login';
   };
 
@@ -62,7 +62,7 @@ export function Sidebar({ userRole = 'owner' }: { userRole?: string }) {
           <span className="text-sm font-medium capitalize text-white">{userRole}</span>
         </div>
         <button
-          onClick={handleLogout}
+          onClick={() => void handleLogout()}
           className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-opacity hover:opacity-80 cursor-pointer"
           style={{ backgroundColor: 'rgba(180, 35, 50, 0.2)', color: '#FFB4B4' }}
         >

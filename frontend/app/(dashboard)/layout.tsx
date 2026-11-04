@@ -3,6 +3,13 @@
 import React, { useEffect, useState } from 'react';
 import { Sidebar } from '../../components/layout/Sidebar';
 import { Topbar } from '../../components/layout/Topbar';
+import {
+  clearLegacyTokenStorage,
+  hasActiveSession,
+  refreshAccessToken,
+  scheduleProactiveRefresh,
+  stopProactiveRefresh,
+} from '../../shared/lib/http';
 
 export default function DashboardLayout({
   children,
@@ -12,12 +19,31 @@ export default function DashboardLayout({
   const [isAuthorized, setIsAuthorized] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    if (!token) {
-      window.location.href = '/login';
-    } else {
-      setIsAuthorized(true);
+    let active = true;
+    clearLegacyTokenStorage();
+
+    async function verifyOrRefreshSession() {
+      if (hasActiveSession()) {
+        scheduleProactiveRefresh();
+        if (active) setIsAuthorized(true);
+        return;
+      }
+
+      const refreshed = await refreshAccessToken();
+      if (!active) return;
+      if (refreshed) {
+        setIsAuthorized(true);
+      } else {
+        window.location.href = '/login';
+      }
     }
+
+    void verifyOrRefreshSession();
+
+    return () => {
+      active = false;
+      stopProactiveRefresh();
+    };
   }, []);
 
   if (!isAuthorized) {
