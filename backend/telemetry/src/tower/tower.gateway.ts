@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleInit, Optional } from '@nestjs/common';
 import {
   OnGatewayConnection,
   OnGatewayDisconnect,
@@ -7,8 +7,12 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { envs } from '../config';
+import { JetStreamService } from '../nats/jetstream.service';
 import { NatsClientService } from '../nats/nats-client.service';
 import type { SiteSummary } from './dto';
+
+const MAX_RECENT_EVENT_IDS = 1_000;
+const TOWER_BROADCAST_SUBJECT = 't.*.attendance.site_summary_updated';
 
 function extractToken(client: Socket): string | null {
   const authHeader = client.handshake.headers?.authorization;
@@ -46,14 +50,68 @@ function extractToken(client: Socket): string | null {
   },
 })
 export class TowerGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
+  implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit
 {
   private readonly logger = new Logger(TowerGateway.name);
+  private readonly recentEventIds = new Set<string>();
 
   @WebSocketServer()
   server?: Server;
 
-  constructor(private readonly natsClient: NatsClientService) {}
+  constructor(
+    private readonly natsClient: NatsClientService,
+    @Optional() private readonly jetstream?: JetStreamService,
+  ) {}
+
+  onModuleInit(): void {
+    this.jetstream?.registerBroadcastHandler(
+      TOWER_BROADCAST_SUBJECT,
+      async (message) => {
+        if (!message.tenantId || !message.payload || typeof message.payload !== 'object') {
+          return;
+        }
+        const payload = message.payload as Record<string, unknown>;
+        if (payload.tenantId !== message.tenantId) {
+          this.logger.warn(
+            `Discarding site_summary_updated with tenant mismatch: subject=${message.tenantId}, payload=${String(payload.tenantId)}`,
+          );
+          return;
+        }
+        if (
+          typeof payload.siteId !== 'string' ||
+          typeof payload.expected !== 'number' ||
+          typeof payload.present !== 'number' ||
+          typeof payload.openAlerts !== 'number'
+        ) {
+          return;
+        }
+
+        if (typeof payload.eventId === 'string') {
+          if (this.recentEventIds.has(payload.eventId)) {
+            return;
+          }
+          this.recordLocalBroadcast(payload.eventId);
+        }
+
+        this.broadcastSiteSummary(message.tenantId, payload.siteId, {
+          siteId: payload.siteId,
+          expected: payload.expected,
+          present: payload.present,
+          openAlerts: payload.openAlerts,
+        });
+      },
+    );
+  }
+
+  recordLocalBroadcast(eventId: string): void {
+    if (this.recentEventIds.size >= MAX_RECENT_EVENT_IDS) {
+      const oldest = this.recentEventIds.values().next().value;
+      if (oldest) {
+        this.recentEventIds.delete(oldest);
+      }
+    }
+    this.recentEventIds.add(eventId);
+  }
 
   async handleConnection(client: Socket): Promise<void> {
     const token = extractToken(client);

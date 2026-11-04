@@ -42,6 +42,14 @@ export interface ConsumedMessage {
   payload: unknown;
 }
 
+export interface OutboxEntry {
+  id: string;
+  subject: string;
+  payload: string;
+  attempts: number;
+  nextRetryAt: number;
+}
+
 export type EventHandler = (message: ConsumedMessage) => Promise<void>;
 
 function isApiError(error: unknown, code: number): boolean {
@@ -63,6 +71,13 @@ export function handlerRetryDelayMs(deliveryCount: number): number {
 export class JetStreamService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(JetStreamService.name);
   private readonly handlers: { filter: string; run: EventHandler }[] = [];
+  private readonly broadcastHandlers: {
+    filter: string;
+    run: EventHandler;
+  }[] = [];
+  private readonly activeBroadcastFilters = new Set<string>();
+  private readonly outbox: OutboxEntry[] = [];
+  private outboxTimer?: NodeJS.Timeout;
   private readonly running = new Set<ConsumerMessages>();
   private readonly stop = new AbortController();
   private connection?: NatsConnection;
@@ -83,6 +98,10 @@ export class JetStreamService implements OnModuleInit, OnModuleDestroy {
       for (const spec of TELEMETRY_DURABLE_CONSUMERS) {
         void this.startConsumer(spec);
       }
+
+      for (const { filter } of this.broadcastHandlers) {
+        this.startBroadcastSubscription(filter);
+      }
     } catch (err) {
       this.logger.warn(
         `Could not connect to JetStream on init: ${err instanceof Error ? err.message : String(err)}`,
@@ -92,6 +111,10 @@ export class JetStreamService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy() {
     this.stop.abort();
+    if (this.outboxTimer) {
+      clearTimeout(this.outboxTimer);
+      this.outboxTimer = undefined;
+    }
     await Promise.all([...this.running].map((messages) => messages.close()));
     this.running.clear();
     await this.connection?.drain().catch(() => undefined);
@@ -99,6 +122,62 @@ export class JetStreamService implements OnModuleInit, OnModuleDestroy {
 
   registerHandler(filter: string, run: EventHandler): void {
     this.handlers.push({ filter, run });
+  }
+
+  registerBroadcastHandler(filter: string, run: EventHandler): void {
+    this.broadcastHandlers.push({ filter, run });
+    this.startBroadcastSubscription(filter);
+  }
+
+  getOutboxEntries(): readonly OutboxEntry[] {
+    return this.outbox;
+  }
+
+  private startBroadcastSubscription(filter: string): void {
+    if (
+      !this.connection ||
+      this.activeBroadcastFilters.has(filter) ||
+      typeof (this.connection as { subscribe?: unknown }).subscribe !==
+        'function'
+    ) {
+      return;
+    }
+
+    this.activeBroadcastFilters.add(filter);
+    const sub = this.connection.subscribe(filter);
+    void (async () => {
+      try {
+        for await (const msg of sub) {
+          if (this.stop.signal.aborted) break;
+          try {
+            const payload: unknown = msg.json();
+            await this.dispatchBroadcastMessage(msg.subject, payload);
+          } catch (err) {
+            this.logger.warn(
+              `Broadcast handler error on ${msg.subject}: ${errorMessage(err)}`,
+            );
+          }
+        }
+      } catch (err) {
+        if (!this.stop.signal.aborted) {
+          this.logger.warn(
+            `Broadcast subscription ${filter} ended: ${errorMessage(err)}`,
+          );
+        }
+      }
+    })();
+  }
+
+  async dispatchBroadcastMessage(
+    subject: string,
+    payload: unknown,
+  ): Promise<void> {
+    const tenantId = tenantIdFromSubject(subject);
+    for (const handler of this.broadcastHandlers) {
+      if (subjectMatches(handler.filter, subject)) {
+        await handler.run({ subject, tenantId, payload });
+      }
+    }
   }
 
   private async ensureOwnStream() {
@@ -245,11 +324,91 @@ export class JetStreamService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  private enqueueOutbox(id: string, subject: string, payload: string): void {
+    if (this.outbox.some((e) => e.id === id)) return;
+    this.outbox.push({
+      id,
+      subject,
+      payload,
+      attempts: 1,
+      nextRetryAt: Date.now() + DEFAULT_RETRY_INITIAL_MS,
+    });
+    this.scheduleOutboxFlush();
+  }
+
+  private scheduleOutboxFlush(): void {
+    if (this.outboxTimer || this.stop.signal.aborted || this.outbox.length === 0)
+      return;
+    this.outboxTimer = setTimeout(() => {
+      this.outboxTimer = undefined;
+      void this.flushOutbox();
+    }, DEFAULT_RETRY_INITIAL_MS);
+    this.outboxTimer.unref?.();
+  }
+
+  async flushOutbox(now = Date.now()): Promise<number> {
+    if (this.outbox.length === 0) return 0;
+
+    let published = 0;
+    for (let i = 0; i < this.outbox.length; ) {
+      const entry = this.outbox[i];
+      if (!entry || entry.nextRetryAt > now) {
+        i++;
+        continue;
+      }
+
+      try {
+        if (!this.js) {
+          if (!this.connection) {
+            this.connection = await connect({
+              servers: envs.natsServers,
+              name: 'telemetry-jetstream',
+            });
+          }
+          this.js = jetstream(this.connection);
+        }
+        await this.js.publish(entry.subject, entry.payload, {
+          msgID: entry.id,
+        });
+        this.outbox.splice(i, 1);
+        published++;
+      } catch {
+        entry.attempts += 1;
+        const backoff = Math.min(
+          DEFAULT_RETRY_INITIAL_MS * 2 ** Math.min(entry.attempts - 1, 6),
+          DEFAULT_RETRY_MAX_MS,
+        );
+        entry.nextRetryAt = Date.now() + backoff;
+        i++;
+      }
+    }
+
+    if (this.outbox.length > 0 && !this.stop.signal.aborted) {
+      this.scheduleOutboxFlush();
+    }
+
+    return published;
+  }
+
   async publish<T extends object>(
     tenantId: string,
     eventName: string,
     payload: T,
   ): Promise<void> {
+    const p = payload as Record<string, unknown>;
+    const eventId =
+      (typeof p.eventId === 'string' ? p.eventId : undefined) ?? randomUUID();
+    const body = {
+      ...payload,
+      eventId,
+      tenantId,
+      occurredAt:
+        (typeof p.occurredAt === 'string' ? p.occurredAt : undefined) ??
+        new Date().toISOString(),
+    };
+    const subject = buildAttendanceSubject(tenantId, eventName);
+    const serialized = JSON.stringify(body);
+
     try {
       if (!this.js) {
         if (!this.connection) {
@@ -261,22 +420,9 @@ export class JetStreamService implements OnModuleInit, OnModuleDestroy {
         this.js = jetstream(this.connection);
       }
 
-      const p = payload as Record<string, unknown>;
-      const eventId =
-        (typeof p.eventId === 'string' ? p.eventId : undefined) ??
-        randomUUID();
-      const body = {
-        ...payload,
-        eventId,
-        tenantId,
-        occurredAt:
-          (typeof p.occurredAt === 'string' ? p.occurredAt : undefined) ??
-          new Date().toISOString(),
-      };
-
-      const subject = buildAttendanceSubject(tenantId, eventName);
-      await this.js.publish(subject, JSON.stringify(body), { msgID: eventId });
+      await this.js.publish(subject, serialized, { msgID: eventId });
     } catch (error) {
+      this.enqueueOutbox(eventId, subject, serialized);
       this.logger.error(
         `Failed to publish attendance event ${eventName} for tenant ${tenantId}: ${error instanceof Error ? error.message : String(error)}`,
       );

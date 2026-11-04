@@ -88,7 +88,8 @@ export class TowerService {
   }
 
   /**
-   * Emits site_summary_updated to JetStream and forwards directly to the WebSocket room.
+   * Emits site_summary_updated to JetStream (which fans out to all telemetry replicas)
+   * and forwards directly to the local WebSocket rooms (deduplicated by eventId).
    */
   async emitSiteSummaryUpdated(
     tenantId: string,
@@ -102,10 +103,13 @@ export class TowerService {
     }
 
     const summary = await this.getSiteSummary(tenantId, siteId, overrideNow);
+    const eventId = randomUUID();
 
-    // 1. Publish JetStream domain event
+    this.gateway.recordLocalBroadcast?.(eventId);
+
+    // 1. Publish JetStream domain event (other telemetry replicas subscribe to t.*.attendance.site_summary_updated)
     await this.jetstream.publish(tenantId, TOWER_EVENTS.SITE_SUMMARY_UPDATED, {
-      eventId: randomUUID(),
+      eventId,
       tenantId,
       siteId,
       expected: summary.expected,
@@ -114,7 +118,7 @@ export class TowerService {
       occurredAt: (overrideNow ?? new Date()).toISOString(),
     });
 
-    // 2. Broadcast via WebSocket Gateway to authorized rooms
+    // 2. Broadcast via WebSocket Gateway to local authorized rooms
     this.gateway.broadcastSiteSummary(tenantId, siteId, summary);
 
     return summary;
