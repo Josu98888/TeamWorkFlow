@@ -12,7 +12,17 @@ export type AppErrorCode =
   | 'shift_overlap'
   | 'version_conflict'
   | 'shift_not_editable'
-  | 'validation_error';
+  | 'validation_error'
+  | 'subscription_not_found'
+  | 'invoice_not_found'
+  | 'plan_not_found'
+  | 'invalid_subscription_transition'
+  | 'invalid_plan_change'
+  | 'no_pending_cancellation'
+  | 'invoice_not_payable'
+  | 'invoice_exists'
+  | 'invalid_webhook_signature'
+  | 'payment_provider_error';
 
 export interface ValidationErrorItem {
   field: string;
@@ -150,5 +160,77 @@ export class ShiftNotEditableException extends AppException {
 export class ValidationException extends AppException {
   constructor(errors: ValidationErrorItem[]) {
     super(422, 'validation_error', 'Validation failed', errors);
+  }
+}
+
+export class SubscriptionNotFoundException extends AppException {
+  constructor() {
+    super(404, 'subscription_not_found', 'Subscription not found');
+  }
+}
+
+export class InvoiceNotFoundException extends AppException {
+  constructor() {
+    super(404, 'invoice_not_found', 'Invoice not found');
+  }
+}
+
+export class PlanNotFoundException extends AppException {
+  constructor() {
+    super(404, 'plan_not_found', 'Plan not found');
+  }
+}
+
+export class InvalidSubscriptionTransitionException extends AppException {
+  constructor() {
+    super(
+      409,
+      'invalid_subscription_transition',
+      'Invalid subscription state transition',
+    );
+  }
+}
+
+export class InvalidPlanChangeException extends AppException {
+  constructor() {
+    super(409, 'invalid_plan_change', 'Invalid plan change request');
+  }
+}
+
+export class NoPendingCancellationException extends AppException {
+  constructor() {
+    super(409, 'no_pending_cancellation', 'No pending cancellation to undo');
+  }
+}
+
+export class InvoiceNotPayableException extends AppException {
+  constructor() {
+    super(
+      409,
+      'invoice_not_payable',
+      'The invoice is paid or void and cannot be paid',
+    );
+  }
+}
+
+export class InvoiceExistsException extends AppException {
+  constructor() {
+    super(
+      409,
+      'invoice_exists',
+      'An invoice already exists for this tenant and period',
+    );
+  }
+}
+
+export class InvalidWebhookSignatureException extends AppException {
+  constructor() {
+    super(401, 'invalid_webhook_signature', 'Invalid webhook signature');
+  }
+}
+
+export class PaymentProviderErrorException extends AppException {
+  constructor(message = 'Payment provider communication error') {
+    super(502, 'payment_provider_error', message);
   }
 }

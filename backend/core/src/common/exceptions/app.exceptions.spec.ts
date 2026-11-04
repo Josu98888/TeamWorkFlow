@@ -6,10 +6,20 @@ import {
   EmployeeNotFoundException,
   ForbiddenException,
   InvalidCredentialsException,
+  InvalidPlanChangeException,
+  InvalidSubscriptionTransitionException,
   InvalidTokenException,
+  InvalidWebhookSignatureException,
+  InvoiceExistsException,
+  InvoiceNotFoundException,
+  InvoiceNotPayableException,
+  NoPendingCancellationException,
+  PaymentProviderErrorException,
+  PlanNotFoundException,
   ShiftNotEditableException,
   ShiftNotFoundException,
   ShiftOverlapException,
+  SubscriptionNotFoundException,
   TenantCancelledException,
   TenantSuspendedException,
   ValidationException,
@@ -30,6 +40,20 @@ describe('app.exceptions', () => {
     [new VersionConflictException(), 409, 'version_conflict'],
     [new ShiftNotEditableException(), 409, 'shift_not_editable'],
     [new ValidationException([]), 422, 'validation_error'],
+    [new SubscriptionNotFoundException(), 404, 'subscription_not_found'],
+    [new InvoiceNotFoundException(), 404, 'invoice_not_found'],
+    [new PlanNotFoundException(), 404, 'plan_not_found'],
+    [
+      new InvalidSubscriptionTransitionException(),
+      409,
+      'invalid_subscription_transition',
+    ],
+    [new InvalidPlanChangeException(), 409, 'invalid_plan_change'],
+    [new NoPendingCancellationException(), 409, 'no_pending_cancellation'],
+    [new InvoiceNotPayableException(), 409, 'invoice_not_payable'],
+    [new InvoiceExistsException(), 409, 'invoice_exists'],
+    [new InvalidWebhookSignatureException(), 401, 'invalid_webhook_signature'],
+    [new PaymentProviderErrorException(), 502, 'payment_provider_error'],
   ])(
     '%p carries status %i and code %s',
     (exception: AppException, status: number, code: string) => {
@@ -56,6 +80,9 @@ describe('app.exceptions', () => {
 
   it('uses the class name as the error name', () => {
     expect(new EmailTakenException().name).toBe('EmailTakenException');
+    expect(new SubscriptionNotFoundException().name).toBe(
+      'SubscriptionNotFoundException',
+    );
   });
 
   it('includes the field errors only in validation_error', () => {
