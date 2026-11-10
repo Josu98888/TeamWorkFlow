@@ -1,4 +1,4 @@
-import { minutesFromNow, mockResponse } from '@/shared/lib/mock';
+import { minutesFromNow, mockResponse, mockUnavailable } from '@/shared/lib/mock';
 import {
   CURRENT_ASSIGNMENTS,
   MOCK_USER_ID,
@@ -119,6 +119,12 @@ function findAlert(id: string): Alert {
 }
 
 export const telemetryMockApi: TelemetryApi = {
+  listClockEvents: () => mockResponse({ items: [], total: 0 }),
+  createManualClockEvent: mockUnavailable,
+  correctClockEvent: mockUnavailable,
+  listWorkdays: () => mockResponse({ items: [], total: 0 }),
+  getWorkday: mockUnavailable,
+
   getTowerSnapshot: () => mockResponse({ items: snapshot() }),
 
   listAlerts: (query = {}) => {

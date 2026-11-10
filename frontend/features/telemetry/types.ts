@@ -55,3 +55,67 @@ export type ListAlertsQuery = {
   page?: number;
   pageSize?: number;
 };
+
+// Attendance: clock events and workdays (raw Prisma rows of `telemetry`; enums come uppercase,
+// but the DTO inputs and query filters use lowercase values).
+
+export const CLOCK_EVENT_TYPES = ['IN', 'OUT', 'BREAK_START', 'BREAK_END'] as const;
+export type ClockEventType = (typeof CLOCK_EVENT_TYPES)[number];
+export type ClockEventTypeInput = Lowercase<ClockEventType>;
+
+export type ClockEventMethod = 'GPS' | 'QR' | 'MANUAL';
+
+/** `GET /clock-events` item; also the response of `POST /clock-events/manual` and `PATCH /clock-events/:id`. */
+export type ClockEvent = {
+  id: string;
+  tenantId: string;
+  shiftId: string;
+  employeeId: string;
+  siteId: string;
+  type: ClockEventType;
+  method: ClockEventMethod;
+  latitude: number | null;
+  longitude: number | null;
+  distanceMeters: number | null;
+  outOfGeofence: boolean;
+  clientEventId: string;
+  deviceTime: string;
+  receivedAt: string;
+  createdByUserId: string | null;
+  reason: string | null;
+};
+
+export type ClockEventsPage = { items: ClockEvent[]; total: number };
+export type ListClockEventsQuery = { shiftId?: string; employeeId?: string; siteId?: string; page?: number; pageSize?: number };
+
+/** `POST /clock-events/manual` (supervisor, admin, owner). */
+export type CreateManualClockEventInput = {
+  employeeId: string;
+  shiftId: string;
+  type: ClockEventTypeInput;
+  time: string;
+  reason: string;
+};
+
+/** `PATCH /clock-events/:clockEventId`: `reason` is required, `type`/`time` are optional. */
+export type CorrectClockEventInput = { type?: ClockEventTypeInput; time?: string; reason: string };
+
+export const WORKDAY_STATUSES = ['OPEN', 'CLOSED', 'MISSING_CLOCK_OUT'] as const;
+export type WorkdayStatus = (typeof WORKDAY_STATUSES)[number];
+
+/** `GET /workdays` item and `GET /workdays/:shiftId`. */
+export type Workday = {
+  id: string;
+  tenantId: string;
+  shiftId: string;
+  employeeId: string;
+  siteId: string;
+  workedMinutes: number;
+  overtimeMinutes: number;
+  lateMinutes: number;
+  status: WorkdayStatus;
+  updatedAt: string;
+};
+
+export type WorkdaysPage = { items: Workday[]; total: number };
+export type ListWorkdaysQuery = { employeeId?: string; siteId?: string; status?: Lowercase<WorkdayStatus>; page?: number; pageSize?: number };

@@ -11,5 +11,8 @@ export const USE_MOCKS = process.env.NEXT_PUBLIC_USE_MOCKS !== 'false';
 export const API_PREFIX = '/api/v1';
 export const TELEMETRY_API_PREFIX = `${API_PREFIX}/telemetry`;
 
+/** Origin of the Socket.IO gateway of telemetry (the reverse proxy, path `/ws`). */
+export const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? 'http://localhost:8080';
+
 /** Fake network latency so loading states are visible in the demo. */
 export const MOCK_LATENCY_MS = 350;
