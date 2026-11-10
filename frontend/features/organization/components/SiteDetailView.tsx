@@ -1,8 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { useResource } from '@/shared/hooks/useResource';
 import { Avatar } from '@/shared/components/Avatar';
 import { Badge } from '@/shared/components/Badge';
+import { Button } from '@/shared/components/Button';
 import { Card, SectionLabel } from '@/shared/components/Card';
 import { PageHeader } from '@/shared/components/PageHeader';
 import { EmptyState, ErrorState, LoadingState } from '@/shared/components/States';
@@ -16,6 +18,10 @@ import {
 } from '@/shared/lib/format';
 import { organizationApi } from '../api';
 import { SHIFT_STATUS_LABELS, SHIFT_STATUS_TONES } from '../labels';
+import type { Post } from '../types';
+import { PostFormModal } from './PostFormModal';
+import { RotateQrButton } from './RotateQrButton';
+import { SiteFormModal } from './SiteFormModal';
 import { SiteMap } from './SiteMap';
 
 const BACK = { href: '/sedes', label: 'Volver a Sedes y Geocercas' } as const;
@@ -28,6 +34,9 @@ export function SiteDetailView({ siteId }: { siteId: string }) {
   const posts = useResource(organizationApi.listPosts, siteId);
   const employees = useResource(organizationApi.listEmployees, { siteId });
   const shifts = useResource(organizationApi.listShifts, { siteId });
+  const [editingSite, setEditingSite] = useState(false);
+  // `null` = closed, `'new'` = create, a post = edit.
+  const [postForm, setPostForm] = useState<Post | 'new' | null>(null);
 
   if (site.error) {
     return (
@@ -76,8 +85,35 @@ export function SiteDetailView({ siteId }: { siteId: string }) {
         title={current.name}
         description={current.address}
         back={BACK}
-        actions={<Badge tone={current.isActive ? 'success' : 'neutral'}>{current.isActive ? 'Activa' : 'Inactiva'}</Badge>}
+        actions={
+          <div className="flex items-center gap-2">
+            <Badge tone={current.isActive ? 'success' : 'neutral'}>{current.isActive ? 'Activa' : 'Inactiva'}</Badge>
+            <Button onClick={() => setEditingSite(true)}>Editar sede</Button>
+            <RotateQrButton siteId={siteId} onRotated={site.reload} />
+          </div>
+        }
       />
+      {editingSite && (
+        <SiteFormModal
+          site={current}
+          onClose={() => setEditingSite(false)}
+          onSaved={() => {
+            setEditingSite(false);
+            site.reload();
+          }}
+        />
+      )}
+      {postForm && (
+        <PostFormModal
+          siteId={siteId}
+          post={postForm === 'new' ? undefined : postForm}
+          onClose={() => setPostForm(null)}
+          onSaved={() => {
+            setPostForm(null);
+            posts.reload();
+          }}
+        />
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card flush className="overflow-hidden lg:col-span-2">
@@ -104,7 +140,9 @@ export function SiteDetailView({ siteId }: { siteId: string }) {
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card flush>
           <div className="px-5 pt-5">
-            <SectionLabel>Puestos · {posts.data.total}</SectionLabel>
+            <SectionLabel action={<Button onClick={() => setPostForm('new')}>Nuevo puesto</Button>}>
+              Puestos · {posts.data.total}
+            </SectionLabel>
           </div>
           {posts.data.items.length === 0 ? (
             <div className="px-5 pb-5">
@@ -126,11 +164,17 @@ export function SiteDetailView({ siteId }: { siteId: string }) {
                         {post.minPeople === 1 ? 'persona' : 'personas'}
                       </p>
                     </div>
-                    {person ? (
-                      <Badge tone="success">{fullName(person)}</Badge>
-                    ) : (
-                      <Badge tone="danger">Sin cubrir</Badge>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {!post.isActive && <Badge>Inactivo</Badge>}
+                      {person ? (
+                        <Badge tone="success">{fullName(person)}</Badge>
+                      ) : (
+                        <Badge tone="danger">Sin cubrir</Badge>
+                      )}
+                      <Button variant="ghost" onClick={() => setPostForm(post)}>
+                        Editar
+                      </Button>
+                    </div>
                   </li>
                 );
               })}

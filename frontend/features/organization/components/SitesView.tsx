@@ -4,13 +4,14 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useResource } from '@/shared/hooks/useResource';
 import { Badge } from '@/shared/components/Badge';
-import { FilterChip } from '@/shared/components/Button';
+import { Button, FilterChip } from '@/shared/components/Button';
 import { Card } from '@/shared/components/Card';
 import { PageHeader } from '@/shared/components/PageHeader';
 import { EmptyState, ErrorState, LoadingState } from '@/shared/components/States';
 import { formatMeters } from '@/shared/lib/format';
 import { organizationApi } from '../api';
 import type { Site } from '../types';
+import { SiteFormModal } from './SiteFormModal';
 import { SiteMap } from './SiteMap';
 
 const FILTERS = ['all', 'active', 'inactive'] as const;
@@ -27,9 +28,29 @@ export function SitesView() {
   const shifts = useResource(organizationApi.listShifts);
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
+  const [creating, setCreating] = useState(false);
 
   const header = (
-    <PageHeader title="Sedes y Geocercas" description="Ubicaciones, radios de geocerca, puestos, personal y turnos." />
+    <>
+      <PageHeader
+        title="Sedes y Geocercas"
+        description="Ubicaciones, radios de geocerca, puestos, personal y turnos."
+        actions={
+          <Button variant="primary" onClick={() => setCreating(true)}>
+            Nueva sede
+          </Button>
+        }
+      />
+      {creating && (
+        <SiteFormModal
+          onClose={() => setCreating(false)}
+          onSaved={() => {
+            setCreating(false);
+            sites.reload();
+          }}
+        />
+      )}
+    </>
   );
 
   if (sites.error || employees.error || shifts.error) {
