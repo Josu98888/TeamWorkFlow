@@ -18,6 +18,10 @@ export function Sidebar({ userRole = 'owner' }: { userRole?: string }) {
     { label: 'Torre de Control', href: '/torre-control' },
     { label: 'Sedes y Geocercas', href: '/sedes' },
     { label: 'Tareas y Reportes', href: '/tareas' },
+    { label: 'Empleados', href: '/empleados' },
+    { label: 'Turnos', href: '/turnos' },
+    { label: 'Asistencia', href: '/asistencia' },
+    { label: 'Usuarios', href: '/usuarios' },
   ];
 
   return (
