@@ -207,11 +207,11 @@ export async function apiFetch<T>(
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     const error = (body ?? {}) as { detail?: string; code?: string };
-    throw new ApiError(
-      response.status,
-      error.code,
-      error.detail ?? 'No se pudo completar la solicitud.',
-    );
+    const message =
+      response.status === 403 && error.code === 'forbidden'
+        ? 'No tenés permiso para realizar esta acción.'
+        : (error.detail ?? 'No se pudo completar la solicitud.');
+    throw new ApiError(response.status, error.code, message);
   }
   return body as T;
 }

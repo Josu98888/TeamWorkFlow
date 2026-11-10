@@ -1,5 +1,6 @@
 'use client';
 
+import { Can } from '@/shared/hooks/useCan';
 import { useState } from 'react';
 import { useResource } from '@/shared/hooks/useResource';
 import { Avatar } from '@/shared/components/Avatar';
@@ -88,8 +89,10 @@ export function SiteDetailView({ siteId }: { siteId: string }) {
         actions={
           <div className="flex items-center gap-2">
             <Badge tone={current.isActive ? 'success' : 'neutral'}>{current.isActive ? 'Activa' : 'Inactiva'}</Badge>
-            <Button onClick={() => setEditingSite(true)}>Editar sede</Button>
-            <RotateQrButton siteId={siteId} onRotated={site.reload} />
+            <Can capability="sites.manage">
+              <Button onClick={() => setEditingSite(true)}>Editar sede</Button>
+              <RotateQrButton siteId={siteId} onRotated={site.reload} />
+            </Can>
           </div>
         }
       />
@@ -140,7 +143,7 @@ export function SiteDetailView({ siteId }: { siteId: string }) {
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card flush>
           <div className="px-5 pt-5">
-            <SectionLabel action={<Button onClick={() => setPostForm('new')}>Nuevo puesto</Button>}>
+            <SectionLabel action={<Can capability="sites.manage"><Button onClick={() => setPostForm('new')}>Nuevo puesto</Button></Can>}>
               Puestos · {posts.data.total}
             </SectionLabel>
           </div>
@@ -171,9 +174,11 @@ export function SiteDetailView({ siteId }: { siteId: string }) {
                       ) : (
                         <Badge tone="danger">Sin cubrir</Badge>
                       )}
-                      <Button variant="ghost" onClick={() => setPostForm(post)}>
-                        Editar
-                      </Button>
+                      <Can capability="sites.manage">
+                        <Button variant="ghost" onClick={() => setPostForm(post)}>
+                          Editar
+                        </Button>
+                      </Can>
                     </div>
                   </li>
                 );

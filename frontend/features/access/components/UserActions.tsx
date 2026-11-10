@@ -7,6 +7,8 @@ import { Modal } from '@/shared/components/Modal';
 import { useAction } from '@/shared/hooks/useAction';
 import { organizationApi } from '@/features/organization';
 import { useResource } from '@/shared/hooks/useResource';
+import { useSession } from '@/shared/hooks/useSession';
+import { manageableRoles } from '@/shared/auth/permissions';
 import { accessApi } from '../api';
 import { ROLE_LABELS } from '../labels';
 import { ASSIGNABLE_ROLES, type AssignableRole, type CreatedPasswordReset } from '../types';
@@ -53,6 +55,7 @@ export function UserActions({ userId }: { userId: string }) {
 function RoleModal({ userId, onClose, onDone }: { userId: string; onClose: () => void; onDone: () => void }) {
   const [role, setRole] = useState<AssignableRole>('supervisor');
   const { run, pending, error } = useAction();
+  const allowedRoles = manageableRoles(useSession()?.role);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -62,7 +65,7 @@ function RoleModal({ userId, onClose, onDone }: { userId: string; onClose: () =>
   return (
     <Modal title="Cambiar rol" onClose={onClose}>
       <form onSubmit={submit} className="space-y-3">
-        <SelectField label="Nuevo rol" value={role} onChange={(value) => setRole(value as AssignableRole)} options={ASSIGNABLE_ROLES.map((value) => ({ value, label: ROLE_LABELS[value] }))} />
+        <SelectField label="Nuevo rol" value={role} onChange={(value) => setRole(value as AssignableRole)} options={ASSIGNABLE_ROLES.filter((value) => allowedRoles.includes(value)).map((value) => ({ value, label: ROLE_LABELS[value] }))} />
         <FormFooter error={error} pending={pending} submitLabel="Cambiar rol" onCancel={onClose} />
       </form>
     </Modal>

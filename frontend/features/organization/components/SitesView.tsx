@@ -1,5 +1,6 @@
 'use client';
 
+import { Can } from '@/shared/hooks/useCan';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useResource } from '@/shared/hooks/useResource';
@@ -36,9 +37,11 @@ export function SitesView() {
         title="Sedes y Geocercas"
         description="Ubicaciones, radios de geocerca, puestos, personal y turnos."
         actions={
-          <Button variant="primary" onClick={() => setCreating(true)}>
-            Nueva sede
-          </Button>
+          <Can capability="sites.manage">
+            <Button variant="primary" onClick={() => setCreating(true)}>
+              Nueva sede
+            </Button>
+          </Can>
         }
       />
       {creating && (

@@ -1,5 +1,6 @@
 'use client';
 
+import { Can } from '@/shared/hooks/useCan';
 import { useState } from 'react';
 import { Avatar } from '@/shared/components/Avatar';
 import { Badge } from '@/shared/components/Badge';
@@ -42,9 +43,11 @@ export function EmployeesView() {
       title="Empleados"
       description="Personal, habilidades y sedes habilitadas."
       actions={
-        <Button variant="primary" onClick={() => setForm('new')} disabled={!sites.data}>
-          Nuevo empleado
-        </Button>
+        <Can capability="employees.manage">
+          <Button variant="primary" onClick={() => setForm('new')} disabled={!sites.data}>
+            Nuevo empleado
+          </Button>
+        </Can>
       }
     />
   );
@@ -98,9 +101,11 @@ export function EmployeesView() {
                   </p>
                 </div>
                 {!employee.isActive && <Badge>Inactivo</Badge>}
-                <Button variant="ghost" onClick={() => setForm(employee)}>
-                  Editar
-                </Button>
+                <Can capability="employees.manage">
+                  <Button variant="ghost" onClick={() => setForm(employee)}>
+                    Editar
+                  </Button>
+                </Can>
               </li>
             ))}
           </ul>

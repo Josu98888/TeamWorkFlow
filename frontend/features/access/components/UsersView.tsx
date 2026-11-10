@@ -9,6 +9,8 @@ import { PageHeader } from '@/shared/components/PageHeader';
 import { EmptyState, ErrorState, LoadingState } from '@/shared/components/States';
 import { useAction } from '@/shared/hooks/useAction';
 import { useResource } from '@/shared/hooks/useResource';
+import { useSession } from '@/shared/hooks/useSession';
+import { manageableRoles } from '@/shared/auth/permissions';
 import { formatDateTime, fullName } from '@/shared/lib/format';
 import { organizationApi } from '@/features/organization';
 import { accessApi } from '../api';
@@ -22,6 +24,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function UsersView() {
   const invitations = useResource(accessApi.listInvitations);
   const employees = useResource(organizationApi.listEmployees, { pageSize: 100 });
+  const session = useSession();
+  // Roles this actor may invite/regenerate (owner: admin+supervisor+employee; admin: supervisor+employee).
+  const allowedRoles = manageableRoles(session?.role);
   const [created, setCreated] = useState<CreatedInvitation | null>(null);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<AssignableRole>('employee');
@@ -59,7 +64,7 @@ export function UsersView() {
           <SectionLabel>Invitar usuario</SectionLabel>
           <form onSubmit={submit} className="space-y-3">
             <TextField label="Correo electrónico" type="email" value={email} onChange={setEmail} required />
-            <SelectField label="Rol" value={role} onChange={(value) => setRole(value as AssignableRole)} options={ASSIGNABLE_ROLES.map((value) => ({ value, label: ROLE_LABELS[value] }))} />
+            <SelectField label="Rol" value={role} onChange={(value) => setRole(value as AssignableRole)} options={ASSIGNABLE_ROLES.filter((value) => allowedRoles.includes(value)).map((value) => ({ value, label: ROLE_LABELS[value] }))} />
             <FormFooter error={create.error} pending={create.pending} submitLabel="Crear invitación" onCancel={() => setEmail('')} />
           </form>
         </Card>
@@ -84,7 +89,11 @@ export function UsersView() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge tone="info">{ROLE_LABELS[invitation.role]}</Badge>
-                    <Button onClick={() => regenerateInvitation(invitation.invitationId)} disabled={regenerate.pending}>
+                    <Button
+                      onClick={() => regenerateInvitation(invitation.invitationId)}
+                      disabled={regenerate.pending || !allowedRoles.includes(invitation.role)}
+                      title={allowedRoles.includes(invitation.role) ? undefined : 'Solo el propietario gestiona invitaciones de administradores.'}
+                    >
                       Regenerar enlace
                     </Button>
                   </div>

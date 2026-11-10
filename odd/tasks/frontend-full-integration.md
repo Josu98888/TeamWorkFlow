@@ -17,6 +17,9 @@ Tokens live in localStorage (XSS-readable). Screens are mostly read-only and sev
 - [x] F4 (af30bda) Attendance: clock events list + manual entry + correction, workdays list/detail, live tower over Socket.IO.
 - [x] F5 (e29343c; partial: `.env.example` could not be created, write denied by permission rules; template content in the final report) Wire-up: sidebar entries, `.env.example`, run instructions.
 
+- [x] F6 Role-based access: one permissions module (role -> capabilities, route -> capability) used by `proxy.ts` redirects, sidebar filtering and a `Can`/`useCan` guard for actions; per-role landing page.
+- [ ] F7 Employee "Mi jornada": QR clock-in (geolocation + QR token, camera via BarcodeDetector when available, manual code fallback) and own workdays.
+
 ## Checks
 - TDD off (user). `pnpm exec tsc --noEmit` per task. No lint/build by request.
 
@@ -31,3 +34,5 @@ Tokens live in localStorage (XSS-readable). Screens are mostly read-only and sev
 - 2026-11-10: F4 done: `/asistencia` (clock events list/filters, manual clock-in, correction; workdays list + detail by shiftId), live tower via `socket.io-client@^4.8.4` (telemetry uses socket.io ^4.8.1) on path `/ws`, `site_summary_updated`, polling fallback every 15 s. tsc --noEmit clean.
 - 2026-11-10: F5 done: sidebar entries Empleados/Turnos/Asistencia/Usuarios. `frontend/.env.example` blocked by a deny rule on `.env*` paths (also `.gitignore` ignores `.env*`, so it needs `!.env.example`). tsc --noEmit clean.
 - 2026-11-10: F1-F5 committed; `tsc --noEmit` clean (re-run by orchestrator). Pending: user creates `frontend/.env.example` (agent writes to `.env*` denied) and sets `WEB_ORIGIN=http://localhost:3002` in `backend/.env`; manual local smoke.
+- 2026-11-10: user asked for role-based screens/redirects ("aplica la mejor arquitectura"); F6-F7 added. Route: delegated writer.
+- 2026-11-10: F6 done: `frontend/shared/auth/permissions.ts` (roles, capabilities, ROUTE_RULES, `can`, `canAccessRoute`, `homeFor`, `manageableRoles`) is the single source; `proxy.ts` redirects by access-token role, `RouteGuard` re-checks with the refreshed session, Sidebar filtered by route rules, `Can`/`useCan`, action buttons gated per capability, users screen offers only manageable roles, `/sin-acceso` page, 403 `forbidden` shows "No tenés permiso". Route: delegated writer (single). tsc --noEmit clean. Employees can read no sites/posts, so QR clock-in must take the site from own shifts (F7).

@@ -1,5 +1,6 @@
 'use client';
 
+import { Can } from '@/shared/hooks/useCan';
 import { useState } from 'react';
 import { organizationApi } from '@/features/organization';
 import { Badge } from '@/shared/components/Badge';
@@ -90,9 +91,11 @@ function ClockEventsTab({ siteId, employeeId, employeeNames, siteNames }: TabPro
   return (
     <>
       <div className="mb-3 flex justify-end">
-        <Button variant="primary" onClick={() => setManual(true)}>
-          Fichada manual
-        </Button>
+        <Can capability="attendance.correct">
+          <Button variant="primary" onClick={() => setManual(true)}>
+            Fichada manual
+          </Button>
+        </Can>
       </div>
       {manual && (
         <ManualClockEventModal
@@ -148,9 +151,11 @@ function ClockEventsTab({ siteId, employeeId, employeeNames, siteNames }: TabPro
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-5 py-3 text-right">
-                      <Button variant="ghost" onClick={() => setCorrecting(item)}>
-                        Corregir
-                      </Button>
+                      <Can capability="attendance.correct">
+                        <Button variant="ghost" onClick={() => setCorrecting(item)}>
+                          Corregir
+                        </Button>
+                      </Can>
                     </td>
                   </tr>
                 ))}

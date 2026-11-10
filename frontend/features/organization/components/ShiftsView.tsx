@@ -1,5 +1,6 @@
 'use client';
 
+import { Can } from '@/shared/hooks/useCan';
 import { useState } from 'react';
 import { Badge } from '@/shared/components/Badge';
 import { Button } from '@/shared/components/Button';
@@ -63,9 +64,11 @@ export function ShiftsView() {
         title="Turnos"
         description="Programación de turnos por sede, puesto y empleado."
         actions={
-          <Button variant="primary" disabled={!ready} onClick={() => setDialog({ kind: 'create' })}>
-            Nuevo turno
-          </Button>
+          <Can capability="shifts.manage">
+            <Button variant="primary" disabled={!ready} onClick={() => setDialog({ kind: 'create' })}>
+              Nuevo turno
+            </Button>
+          </Can>
         }
       />
 
@@ -146,11 +149,11 @@ export function ShiftsView() {
                       </td>
                       <td className="whitespace-nowrap px-5 py-3 text-right">
                         {open && (
-                          <>
+                          <Can capability="shifts.manage">
                             <Button variant="ghost" onClick={() => setDialog({ kind: 'edit', shift })}>Editar</Button>
                             <Button variant="ghost" onClick={() => setDialog({ kind: 'reassign', shift })}>Reasignar</Button>
                             <Button variant="ghost" onClick={() => void cancel(shift)} disabled={cancelAction.pending}>Cancelar</Button>
-                          </>
+                          </Can>
                         )}
                       </td>
                     </tr>
