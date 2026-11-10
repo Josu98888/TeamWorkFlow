@@ -13,9 +13,9 @@ Tokens live in localStorage (XSS-readable). Screens are mostly read-only and sev
 ## Tasks
 - [x] F1 (b777e58) Auth BFF: cookie login/register/refresh/logout, API proxy route, drop localStorage, route protection (`proxy.ts`), session user in Topbar + logout.
 - [x] F2 (122f1c8) Organization: sites create/edit + rotate QR, posts create/edit, employees screen (list/create/edit), shifts screen (list/create/edit/reassign/cancel).
-- [x] F3 Users & access: invitations (create/list/regenerate), user role/sites/deactivate, admin password reset link; public pages accept-invitation and password-reset confirm.
-- [x] F4 Attendance: clock events list + manual entry + correction, workdays list/detail, live tower over Socket.IO.
-- [x] F5 (partial: `.env.example` could not be created, write denied by permission rules; template content in the final report) Wire-up: sidebar entries, `.env.example`, run instructions.
+- [x] F3 (9ab43a7) Users & access: invitations (create/list/regenerate), user role/sites/deactivate, admin password reset link; public pages accept-invitation and password-reset confirm.
+- [x] F4 (af30bda) Attendance: clock events list + manual entry + correction, workdays list/detail, live tower over Socket.IO.
+- [x] F5 (e29343c; partial: `.env.example` could not be created, write denied by permission rules; template content in the final report) Wire-up: sidebar entries, `.env.example`, run instructions.
 
 ## Checks
 - TDD off (user). `pnpm exec tsc --noEmit` per task. No lint/build by request.
@@ -30,3 +30,4 @@ Tokens live in localStorage (XSS-readable). Screens are mostly read-only and sev
 - 2026-11-10: F3 done: `/usuarios` (invitations create/list/regenerate with link modal; role/sites/deactivate/password-reset link for employees with userId or a pasted user id), public `/invitations/accept` and `/password-reset`, BFF routes `/api/auth/accept-invitation` and `/api/auth/password-reset-confirm`. Gap: core has no list-users endpoint. tsc --noEmit clean.
 - 2026-11-10: F4 done: `/asistencia` (clock events list/filters, manual clock-in, correction; workdays list + detail by shiftId), live tower via `socket.io-client@^4.8.4` (telemetry uses socket.io ^4.8.1) on path `/ws`, `site_summary_updated`, polling fallback every 15 s. tsc --noEmit clean.
 - 2026-11-10: F5 done: sidebar entries Empleados/Turnos/Asistencia/Usuarios. `frontend/.env.example` blocked by a deny rule on `.env*` paths (also `.gitignore` ignores `.env*`, so it needs `!.env.example`). tsc --noEmit clean.
+- 2026-11-10: F1-F5 committed; `tsc --noEmit` clean (re-run by orchestrator). Pending: user creates `frontend/.env.example` (agent writes to `.env*` denied) and sets `WEB_ORIGIN=http://localhost:3002` in `backend/.env`; manual local smoke.
