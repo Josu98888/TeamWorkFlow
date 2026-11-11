@@ -25,6 +25,8 @@ export type Capability =
   | 'shifts.manage'
   | 'tasks.view'
   | 'users.manage'
+  | 'billing.manage'
+  | 'platform.billing'
   | 'attendance.view'
   | 'attendance.correct'
   | 'clock.self'
@@ -33,6 +35,7 @@ export type Capability =
 const OWNER_ADMIN: readonly Role[] = ['owner', 'admin'];
 const MANAGERS: readonly Role[] = ['owner', 'admin', 'supervisor'];
 const EMPLOYEE_ONLY: readonly Role[] = ['employee'];
+const PLATFORM_ONLY: readonly Role[] = ['platform_admin'];
 
 /** Roles holding each capability, with the backend rule it mirrors. `platform_admin` holds none (no tenant). */
 const CAPABILITY_ROLES: Record<Capability, readonly Role[]> = {
@@ -58,6 +61,11 @@ const CAPABILITY_ROLES: Record<Capability, readonly Role[]> = {
   'tasks.view': MANAGERS,
   // core `auth/users/user-policy.ts` `isUserManager` + `invitations/invitation-policy.ts`: owner, admin.
   'users.manage': OWNER_ADMIN,
+  // core `billing/billing.service.ts` `assertTenantRole`: plans, subscription, invoices, payment links, change
+  // plan/cancel/resubscribe are owner/admin of the tenant only (a platform_admin gets 403 there).
+  'billing.manage': OWNER_ADMIN,
+  // core `billing/billing.service.ts` `assertPlatformAdmin`: every `/billing/admin/*` route is platform_admin only.
+  'platform.billing': PLATFORM_ONLY,
   // telemetry `clock-ins.controller.ts` GET + `workdays.controller.ts`: all tenant roles; this is the
   // team-wide screen, so supervisor/admin/owner (employees use `/mi-jornada`).
   'attendance.view': MANAGERS,
@@ -92,6 +100,8 @@ export const ROUTE_RULES: readonly { path: string; exact?: boolean; capability: 
   { path: '/asistencia', capability: 'attendance.view' },
   { path: '/usuarios', capability: 'users.manage' },
   { path: '/mi-jornada', capability: 'clock.self' },
+  { path: '/facturacion', capability: 'billing.manage' },
+  { path: '/plataforma', capability: 'platform.billing' },
 ];
 
 export function canAccessRoute(role: string | null | undefined, pathname: string): boolean {
@@ -103,10 +113,11 @@ export function canAccessRoute(role: string | null | undefined, pathname: string
 
 export const NO_ACCESS_PATH = '/sin-acceso';
 
-/** Landing page of a role. Unknown roles and `platform_admin` (no tenant) land on the "sin acceso" page. */
+/** Landing page of a role. `platform_admin` (no tenant) lands on platform billing; unknown roles on "sin acceso". */
 export function homeFor(role: string | null | undefined): string {
   if (role === 'employee') return '/mi-jornada';
   if (role === 'owner' || role === 'admin' || role === 'supervisor') return '/';
+  if (role === 'platform_admin') return '/plataforma/facturacion';
   return NO_ACCESS_PATH;
 }
 

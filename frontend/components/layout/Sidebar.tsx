@@ -22,6 +22,8 @@ export function Sidebar() {
     { label: 'Turnos', href: '/turnos' },
     { label: 'Asistencia', href: '/asistencia' },
     { label: 'Usuarios', href: '/usuarios' },
+    { label: 'Facturación', href: '/facturacion' },
+    { label: 'Facturación plataforma', href: '/plataforma/facturacion' },
   ].filter((item) => canAccessRoute(session?.role, item.href));
 
   return (

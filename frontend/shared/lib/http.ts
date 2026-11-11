@@ -17,6 +17,14 @@ export class ApiError extends Error {
   }
 }
 
+/** Spanish copy for the 403 codes every screen can hit (`forbidden`, plan gating, tenant billing state). */
+const FORBIDDEN_MESSAGES: Record<string, string> = {
+  forbidden: 'No tenés permiso para realizar esta acción.',
+  feature_not_in_plan: 'Tu plan no incluye esta función. Podés cambiarlo desde Facturación.',
+  tenant_suspended: 'La cuenta de tu empresa está suspendida por falta de pago. Regularizala desde Facturación.',
+  tenant_cancelled: 'La suscripción de tu empresa está cancelada. Podés volver a suscribirte desde Facturación.',
+};
+
 let refreshInFlight: Promise<boolean> | null = null;
 let proactiveRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 let visibilityListenerAttached = false;
@@ -229,9 +237,7 @@ export async function apiFetch<T>(
   if (!response.ok) {
     const error = (body ?? {}) as { detail?: string; code?: string };
     const message =
-      response.status === 403 && error.code === 'forbidden'
-        ? 'No tenés permiso para realizar esta acción.'
-        : (error.detail ?? 'No se pudo completar la solicitud.');
+      (response.status === 403 && FORBIDDEN_MESSAGES[error.code ?? '']) || (error.detail ?? 'No se pudo completar la solicitud.');
     throw new ApiError(response.status, error.code, message);
   }
   return body as T;
