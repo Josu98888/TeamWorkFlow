@@ -7,8 +7,10 @@ Make the frontend cover every backend capability and run against the real local 
 Tokens live in localStorage (XSS-readable). Screens are mostly read-only and several backend features (employees, shifts, users/invitations, password reset, clock events, workdays, live tower) have no UI.
 
 ## Decisions
-- Auth via a Next BFF (user, 2026-11-10: "http only"; route chosen by orchestrator): Next route handlers call core `/auth/*` and set `access_token`/`refresh_token` as httpOnly, SameSite=Lax cookies. A catch-all route handler `app/api/v1/[...path]` forwards to `BACKEND_URL`, reading the cookie and sending `Authorization: Bearer` (core only accepts bearer), refreshing once on 401. Mutating requests are checked by Origin. Backend unchanged. Socket.IO connects to the proxy origin; telemetry reads the `access_token` cookie from the handshake (cookies are shared across localhost ports).
+- SUPERSEDED (F8): auth via a Next BFF (user, 2026-11-10: "http only"; route chosen by orchestrator): Next route handlers call core `/auth/*` and set `access_token`/`refresh_token` as httpOnly, SameSite=Lax cookies. A catch-all route handler `app/api/v1/[...path]` forwards to `BACKEND_URL`, reading the cookie and sending `Authorization: Bearer` (core only accepts bearer), refreshing once on 401. Mutating requests are checked by Origin. Backend unchanged. Socket.IO connects to the proxy origin; telemetry reads the `access_token` cookie from the handshake (cookies are shared across localhost ports).
 - No tests (user request); per task only `tsc --noEmit`. Fix issues on the way.
+
+- 2026-11-10 decision: adopt the teammate's backend-owned cookie auth (core sets httpOnly `access_token` Path=/, httpOnly `refresh_token` Path=/api/v1/auth, readable `csrf_token` Path=/; double-submit `X-CSRF-Token`) and drop our Next BFF. `/api/v1/*` is proxied by the `next.config.ts` rewrite to `BACKEND_URL`.
 
 ## Tasks
 - [x] F1 (b777e58) Auth BFF: cookie login/register/refresh/logout, API proxy route, drop localStorage, route protection (`proxy.ts`), session user in Topbar + logout.
@@ -19,6 +21,8 @@ Tokens live in localStorage (XSS-readable). Screens are mostly read-only and sev
 
 - [x] F6 (1358577) Role-based access: one permissions module (role -> capabilities, route -> capability) used by `proxy.ts` redirects, sidebar filtering and a `Can`/`useCan` guard for actions; per-role landing page.
 - [x] F7 Employee "Mi jornada": QR clock-in (geolocation + QR token, camera via BarcodeDetector when available, manual code fallback) and own workdays.
+- [x] F8 (c0469f3) Adopt core cookie auth: BFF route handlers and `shared/server` removed, login/register/invitation/password reset via the shared http client, session claims from the token pair, `proxy.ts` decides from `access_token`/`csrf_token`.
+- [x] F9 (7aaba05) Billing: tenant `/facturacion` (owner/admin) and platform `/plataforma/facturacion` (`platform_admin`), capabilities `billing.manage`/`platform.billing`, Spanish messages for `feature_not_in_plan` and suspended/cancelled tenants.
 
 ## Checks
 - TDD off (user). `pnpm exec tsc --noEmit` per task. No lint/build by request.
@@ -37,3 +41,4 @@ Tokens live in localStorage (XSS-readable). Screens are mostly read-only and sev
 - 2026-11-10: user asked for role-based screens/redirects ("aplica la mejor arquitectura"); F6-F7 added. Route: delegated writer.
 - 2026-11-10: F6 done: `frontend/shared/auth/permissions.ts` (roles, capabilities, ROUTE_RULES, `can`, `canAccessRoute`, `homeFor`, `manageableRoles`) is the single source; `proxy.ts` redirects by access-token role, `RouteGuard` re-checks with the refreshed session, Sidebar filtered by route rules, `Can`/`useCan`, action buttons gated per capability, users screen offers only manageable roles, `/sin-acceso` page, 403 `forbidden` shows "No tenés permiso". Route: delegated writer (single). tsc --noEmit clean. Employees can read no sites/posts, so QR clock-in must take the site from own shifts (F7).
 - 2026-11-10: F7 done: `/mi-jornada` (`MyShiftView`): own open shifts (site taken from the shift, employees cannot read sites), clock type, QR code by camera (native `BarcodeDetector`, manual field fallback) or `navigator.geolocation` (GPS) -> `POST /telemetry/clock-events`, Spanish messages for invalid_qr/no_matching_shift/clock_too_old/validation_error; own clock events and workdays. Out-of-geofence is not an error in the backend (event saved + alert), shown as a warning. tsc --noEmit clean.
+- 2026-11-10: rebased onto origin/develop (37 upstream commits; conflicts only in layout, Sidebar, http.ts, login, register, resolved taking upstream and re-applying our additions). F8 done: cookie auth adopted, BFF removed. Gap: core `POST /auth/invitations/accept` returns a token pair but sets no cookies, so after accepting the user is sent to /login. F9 done: billing screens; gap: core has no plan listing for `platform_admin`, so the platform screen edits a plan by code. tsc --noEmit clean.
