@@ -120,6 +120,7 @@ function findAlert(id: string): Alert {
 
 export const telemetryMockApi: TelemetryApi = {
   listClockEvents: () => mockResponse({ items: [], total: 0 }),
+  createClockEvent: mockUnavailable,
   createManualClockEvent: mockUnavailable,
   correctClockEvent: mockUnavailable,
   listWorkdays: () => mockResponse({ items: [], total: 0 }),

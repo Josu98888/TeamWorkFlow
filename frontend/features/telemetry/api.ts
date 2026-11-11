@@ -7,6 +7,7 @@ import type {
   ClockEvent,
   ClockEventsPage,
   CorrectClockEventInput,
+  CreateClockEventInput,
   CreateManualClockEventInput,
   ListAlertsQuery,
   ListClockEventsQuery,
@@ -22,6 +23,7 @@ export type TelemetryApi = {
   acknowledgeAlert: (alertId: string) => Promise<Alert>;
   resolveAlert: (alertId: string, reason?: string) => Promise<Alert>;
   listClockEvents: (query?: ListClockEventsQuery) => Promise<ClockEventsPage>;
+  createClockEvent: (input: CreateClockEventInput) => Promise<ClockEvent>;
   createManualClockEvent: (input: CreateManualClockEventInput) => Promise<ClockEvent>;
   correctClockEvent: (clockEventId: string, input: CorrectClockEventInput) => Promise<ClockEvent>;
   listWorkdays: (query?: ListWorkdaysQuery) => Promise<WorkdaysPage>;

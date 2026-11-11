@@ -24,6 +24,8 @@ export const telemetryHttpApi: TelemetryApi = {
   resolveAlert: (alertId, reason) =>
     apiFetch(`/alerts/${alertId}/resolve`, { ...options, method: 'POST', body: JSON.stringify({ reason }) }),
   listClockEvents: (query = {}) => apiFetch(`/clock-events${toQueryString(query)}`, options),
+  createClockEvent: (input) =>
+    apiFetch('/clock-events', { ...options, method: 'POST', body: JSON.stringify(input) }),
   createManualClockEvent: (input) =>
     apiFetch('/clock-events/manual', { ...options, method: 'POST', body: JSON.stringify(input) }),
   correctClockEvent: (clockEventId, input) =>

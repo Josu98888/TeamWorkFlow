@@ -85,6 +85,18 @@ export type ClockEvent = {
   reason: string | null;
 };
 
+/** `POST /clock-events` (employee). `clientEventId` makes the call idempotent; `siteId` comes from the shift. */
+export type CreateClockEventInput = {
+  clientEventId: string;
+  type: ClockEventTypeInput;
+  method: 'gps' | 'qr';
+  siteId: string;
+  deviceTime: string;
+  latitude?: number;
+  longitude?: number;
+  qrCode?: string;
+};
+
 export type ClockEventsPage = { items: ClockEvent[]; total: number };
 export type ListClockEventsQuery = { shiftId?: string; employeeId?: string; siteId?: string; page?: number; pageSize?: number };
 
