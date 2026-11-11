@@ -10,6 +10,7 @@ import { PageHeader } from '@/shared/components/PageHeader';
 import { EmptyState, ErrorState, LoadingState } from '@/shared/components/States';
 import { fullName, formatPercent } from '@/shared/lib/format';
 import { telemetryApi } from '../api';
+import { useTowerLive } from '../useTowerLive';
 import type { Alert } from '../types';
 import { AlertItem } from './AlertItem';
 import { SiteStatusRow } from './SiteStatusRow';
@@ -32,6 +33,13 @@ export function TowerView() {
   const alertsPage = useResource(telemetryApi.listAlerts);
   const sites = useResource(organizationApi.listSites);
   const employees = useResource(organizationApi.listEmployees);
+  const live = useTowerLive(
+    () => {
+      snapshot.reload();
+      alertsPage.reload();
+    },
+    () => alertsPage.reload(),
+  );
 
   // Local state needed: acknowledge / resolve results are kept here until the live feed (P5) replaces them.
   const [overrides, setOverrides] = useState<Record<string, Alert>>({});
@@ -43,7 +51,7 @@ export function TowerView() {
   const header = (
     <PageHeader
       title="Torre de Control"
-      description="Presencia del personal por sede y alertas operativas del turno en curso."
+      description={`Presencia del personal por sede y alertas operativas del turno en curso.${live.connected ? " En vivo." : ""}`}
     />
   );
 
@@ -78,8 +86,10 @@ export function TowerView() {
   const siteNames = new Map(sites.data.items.map((site) => [site.id, site.name]));
   const employeeNames = new Map(employees.data.items.map((employee) => [employee.id, fullName(employee)]));
 
-  const expected = snapshot.data.items.reduce((total, item) => total + item.expected, 0);
-  const present = snapshot.data.items.reduce((total, item) => total + item.present, 0);
+  // Live summaries (WebSocket) override the snapshot counters of their site.
+  const siteItems = snapshot.data.items.map((item) => ({ ...item, ...live.summaries[item.siteId] }));
+  const expected = siteItems.reduce((total, item) => total + item.expected, 0);
+  const present = siteItems.reduce((total, item) => total + item.present, 0);
   const countByStatus = (status: Alert['status']) => alerts.filter((alert) => alert.status === status).length;
   const activeAlertsBySite = (siteId: string) =>
     alerts.filter((alert) => alert.siteId === siteId && alert.status !== 'RESOLVED').length;
@@ -144,7 +154,7 @@ export function TowerView() {
               </SectionLabel>
             </div>
             <ul className="divide-y divide-line">
-              {snapshot.data.items.map((item) => (
+              {siteItems.map((item) => (
                 <SiteStatusRow
                   key={item.siteId}
                   name={siteNames.get(item.siteId) ?? 'Sede'}

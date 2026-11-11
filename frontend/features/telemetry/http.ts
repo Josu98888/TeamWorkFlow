@@ -1,11 +1,11 @@
 import { TELEMETRY_API_PREFIX } from '@/shared/lib/config';
 import { apiFetch } from '@/shared/lib/http';
 import type { TelemetryApi } from './api';
-import type { ListAlertsQuery } from './types';
+import type { ListAlertsQuery, ListClockEventsQuery, ListWorkdaysQuery } from './types';
 
 const options = { prefix: TELEMETRY_API_PREFIX };
 
-function toQueryString(query: ListAlertsQuery): string {
+function toQueryString(query: ListAlertsQuery | ListClockEventsQuery | ListWorkdaysQuery): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined) params.set(key, String(value));
@@ -16,7 +16,6 @@ function toQueryString(query: ListAlertsQuery): string {
 
 /**
  * Real implementation against `telemetry` (`/api/v1/telemetry/...`). Same contract as the mock.
- * TODO(P5): live updates through the Socket.IO `/ws` event `site_summary_updated`.
  */
 export const telemetryHttpApi: TelemetryApi = {
   getTowerSnapshot: () => apiFetch('/tower/snapshot', options),
@@ -24,4 +23,13 @@ export const telemetryHttpApi: TelemetryApi = {
   acknowledgeAlert: (alertId) => apiFetch(`/alerts/${alertId}/acknowledge`, { ...options, method: 'POST' }),
   resolveAlert: (alertId, reason) =>
     apiFetch(`/alerts/${alertId}/resolve`, { ...options, method: 'POST', body: JSON.stringify({ reason }) }),
+  listClockEvents: (query = {}) => apiFetch(`/clock-events${toQueryString(query)}`, options),
+  createClockEvent: (input) =>
+    apiFetch('/clock-events', { ...options, method: 'POST', body: JSON.stringify(input) }),
+  createManualClockEvent: (input) =>
+    apiFetch('/clock-events/manual', { ...options, method: 'POST', body: JSON.stringify(input) }),
+  correctClockEvent: (clockEventId, input) =>
+    apiFetch(`/clock-events/${clockEventId}`, { ...options, method: 'PATCH', body: JSON.stringify(input) }),
+  listWorkdays: (query = {}) => apiFetch(`/workdays${toQueryString(query)}`, options),
+  getWorkday: (shiftId) => apiFetch(`/workdays/${shiftId}`, options),
 };

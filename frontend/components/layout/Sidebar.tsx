@@ -3,22 +3,28 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { logoutSession } from '../../shared/lib/http';
+import { canAccessRoute } from '@/shared/auth/permissions';
+import { useLogout, useSession } from '@/shared/hooks/useSession';
 
-export function Sidebar({ userRole = 'owner' }: { userRole?: string }) {
+export function Sidebar() {
   const pathname = usePathname();
+  const session = useSession();
 
-  const handleLogout = async () => {
-    await logoutSession();
-    window.location.href = '/login';
-  };
+  const logout = useLogout();
 
   const navItems = [
+    { label: 'Mi jornada', href: '/mi-jornada' },
     { label: 'Panel Principal', href: '/' },
     { label: 'Torre de Control', href: '/torre-control' },
     { label: 'Sedes y Geocercas', href: '/sedes' },
     { label: 'Tareas y Reportes', href: '/tareas' },
-  ];
+    { label: 'Empleados', href: '/empleados' },
+    { label: 'Turnos', href: '/turnos' },
+    { label: 'Asistencia', href: '/asistencia' },
+    { label: 'Usuarios', href: '/usuarios' },
+    { label: 'Facturación', href: '/facturacion' },
+    { label: 'Facturación plataforma', href: '/plataforma/facturacion' },
+  ].filter((item) => canAccessRoute(session?.role, item.href));
 
   return (
     <aside
@@ -59,10 +65,10 @@ export function Sidebar({ userRole = 'owner' }: { userRole?: string }) {
       <div className="pt-4 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}>
         <div className="mb-3 px-1">
           <span className="block text-[11px] uppercase tracking-wider text-gray-400">Rol activo</span>
-          <span className="text-sm font-medium capitalize text-white">{userRole}</span>
+          <span className="text-sm font-medium capitalize text-white">{session?.role ?? ''}</span>
         </div>
         <button
-          onClick={() => void handleLogout()}
+          onClick={() => void logout()}
           className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-opacity hover:opacity-80 cursor-pointer"
           style={{ backgroundColor: 'rgba(180, 35, 50, 0.2)', color: '#FFB4B4' }}
         >

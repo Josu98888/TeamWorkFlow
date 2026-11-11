@@ -17,3 +17,8 @@ export function todayAt(hour: number, minute = 0, dayOffset = 0): string {
   date.setHours(hour, minute, 0, 0);
   return date.toISOString();
 }
+
+/** Rejects like a write that the demo data cannot perform (mock mode is read-only). */
+export function mockUnavailable<T = never>(): Promise<T> {
+  return Promise.reject(new Error('Esta acción no está disponible en modo demo. Usá NEXT_PUBLIC_USE_MOCKS=false.'));
+}
