@@ -1,4 +1,5 @@
 import { API_PREFIX } from './config';
+import { clearSession, setSessionFromToken } from './session';
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const DEFAULT_ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
@@ -119,8 +120,10 @@ export async function refreshAccessToken(prefix = API_PREFIX): Promise<boolean> 
       }
 
       const data = (await response.json().catch(() => null)) as {
+        accessToken?: string;
         expiresIn?: number;
       } | null;
+      setSessionFromToken(data?.accessToken);
       clearLegacyTokenStorage();
       scheduleProactiveRefresh(
         typeof data?.expiresIn === 'number'
@@ -142,6 +145,7 @@ export async function refreshAccessToken(prefix = API_PREFIX): Promise<boolean> 
 export async function logoutSession(prefix = API_PREFIX): Promise<void> {
   stopProactiveRefresh();
   clearLegacyTokenStorage();
+  clearSession();
   if (typeof window === 'undefined') return;
 
   try {
@@ -160,12 +164,29 @@ export async function logoutSession(prefix = API_PREFIX): Promise<void> {
   }
 }
 
+/** Body of login/register/accept-invitation in `core`; the tokens also arrive as cookies set by core. */
+export type TokenPair = { accessToken: string; refreshToken: string; expiresIn: number };
+
+/**
+ * POSTs to a public `/auth/*` route that opens a session (`login`, `register`): core sets the httpOnly
+ * session cookies plus the CSRF cookie, and this keeps the token claims and schedules the rotation.
+ */
+export async function startSession(path: string, body: unknown, prefix = API_PREFIX): Promise<TokenPair> {
+  const pair = await apiFetch<TokenPair>(path, { method: 'POST', body: JSON.stringify(body), prefix });
+  setSessionFromToken(pair.accessToken);
+  clearLegacyTokenStorage();
+  scheduleProactiveRefresh(typeof pair.expiresIn === 'number' ? pair.expiresIn : undefined);
+  return pair;
+}
+
 function isAuthLifecyclePath(path: string): boolean {
   return (
     path.startsWith('/auth/login') ||
     path.startsWith('/auth/register') ||
     path.startsWith('/auth/refresh') ||
-    path.startsWith('/auth/logout')
+    path.startsWith('/auth/logout') ||
+    path.startsWith('/auth/invitations/accept') ||
+    path.startsWith('/auth/password-reset/confirm')
   );
 }
 

@@ -5,21 +5,7 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { Card } from '@/shared/components/Card';
 import { FormFooter, TextField } from '@/shared/components/Fields';
 import { useAction } from '@/shared/hooks/useAction';
-
-type Failure = { detail?: string; message?: string };
-
-async function submitJson(url: string, body: unknown): Promise<void> {
-  const response = await fetch(url, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    const failure = (await response.json().catch(() => ({}))) as Failure;
-    throw new Error(failure.detail ?? failure.message ?? 'El enlace no es válido o ya venció.');
-  }
-}
+import { apiFetch } from '@/shared/lib/http';
 
 function Shell({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -40,22 +26,34 @@ function MissingToken() {
   );
 }
 
-/** Public page body of `/invitations/accept?token=...`: sets name and password, then enters the app. */
+/** Public page body of `/invitations/accept?token=...`: sets name and password. */
 export function AcceptInvitationForm({ token }: { token?: string }) {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
+  const [accepted, setAccepted] = useState(false);
   const { run, pending, error } = useAction();
 
   if (!token) return <MissingToken />;
 
+  if (accepted) {
+    return (
+      <Shell title="Cuenta creada">
+        <p className="mb-4 text-sm text-muted">Ya podés iniciar sesión con tu correo y tu contraseña.</p>
+        <Link href="/login" className="text-sm font-semibold text-link hover:underline">
+          Ir a iniciar sesión
+        </Link>
+      </Shell>
+    );
+  }
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const done = await run(async () => {
-      await submitJson('/api/auth/accept-invitation', { token, name: name.trim(), password });
+      // Core answers with a token pair but does not set the session cookies on this route: sign in afterwards.
+      await apiFetch('/auth/invitations/accept', { method: 'POST', body: JSON.stringify({ token, name: name.trim(), password }) });
       return true;
     });
-    // The BFF stored the session cookies: go straight to the app.
-    if (done) window.location.href = '/';
+    if (done) setAccepted(true);
   };
 
   return (
@@ -81,7 +79,7 @@ export function PasswordResetForm({ token }: { token?: string }) {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const ok = await run(async () => {
-      await submitJson('/api/auth/password-reset-confirm', { token, password });
+      await apiFetch('/auth/password-reset/confirm', { method: 'POST', body: JSON.stringify({ token, password }) });
       return true;
     });
     if (ok) setDone(true);

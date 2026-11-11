@@ -3,18 +3,14 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { logoutSession } from '../../shared/lib/http';
 import { canAccessRoute } from '@/shared/auth/permissions';
-import { useSession } from '@/shared/hooks/useSession';
+import { useLogout, useSession } from '@/shared/hooks/useSession';
 
 export function Sidebar() {
   const pathname = usePathname();
   const session = useSession();
 
-  const handleLogout = async () => {
-    await logoutSession();
-    window.location.href = '/login';
-  };
+  const logout = useLogout();
 
   const navItems = [
     { label: 'Mi jornada', href: '/mi-jornada' },
@@ -70,7 +66,7 @@ export function Sidebar() {
           <span className="text-sm font-medium capitalize text-white">{session?.role ?? ''}</span>
         </div>
         <button
-          onClick={() => void handleLogout()}
+          onClick={() => void logout()}
           className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-opacity hover:opacity-80 cursor-pointer"
           style={{ backgroundColor: 'rgba(180, 35, 50, 0.2)', color: '#FFB4B4' }}
         >
