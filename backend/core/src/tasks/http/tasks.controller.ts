@@ -72,8 +72,10 @@ export class TasksController {
       throw new ForbiddenException();
     }
     return this.tasksService.taskAnswer(this.toActor(actor), {
-      ...body,
       taskId: param.taskId,
+      clientAnswerId: body.clientAnswerId,
+      deviceTime: body.deviceTime,
+      answers: body.answers,
     });
   }
 

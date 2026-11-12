@@ -7,11 +7,7 @@ import { TASKS_EVENTS } from './tasks.events';
 import {
   CONSUMED_SUBJECTS,
   type ConsumedMessage,
-  type ConsumedSubject,
 } from './consumed-events';
-
-const UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -58,13 +54,12 @@ export class ConsumedEventsProcessor implements OnModuleInit {
     if (!isRecord(message.payload) || !message.tenantId) return;
 
     const payload = message.payload;
-    const eventId = String(payload.eventId ?? '');
-    const shiftId = String(payload.shiftId ?? '');
-    const siteId = String(payload.siteId ?? '');
-    const postId = String(payload.postId ?? '');
-    const employeeId = payload.employeeId ? String(payload.employeeId) : null;
-    const startStr = String(payload.start ?? payload.startTime ?? '');
-    const endStr = String(payload.end ?? payload.endTime ?? '');
+    const shiftId = typeof payload.shiftId === 'string' ? payload.shiftId : '';
+    const siteId = typeof payload.siteId === 'string' ? payload.siteId : '';
+    const postId = typeof payload.postId === 'string' ? payload.postId : '';
+    const employeeId = typeof payload.employeeId === 'string' ? payload.employeeId : null;
+    const startStr = typeof payload.start === 'string' ? payload.start : (typeof payload.startTime === 'string' ? payload.startTime : '');
+    const endStr = typeof payload.end === 'string' ? payload.end : (typeof payload.endTime === 'string' ? payload.endTime : '');
 
     if (!shiftId || !siteId || !postId || !startStr || !endStr) {
       return;
@@ -159,7 +154,7 @@ export class ConsumedEventsProcessor implements OnModuleInit {
   async handleShiftCancelled(message: ConsumedMessage): Promise<void> {
     if (!isRecord(message.payload) || !message.tenantId) return;
 
-    const shiftId = String(message.payload.shiftId ?? '');
+    const shiftId = typeof message.payload.shiftId === 'string' ? message.payload.shiftId : '';
     if (!shiftId) return;
 
     await this.prisma.task.updateMany({
@@ -195,7 +190,7 @@ export class ConsumedEventsProcessor implements OnModuleInit {
     if (!isRecord(message.payload) || !message.tenantId) return;
 
     const payload = message.payload;
-    const effectiveAtStr = String(payload.effectiveAt ?? payload.occurredAt ?? '');
+    const effectiveAtStr = typeof payload.effectiveAt === 'string' ? payload.effectiveAt : (typeof payload.occurredAt === 'string' ? payload.occurredAt : '');
     const effectiveAt = new Date(effectiveAtStr);
     const features = (payload.features ?? {}) as object;
 
