@@ -1,40 +1,35 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import { useLogout, useSession } from '@/shared/hooks/useSession';
 
+const emptySubscribe = () => () => {};
+
+function getInitialTheme(): boolean {
+  if (typeof window === 'undefined') return false;
+  const savedTheme = localStorage.getItem('theme');
+  const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return savedTheme === 'dark' || (!savedTheme && systemPrefersDark);
+}
+
 export function Topbar() {
-  const [isDark, setIsDark] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
+  const [isDark, setIsDark] = useState(getInitialTheme);
   const session = useSession();
   const logout = useLogout();
 
   useEffect(() => {
-   
-    const savedTheme = localStorage.getItem('theme');
-    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    
-    if (savedTheme === 'dark' || (!savedTheme && systemPrefersDark)) {
+    if (isDark) {
       document.documentElement.setAttribute('data-theme', 'dark');
-      setIsDark(true);
     } else {
       document.documentElement.removeAttribute('data-theme');
-      setIsDark(false);
     }
-    setMounted(true);
-  }, []);
+  }, [isDark]);
 
-  const toggleTheme = () =>{
+  const toggleTheme = () => {
     const nextDark = !isDark;
     setIsDark(nextDark);
-
-    if (nextDark) {
-      document.documentElement.setAttribute('data-theme', 'dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-      localStorage.setItem('theme', 'light');
-    }
+    localStorage.setItem('theme', nextDark ? 'dark' : 'light');
   };
 
   if (!mounted) {
@@ -91,7 +86,7 @@ export function Topbar() {
             color: 'var(--text-body)',
           }}
         >
-         {isDark ? 'Tema Claro' : 'Tema Oscuro'}
+          {isDark ? 'Tema Claro' : 'Tema Oscuro'}
         </button>
         <button
           onClick={logout}
