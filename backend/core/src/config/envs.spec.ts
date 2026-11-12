@@ -10,16 +10,26 @@ describe('envs', () => {
       'postgresql://organization_svc:secret@localhost:5432/teamworkflow?schema=organization',
     BILLING_DATABASE_URL:
       'postgresql://billing_svc:secret@localhost:5432/teamworkflow?schema=billing',
+    TASKS_DATABASE_URL:
+      'postgresql://tasks_svc:secret@localhost:5432/teamworkflow?schema=tasks',
     JWT_SECRET: 'a-secret-with-at-least-32-characters!',
   };
 
-  it('accepts a valid environment, converts PORT and defaults the TTLs and billing settings', () => {
+  it('accepts a valid environment, converts PORT and defaults the TTLs, billing and tasks settings', () => {
     expect(validateEnvs(validEnv)).toEqual({
       port: 3000,
       natsServers: ['nats://localhost:4222'],
       authDatabaseUrl: validEnv.AUTH_DATABASE_URL,
       organizationDatabaseUrl: validEnv.ORGANIZATION_DATABASE_URL,
       billingDatabaseUrl: validEnv.BILLING_DATABASE_URL,
+      tasksDatabaseUrl: validEnv.TASKS_DATABASE_URL,
+      s3Endpoint: 'http://localhost:9000',
+      s3Region: 'us-east-1',
+      s3Bucket: 'teamworkflow-tasks',
+      s3AccessKey: 'minioadmin',
+      s3SecretKey: 'minioadmin',
+      s3ForcePathStyle: true,
+      mediaUrlTtlSeconds: 300,
       paymentProvider: 'fake',
       mpAccessToken: undefined,
       mpWebhookSecret: undefined,
@@ -90,6 +100,18 @@ describe('envs', () => {
         BILLING_DATABASE_URL: 'mysql://localhost/db',
       }),
     ).toThrow('BILLING_DATABASE_URL');
+  });
+
+  it('throws when TASKS_DATABASE_URL is missing or not a postgres URI', () => {
+    const { TASKS_DATABASE_URL: _omitted, ...env } = validEnv;
+
+    expect(() => validateEnvs(env)).toThrow('TASKS_DATABASE_URL');
+    expect(() =>
+      validateEnvs({
+        ...validEnv,
+        TASKS_DATABASE_URL: 'mysql://localhost/db',
+      }),
+    ).toThrow('TASKS_DATABASE_URL');
   });
 
   it('validates mercadopago payment provider requirements', () => {

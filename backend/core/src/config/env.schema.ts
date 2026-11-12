@@ -9,6 +9,14 @@ export interface Envs {
   authDatabaseUrl: string;
   organizationDatabaseUrl: string;
   billingDatabaseUrl: string;
+  tasksDatabaseUrl: string;
+  s3Endpoint: string;
+  s3Region: string;
+  s3Bucket: string;
+  s3AccessKey: string;
+  s3SecretKey: string;
+  s3ForcePathStyle: boolean;
+  mediaUrlTtlSeconds: number;
   paymentProvider: 'mercadopago' | 'fake';
   mpAccessToken?: string;
   mpWebhookSecret?: string;
@@ -30,6 +38,14 @@ interface EnvVars {
   AUTH_DATABASE_URL: string;
   ORGANIZATION_DATABASE_URL: string;
   BILLING_DATABASE_URL: string;
+  TASKS_DATABASE_URL: string;
+  S3_ENDPOINT: string;
+  S3_REGION: string;
+  S3_BUCKET: string;
+  S3_ACCESS_KEY: string;
+  S3_SECRET_KEY: string;
+  S3_FORCE_PATH_STYLE: boolean;
+  MEDIA_URL_TTL_SECONDS: number;
   PAYMENT_PROVIDER: 'mercadopago' | 'fake';
   MP_ACCESS_TOKEN?: string;
   MP_WEBHOOK_SECRET?: string;
@@ -61,6 +77,17 @@ const envsSchema = joi
       .string()
       .uri({ scheme: ['postgresql', 'postgres'] })
       .required(),
+    TASKS_DATABASE_URL: joi
+      .string()
+      .uri({ scheme: ['postgresql', 'postgres'] })
+      .required(),
+    S3_ENDPOINT: joi.string().uri().default('http://localhost:9000'),
+    S3_REGION: joi.string().default('us-east-1'),
+    S3_BUCKET: joi.string().default('teamworkflow-tasks'),
+    S3_ACCESS_KEY: joi.string().default('minioadmin'),
+    S3_SECRET_KEY: joi.string().default('minioadmin'),
+    S3_FORCE_PATH_STYLE: joi.boolean().default(true),
+    MEDIA_URL_TTL_SECONDS: joi.number().integer().positive().default(300),
     PAYMENT_PROVIDER: joi
       .string()
       .valid('mercadopago', 'fake')
@@ -114,6 +141,14 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
     authDatabaseUrl: envVars.AUTH_DATABASE_URL,
     organizationDatabaseUrl: envVars.ORGANIZATION_DATABASE_URL,
     billingDatabaseUrl: envVars.BILLING_DATABASE_URL,
+    tasksDatabaseUrl: envVars.TASKS_DATABASE_URL,
+    s3Endpoint: envVars.S3_ENDPOINT,
+    s3Region: envVars.S3_REGION,
+    s3Bucket: envVars.S3_BUCKET,
+    s3AccessKey: envVars.S3_ACCESS_KEY,
+    s3SecretKey: envVars.S3_SECRET_KEY,
+    s3ForcePathStyle: envVars.S3_FORCE_PATH_STYLE,
+    mediaUrlTtlSeconds: envVars.MEDIA_URL_TTL_SECONDS,
     paymentProvider: envVars.PAYMENT_PROVIDER,
     mpAccessToken: envVars.MP_ACCESS_TOKEN,
     mpWebhookSecret: envVars.MP_WEBHOOK_SECRET,
