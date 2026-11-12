@@ -16,7 +16,7 @@ import { MediaService } from '../media/media.service';
 import { TasksPrismaService } from '../prisma/prisma.service';
 import { TasksEventsService } from '../events/tasks-events.service';
 import { TASKS_EVENTS } from '../events/tasks.events';
-import type { ReviewResult, TaskKind, TaskStatus } from '../prisma/generated/client';
+import type { ReviewResult, TaskStatus } from '../prisma/generated/client';
 
 export interface TaskActor {
   userId: string;

@@ -13,7 +13,6 @@ import {
   FeatureNotInPlanException,
   NoShiftInProgressException,
   TaskAlreadyClaimedException,
-  TaskNotFoundException,
   ValidationException,
 } from '../../common/exceptions/app.exceptions';
 import {

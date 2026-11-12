@@ -1,6 +1,5 @@
 import {
   DeleteObjectsCommand,
-  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
