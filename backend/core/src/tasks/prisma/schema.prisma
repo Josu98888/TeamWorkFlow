@@ -1,0 +1,197 @@
+// Data model of the tasks module (AGENTS § Data Model).
+// Lives in the `tasks` PostgreSQL schema of the shared `teamworkflow` database.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "./generated"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum DeadlineMode {
+  AFTER_START
+  AT_SHIFT_END
+
+  @@map("deadline_mode")
+}
+
+enum TaskKind {
+  SINGLE
+  PER_SHIFT
+
+  @@map("task_kind")
+}
+
+enum TaskStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+  CANCELLED
+
+  @@map("task_status")
+}
+
+enum MediaStatus {
+  PENDING
+  UPLOADED
+
+  @@map("media_status")
+}
+
+enum ReviewResult {
+  NONE
+  APPROVED
+  OBSERVED
+
+  @@map("review_result")
+}
+
+model Form {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  name        String
+  draftFields Json     @map("draft_fields")
+  createdBy   String   @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  versions FormVersion[]
+
+  @@index([tenantId, createdAt])
+  @@map("forms")
+}
+
+model FormVersion {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  formId      String   @map("form_id") @db.Uuid
+  version     Int
+  name        String
+  fields      Json
+  publishedAt DateTime @default(now()) @map("published_at") @db.Timestamptz(3)
+  publishedBy String   @map("published_by") @db.Uuid
+
+  form          Form           @relation(fields: [formId], references: [id], onDelete: Cascade)
+  taskTemplates TaskTemplate[]
+  tasks         Task[]
+  answers       TaskAnswer[]
+
+  @@unique([formId, version])
+  @@index([tenantId, formId])
+  @@map("form_versions")
+}
+
+model TaskTemplate {
+  id              String       @id @default(uuid(7)) @db.Uuid
+  tenantId        String       @map("tenant_id") @db.Uuid
+  siteId          String       @map("site_id") @db.Uuid
+  postId          String       @map("post_id") @db.Uuid
+  formVersionId   String       @map("form_version_id") @db.Uuid
+  deadlineMode    DeadlineMode @map("deadline_mode")
+  deadlineMinutes Int?         @map("deadline_minutes")
+  isActive        Boolean      @default(true) @map("is_active")
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  formVersion FormVersion @relation(fields: [formVersionId], references: [id])
+  tasks       Task[]
+
+  @@index([tenantId, siteId, postId])
+  @@map("task_templates")
+}
+
+model Task {
+  id            String     @id @default(uuid(7)) @db.Uuid
+  tenantId      String     @map("tenant_id") @db.Uuid
+  kind          TaskKind
+  status        TaskStatus @default(PENDING)
+  formVersionId String     @map("form_version_id") @db.Uuid
+  title         String
+  deadline      DateTime   @db.Timestamptz(3)
+  employeeId    String?    @map("employee_id") @db.Uuid
+  claimedAt     DateTime?  @map("claimed_at") @db.Timestamptz(3)
+  siteId        String     @map("site_id") @db.Uuid
+  postId        String     @map("post_id") @db.Uuid
+  shiftId       String?    @map("shift_id") @db.Uuid
+  templateId    String?    @map("template_id") @db.Uuid
+  expectedQr    String?    @map("expected_qr")
+  createdBy     String?    @map("created_by") @db.Uuid
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  formVersion FormVersion   @relation(fields: [formVersionId], references: [id])
+  template    TaskTemplate? @relation(fields: [templateId], references: [id])
+  answer      TaskAnswer?
+
+  @@index([tenantId, employeeId, status])
+  @@index([tenantId, siteId, status])
+  @@index([status, deadline])
+  @@index([tenantId, shiftId, templateId])
+  @@map("tasks")
+}
+
+model TaskAnswer {
+  id                String       @id @default(uuid(7)) @db.Uuid
+  tenantId          String       @map("tenant_id") @db.Uuid
+  taskId            String       @unique @map("task_id") @db.Uuid
+  formVersionId     String       @map("form_version_id") @db.Uuid
+  answers           Json
+  clientAnswerId    String       @map("client_answer_id")
+  deviceTime        DateTime     @map("device_time") @db.Timestamptz(3)
+  receivedAt        DateTime     @default(now()) @map("received_at") @db.Timestamptz(3)
+  submittedByUserId String       @map("submitted_by_user_id") @db.Uuid
+  reviewResult      ReviewResult @default(NONE) @map("review_result")
+  reviewNote        String?      @map("review_note")
+  reviewedBy        String?      @map("reviewed_by") @db.Uuid
+  reviewedAt        DateTime?    @map("reviewed_at") @db.Timestamptz(3)
+
+  task        Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  formVersion FormVersion @relation(fields: [formVersionId], references: [id])
+
+  @@unique([tenantId, clientAnswerId])
+  @@index([tenantId, submittedByUserId])
+  @@map("task_answers")
+}
+
+model Media {
+  id               String      @id @default(uuid(7)) @db.Uuid
+  tenantId         String      @map("tenant_id") @db.Uuid
+  storageKey       String      @map("storage_key")
+  mime             String
+  sizeBytes        Int         @map("size_bytes")
+  sha256           String
+  takenAt          DateTime    @map("taken_at") @db.Timestamptz(3)
+  uploadedByUserId String      @map("uploaded_by_user_id") @db.Uuid
+  status           MediaStatus @default(PENDING)
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, uploadedByUserId])
+  @@map("media")
+}
+
+model TenantState {
+  tenantId    String   @id @map("tenant_id") @db.Uuid
+  isSuspended Boolean  @default(false) @map("is_suspended")
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("tenant_state")
+}
+
+model TenantFeatures {
+  tenantId    String   @id @map("tenant_id") @db.Uuid
+  features    Json
+  effectiveAt DateTime @map("effective_at") @db.Timestamptz(3)
+
+  @@map("tenant_features")
+}
+
+model ProcessedEvent {
+  eventId     String   @id @map("event_id")
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(3)
+
+  @@map("processed_events")
+}
