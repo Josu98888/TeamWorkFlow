@@ -24,6 +24,18 @@ import {
   TenantSuspendedException,
   ValidationException,
   VersionConflictException,
+  FormNotFoundException,
+  TaskNotFoundException,
+  MediaNotFoundException,
+  FormNotPublishedException,
+  TaskNotOpenException,
+  TaskAlreadyClaimedException,
+  NoShiftInProgressException,
+  QrMismatchException,
+  AnswerTooOldException,
+  MediaTooLargeException,
+  MediaTypeNotAllowedException,
+  MediaNotUploadedException,
 } from './app.exceptions';
 
 describe('app.exceptions', () => {
@@ -54,6 +66,18 @@ describe('app.exceptions', () => {
     [new InvoiceExistsException(), 409, 'invoice_exists'],
     [new InvalidWebhookSignatureException(), 401, 'invalid_webhook_signature'],
     [new PaymentProviderErrorException(), 502, 'payment_provider_error'],
+    [new FormNotFoundException(), 404, 'form_not_found'],
+    [new TaskNotFoundException(), 404, 'task_not_found'],
+    [new MediaNotFoundException(), 404, 'media_not_found'],
+    [new FormNotPublishedException(), 409, 'form_not_published'],
+    [new TaskNotOpenException(), 409, 'task_not_open'],
+    [new TaskAlreadyClaimedException(), 409, 'task_already_claimed'],
+    [new NoShiftInProgressException(), 403, 'no_shift_in_progress'],
+    [new QrMismatchException(), 422, 'qr_mismatch'],
+    [new AnswerTooOldException(), 422, 'answer_too_old'],
+    [new MediaTooLargeException(), 422, 'media_too_large'],
+    [new MediaTypeNotAllowedException(), 422, 'media_type_not_allowed'],
+    [new MediaNotUploadedException(), 422, 'media_not_uploaded'],
   ])(
     '%p carries status %i and code %s',
     (exception: AppException, status: number, code: string) => {
