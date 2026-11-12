@@ -1,0 +1,157 @@
+// Data model of the auth service (AGENTS.md § Data Model).
+// Lives in the `auth` PostgreSQL schema of the shared `teamworkflow` database.
+generator client {
+  provider     = "prisma-client"
+  output       = "./generated"
+  moduleFormat = "cjs" // the service compiles to CommonJS
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TenantStatus {
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+  DELETED
+
+  @@map("tenant_status")
+}
+
+enum Plan {
+  BASIC
+  PRO
+
+  @@map("plan")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  SUPERVISOR
+  EMPLOYEE
+  PLATFORM_ADMIN
+
+  @@map("role")
+}
+
+// Roles that can be invited (never OWNER or PLATFORM_ADMIN).
+enum InvitationRole {
+  ADMIN
+  SUPERVISOR
+  EMPLOYEE
+
+  @@map("invitation_role")
+}
+
+model Tenant {
+  id            String       @id @default(uuid(7)) @db.Uuid
+  name          String
+  status        TenantStatus @default(ACTIVE)
+  pastDueSince  DateTime?    @map("past_due_since") @db.Timestamptz(3)
+  suspendedAt   DateTime?    @map("suspended_at") @db.Timestamptz(3)
+  cancelledAt   DateTime?    @map("cancelled_at") @db.Timestamptz(3)
+  plan          Plan?
+  features      Json?
+  // Ignores stale billing events (compare with the event's occurredAt / effectiveAt).
+  planUpdatedAt DateTime?    @map("plan_updated_at") @db.Timestamptz(3)
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  users       User[]
+  invitations Invitation[]
+
+  @@map("tenants")
+}
+
+model User {
+  id                  String    @id @default(uuid(7)) @db.Uuid
+  // Null ONLY for PLATFORM_ADMIN; enforced by the users_role_tenant_check
+  // constraint, added as raw SQL in the init_auth migration.
+  tenantId            String?   @map("tenant_id") @db.Uuid
+  // Stored trimmed and lowercased by the application.
+  email               String    @unique
+  passwordHash        String    @map("password_hash")
+  role                Role
+  isActive            Boolean   @default(true) @map("is_active")
+  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime? @map("locked_until") @db.Timestamptz(3)
+  // Site ids of a supervisor (owned by `organization`, no foreign key); [] for every other role.
+  siteIds             String[]  @default([]) @map("site_ids")
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant              Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[] @relation("ResetTokenOwner")
+  createdResetTokens  PasswordResetToken[] @relation("ResetTokenCreator")
+  sentInvitations     Invitation[]
+
+  @@index([tenantId, role])
+  @@index([siteIds], type: Gin)
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  // SHA-256 of the opaque token; the raw token is never stored.
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Invitation {
+  id          String         @id @default(uuid(7)) @db.Uuid
+  tenantId    String         @map("tenant_id") @db.Uuid
+  email       String
+  role        InvitationRole
+  tokenHash   String         @unique @map("token_hash")
+  // Null when created by the system from the organization employee_created event.
+  invitedById String?        @map("invited_by_id") @db.Uuid
+  expiresAt   DateTime       @map("expires_at") @db.Timestamptz(3)
+  usedAt      DateTime?      @map("used_at") @db.Timestamptz(3)
+  revokedAt   DateTime?      @map("revoked_at") @db.Timestamptz(3)
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id])
+  invitedBy User?  @relation(fields: [invitedById], references: [id], onDelete: SetNull)
+
+  // The (tenant_id, email) lookup index is partial (pending only), so it is
+  // declared as raw SQL in the init_auth migration.
+  @@map("invitations")
+}
+
+model PasswordResetToken {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  tokenHash   String    @unique @map("token_hash")
+  createdById String    @map("created_by_id") @db.Uuid
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt      DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user      User @relation("ResetTokenOwner", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User @relation("ResetTokenCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// Deduplicates consumed JetStream events (one table for every consumer).
+model ProcessedEvent {
+  eventId     String   @id @map("event_id") @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(3)
+
+  // Lets the tenant data purge delete a tenant's rows.
+  @@index([tenantId])
+  @@map("processed_events")
+}

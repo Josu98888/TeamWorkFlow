@@ -1,0 +1,160 @@
+// Data model of the organization module (AGENTS.md § Data Model).
+// Lives in the `organization` PostgreSQL schema of the shared `teamworkflow` database.
+// Shift templates (ShiftTemplate) come in a later feature: `Shift.templateId` is a
+// plain nullable column until then.
+generator client {
+  provider     = "prisma-client"
+  output       = "./generated"
+  moduleFormat = "cjs" // the service compiles to CommonJS
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ShiftStatus {
+  SCHEDULED
+  IN_PROGRESS
+  FINISHED
+  CANCELLED
+
+  @@map("shift_status")
+}
+
+model Site {
+  id                   String    @id @default(uuid(7)) @db.Uuid
+  tenantId             String    @map("tenant_id") @db.Uuid
+  name                 String
+  address              String
+  latitude             Float
+  longitude            Float
+  geofenceRadiusMeters Int       @map("geofence_radius_meters")
+  // IANA timezone, e.g. America/Argentina/Buenos_Aires.
+  timezone             String
+  // Random opaque value, unique across the system; rotated by an admin.
+  qrCode               String    @unique @map("qr_code")
+  qrRotatedAt          DateTime? @map("qr_rotated_at") @db.Timestamptz(3)
+  isActive             Boolean   @default(true) @map("is_active")
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  posts         Post[]
+  employeeSites EmployeeSite[]
+  shifts        Shift[]
+
+  @@index([tenantId, isActive])
+  @@map("sites")
+}
+
+model Post {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  siteId         String   @map("site_id") @db.Uuid
+  name           String
+  requiredSkills String[] @default([]) @map("required_skills")
+  minPeople      Int      @default(1) @map("min_people")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  site   Site    @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  shifts Shift[]
+
+  @@index([tenantId, siteId])
+  @@map("posts")
+}
+
+model Employee {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  // Null until the profile is linked to an auth user.
+  userId           String?  @map("user_id") @db.Uuid
+  // Stored trimmed and lowercased by the application.
+  email            String
+  firstName        String   @map("first_name")
+  lastName         String   @map("last_name")
+  phone            String?
+  avatarMediaId    String?  @map("avatar_media_id") @db.Uuid
+  // Legajo: only operational employees have one.
+  employeeNumber   String?  @map("employee_number")
+  nationalId       String?  @map("national_id")
+  skills           String[] @default([])
+  weeklyHoursLimit Int?     @map("weekly_hours_limit")
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sites  EmployeeSite[]
+  shifts Shift[]
+
+  // Postgres treats NULLs as distinct, so nullable columns allow many NULLs per tenant.
+  @@unique([tenantId, email])
+  @@unique([tenantId, userId])
+  @@unique([tenantId, employeeNumber])
+  @@map("employees")
+}
+
+model EmployeeSite {
+  tenantId   String @map("tenant_id") @db.Uuid
+  employeeId String @map("employee_id") @db.Uuid
+  siteId     String @map("site_id") @db.Uuid
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  site     Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@id([employeeId, siteId])
+  // Lookup by site (the primary key already covers the employee side).
+  @@index([tenantId, siteId])
+  @@map("employee_sites")
+}
+
+model Shift {
+  id         String      @id @default(uuid(7)) @db.Uuid
+  tenantId   String      @map("tenant_id") @db.Uuid
+  // Generated shifts only; no ShiftTemplate model yet, so no foreign key.
+  templateId String?     @map("template_id") @db.Uuid
+  siteId     String      @map("site_id") @db.Uuid
+  postId     String      @map("post_id") @db.Uuid
+  employeeId String?     @map("employee_id") @db.Uuid
+  startsAt   DateTime    @map("starts_at") @db.Timestamptz(3)
+  endsAt     DateTime    @map("ends_at") @db.Timestamptz(3)
+  status     ShiftStatus @default(SCHEDULED)
+  // Optimistic locking: incremented on every successful write.
+  version    Int         @default(1)
+  // Marker so `shift_starting` is emitted once.
+  startingEmittedAt DateTime? @map("starting_emitted_at") @db.Timestamptz(3)
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  site     Site      @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  post     Post      @relation(fields: [postId], references: [id], onDelete: Restrict)
+  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  // Generator idempotency (NULL template ids never collide).
+  @@unique([tenantId, templateId, startsAt])
+  @@index([tenantId, employeeId, startsAt])
+  @@index([tenantId, siteId, startsAt])
+  // Lifecycle job: scans all tenants by status and start time.
+  @@index([status, startsAt])
+  @@map("shifts")
+}
+
+// One row per tenant that is (or was) suspended or cancelled. No row means active.
+model TenantState {
+  tenantId    String   @id @map("tenant_id") @db.Uuid
+  isSuspended Boolean  @default(false) @map("is_suspended")
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("tenant_states")
+}
+
+// Deduplicates consumed JetStream events (one table for every consumer).
+model ProcessedEvent {
+  eventId     String   @id @map("event_id") @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(3)
+
+  // Lets the tenant data purge delete a tenant's rows.
+  @@index([tenantId])
+  @@map("processed_events")
+}

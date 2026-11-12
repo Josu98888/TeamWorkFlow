@@ -1,0 +1,203 @@
+// Data model of the billing module (AGENTS § Data Model).
+// Lives in the `billing` PostgreSQL schema of the shared `teamworkflow` database.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "./generated"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PlanCode {
+  BASIC
+  PRO
+
+  @@map("plan_code")
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+
+  @@map("subscription_status")
+}
+
+enum InvoiceStatus {
+  ISSUED
+  PAID
+  VOID
+
+  @@map("invoice_status")
+}
+
+enum InvoiceLineKind {
+  PLAN
+  VAT
+
+  @@map("invoice_line_kind")
+}
+
+enum PaymentProviderType {
+  MERCADOPAGO
+  MANUAL
+
+  @@map("payment_provider_type")
+}
+
+enum PaymentStatus {
+  APPROVED
+  NEEDS_REVIEW
+  REJECTED
+
+  @@map("payment_status")
+}
+
+model Plan {
+  code         PlanCode @id
+  name         String
+  monthlyPrice Decimal  @map("monthly_price") @db.Decimal(12, 2)
+  features     Json
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  subscriptions           Subscription[] @relation("SubscriptionPlan")
+  nextPlanSubscriptions   Subscription[] @relation("SubscriptionNextPlan")
+
+  @@map("plans")
+}
+
+model Subscription {
+  id                         String             @id @default(uuid(7)) @db.Uuid
+  tenantId                   String             @map("tenant_id") @db.Uuid
+  plan                       PlanCode
+  status                     SubscriptionStatus
+  trialEndsAt                DateTime?          @map("trial_ends_at") @db.Timestamptz(3)
+  nextPlan                   PlanCode?          @map("next_plan")
+  cancelAtPeriodEnd          Boolean            @default(false) @map("cancel_at_period_end")
+  endedAt                    DateTime?          @map("ended_at") @db.Timestamptz(3)
+  dataRetentionWarningSentAt DateTime?          @map("data_retention_warning_sent_at") @db.Timestamptz(3)
+  dataRetentionExpiredAt     DateTime?          @map("data_retention_expired_at") @db.Timestamptz(3)
+  createdAt                  DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                  DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  planRef     Plan                     @relation("SubscriptionPlan", fields: [plan], references: [code])
+  nextPlanRef Plan?                    @relation("SubscriptionNextPlan", fields: [nextPlan], references: [code])
+  planChanges SubscriptionPlanChange[]
+  invoices    Invoice[]
+
+  @@index([status, trialEndsAt])
+  @@index([tenantId])
+  @@map("subscriptions")
+}
+
+model SubscriptionPlanChange {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  subscriptionId String   @map("subscription_id") @db.Uuid
+  fromPlan       PlanCode @map("from_plan")
+  toPlan         PlanCode @map("to_plan")
+  effectiveAt    DateTime @map("effective_at") @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, subscriptionId])
+  @@map("subscription_plan_changes")
+}
+
+model Invoice {
+  id                  String        @id @default(uuid(7)) @db.Uuid
+  tenantId            String        @map("tenant_id") @db.Uuid
+  subscriptionId      String        @map("subscription_id") @db.Uuid
+  period              String        @db.VarChar(7)
+  periodStart         DateTime      @map("period_start") @db.Timestamptz(3)
+  periodEnd           DateTime      @map("period_end") @db.Timestamptz(3)
+  plan                PlanCode
+  billableDays        Int           @map("billable_days")
+  daysInPeriod        Int           @map("days_in_period")
+  subtotal            Decimal       @db.Decimal(12, 2)
+  vatPercent          Decimal       @map("vat_percent") @db.Decimal(5, 2)
+  vatAmount           Decimal       @map("vat_amount") @db.Decimal(12, 2)
+  total               Decimal       @db.Decimal(12, 2)
+  currency            String        @default("ARS") @db.VarChar(3)
+  status              InvoiceStatus @default(ISSUED)
+  issuedAt            DateTime      @default(now()) @map("issued_at") @db.Timestamptz(3)
+  dueDate             DateTime      @map("due_date") @db.Timestamptz(3)
+  paidAt              DateTime?     @map("paid_at") @db.Timestamptz(3)
+  voidedAt            DateTime?     @map("voided_at") @db.Timestamptz(3)
+  voidReason          String?       @map("void_reason")
+  voidedByUserId      String?       @map("voided_by_user_id") @db.Uuid
+  fiscalReceiptNumber String?       @map("fiscal_receipt_number")
+  paymentLinkUrl      String?       @map("payment_link_url")
+  paymentLinkExpiresAt DateTime?    @map("payment_link_expires_at") @db.Timestamptz(3)
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  subscription Subscription  @relation(fields: [subscriptionId], references: [id])
+  lines        InvoiceLine[]
+  payments     Payment[]
+
+  @@index([tenantId, status, dueDate])
+  @@index([tenantId, period])
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id          String          @id @default(uuid(7)) @db.Uuid
+  tenantId    String          @map("tenant_id") @db.Uuid
+  invoiceId   String          @map("invoice_id") @db.Uuid
+  kind        InvoiceLineKind
+  description String
+  quantity    Int             @default(1)
+  unitPrice   Decimal         @map("unit_price") @db.Decimal(12, 2)
+  amount      Decimal         @db.Decimal(12, 2)
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_lines")
+}
+
+model Payment {
+  id                 String              @id @default(uuid(7)) @db.Uuid
+  tenantId           String              @map("tenant_id") @db.Uuid
+  invoiceId          String              @map("invoice_id") @db.Uuid
+  provider           PaymentProviderType
+  providerPaymentId  String              @map("provider_payment_id")
+  amount             Decimal             @db.Decimal(12, 2)
+  currency           String              @default("ARS") @db.VarChar(3)
+  status             PaymentStatus
+  registeredByUserId String?             @map("registered_by_user_id") @db.Uuid
+  paidAt             DateTime            @map("paid_at") @db.Timestamptz(3)
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@unique([provider, providerPaymentId])
+  @@index([invoiceId])
+  @@map("payments")
+}
+
+model WebhookNotification {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  notificationId String   @unique @map("notification_id")
+  receivedAt     DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
+  result         String
+
+  @@map("webhook_notifications")
+}
+
+model ProcessedEvent {
+  eventId     String   @id @map("event_id")
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(3)
+
+  @@map("processed_events")
+}

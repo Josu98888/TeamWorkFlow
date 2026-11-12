@@ -1,0 +1,243 @@
+export type AppErrorCode =
+  | 'invalid_credentials'
+  | 'invalid_token'
+  | 'forbidden'
+  | 'tenant_suspended'
+  | 'tenant_cancelled'
+  | 'email_taken'
+  | 'site_not_found'
+  | 'post_not_found'
+  | 'employee_not_found'
+  | 'shift_not_found'
+  | 'shift_overlap'
+  | 'version_conflict'
+  | 'shift_not_editable'
+  | 'validation_error'
+  | 'subscription_not_found'
+  | 'invoice_not_found'
+  | 'plan_not_found'
+  | 'invalid_subscription_transition'
+  | 'invalid_plan_change'
+  | 'no_pending_cancellation'
+  | 'invoice_not_payable'
+  | 'invoice_exists'
+  | 'invalid_webhook_signature'
+  | 'payment_provider_error'
+  | 'feature_not_in_plan';
+
+export interface ValidationErrorItem {
+  field: string;
+  constraints: string[];
+}
+
+// Transport-agnostic error body. The HTTP filter maps it to `{ detail, code }`
+// and the NATS filter sends it as-is to the caller.
+export interface AppErrorBody {
+  status: number;
+  code: AppErrorCode;
+  message: string;
+  errors?: ValidationErrorItem[];
+}
+
+// Domain code throws this; it knows nothing about HTTP or NATS. It does not
+// extend RpcException or HttpException on purpose.
+export class AppException extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: AppErrorCode,
+    message: string,
+    public readonly errors?: ValidationErrorItem[],
+  ) {
+    super(message);
+    this.name = new.target.name;
+  }
+
+  getError(): AppErrorBody {
+    const body: AppErrorBody = {
+      status: this.status,
+      code: this.code,
+      message: this.message,
+    };
+    if (this.errors) {
+      body.errors = this.errors;
+    }
+    return body;
+  }
+}
+
+// Messages are fixed and generic: they are shown to end users and must not
+// reveal whether an email exists, why a login failed, or any internal detail.
+
+export class InvalidCredentialsException extends AppException {
+  constructor() {
+    super(401, 'invalid_credentials', 'Invalid credentials');
+  }
+}
+
+export class InvalidTokenException extends AppException {
+  constructor() {
+    super(401, 'invalid_token', 'Invalid or expired token');
+  }
+}
+
+export class ForbiddenException extends AppException {
+  constructor() {
+    super(403, 'forbidden', 'You are not allowed to perform this action');
+  }
+}
+
+export class TenantSuspendedException extends AppException {
+  constructor() {
+    super(403, 'tenant_suspended', 'The organization account is suspended');
+  }
+}
+
+export class TenantCancelledException extends AppException {
+  constructor() {
+    super(403, 'tenant_cancelled', 'The organization account is cancelled');
+  }
+}
+
+export class EmailTakenException extends AppException {
+  constructor() {
+    super(409, 'email_taken', 'Email is already in use');
+  }
+}
+
+export class SiteNotFoundException extends AppException {
+  constructor() {
+    super(404, 'site_not_found', 'Site not found');
+  }
+}
+
+export class PostNotFoundException extends AppException {
+  constructor() {
+    super(404, 'post_not_found', 'Post not found');
+  }
+}
+
+export class EmployeeNotFoundException extends AppException {
+  constructor() {
+    super(404, 'employee_not_found', 'Employee not found');
+  }
+}
+
+export class ShiftNotFoundException extends AppException {
+  constructor() {
+    super(404, 'shift_not_found', 'Shift not found');
+  }
+}
+
+export class ShiftOverlapException extends AppException {
+  constructor() {
+    super(
+      409,
+      'shift_overlap',
+      'The employee already has an overlapping shift',
+    );
+  }
+}
+
+export class VersionConflictException extends AppException {
+  constructor() {
+    super(
+      409,
+      'version_conflict',
+      'The resource was modified by someone else; reload and retry',
+    );
+  }
+}
+
+export class ShiftNotEditableException extends AppException {
+  constructor() {
+    super(
+      409,
+      'shift_not_editable',
+      'A cancelled or finished shift cannot be edited',
+    );
+  }
+}
+
+export class ValidationException extends AppException {
+  constructor(errors: ValidationErrorItem[]) {
+    super(422, 'validation_error', 'Validation failed', errors);
+  }
+}
+
+export class SubscriptionNotFoundException extends AppException {
+  constructor() {
+    super(404, 'subscription_not_found', 'Subscription not found');
+  }
+}
+
+export class InvoiceNotFoundException extends AppException {
+  constructor() {
+    super(404, 'invoice_not_found', 'Invoice not found');
+  }
+}
+
+export class PlanNotFoundException extends AppException {
+  constructor() {
+    super(404, 'plan_not_found', 'Plan not found');
+  }
+}
+
+export class InvalidSubscriptionTransitionException extends AppException {
+  constructor() {
+    super(
+      409,
+      'invalid_subscription_transition',
+      'Invalid subscription state transition',
+    );
+  }
+}
+
+export class InvalidPlanChangeException extends AppException {
+  constructor() {
+    super(409, 'invalid_plan_change', 'Invalid plan change request');
+  }
+}
+
+export class NoPendingCancellationException extends AppException {
+  constructor() {
+    super(409, 'no_pending_cancellation', 'No pending cancellation to undo');
+  }
+}
+
+export class InvoiceNotPayableException extends AppException {
+  constructor() {
+    super(
+      409,
+      'invoice_not_payable',
+      'The invoice is paid or void and cannot be paid',
+    );
+  }
+}
+
+export class InvoiceExistsException extends AppException {
+  constructor() {
+    super(
+      409,
+      'invoice_exists',
+      'An invoice already exists for this tenant and period',
+    );
+  }
+}
+
+export class InvalidWebhookSignatureException extends AppException {
+  constructor() {
+    super(401, 'invalid_webhook_signature', 'Invalid webhook signature');
+  }
+}
+
+export class PaymentProviderErrorException extends AppException {
+  constructor(message = 'Payment provider communication error') {
+    super(502, 'payment_provider_error', message);
+  }
+}
+
+export class FeatureNotInPlanException extends AppException {
+  constructor() {
+    super(403, 'feature_not_in_plan', 'Feature not included in current plan');
+  }
+}

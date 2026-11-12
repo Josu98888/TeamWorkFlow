@@ -1,0 +1,2 @@
+# Local secrets for docker compose (only .env.example is tracked)
+.env
