@@ -50,6 +50,14 @@ services:
       - AUTH_DATABASE_URL=postgresql://auth_svc:${AUTH_DB_PASSWORD}@postgres:5432/teamworkflow?schema=auth
       - ORGANIZATION_DATABASE_URL=postgresql://organization_svc:${ORGANIZATION_DB_PASSWORD}@postgres:5432/teamworkflow?schema=organization
       - BILLING_DATABASE_URL=postgresql://billing_svc:${BILLING_DB_PASSWORD}@postgres:5432/teamworkflow?schema=billing
+      - TASKS_DATABASE_URL=postgresql://tasks_svc:${TASKS_DB_PASSWORD}@postgres:5432/teamworkflow?schema=tasks
+      - S3_ENDPOINT=http://minio:9000
+      - S3_REGION=us-east-1
+      - S3_BUCKET=teamworkflow-tasks
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin}
+      - S3_FORCE_PATH_STYLE=true
+      - MEDIA_URL_TTL_SECONDS=300
       - JWT_SECRET=${JWT_SECRET:?set JWT_SECRET in backend/.env}
       - ACCESS_TOKEN_TTL=${ACCESS_TOKEN_TTL:-15m}
       - REFRESH_TOKEN_TTL=${REFRESH_TOKEN_TTL:-7d}
@@ -83,6 +91,18 @@ services:
       postgres:
         condition: service_healthy
 
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=${S3_ACCESS_KEY:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${S3_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio-data:/data
+
   proxy:
     image: nginx:alpine
     ports:
@@ -96,3 +116,4 @@ services:
 volumes:
   nats-data:
   postgres-data:
+  minio-data:
