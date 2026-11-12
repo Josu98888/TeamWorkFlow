@@ -42,6 +42,7 @@ export default async function globalSetup() {
   for (const config of [
     'prisma.auth.config.ts',
     'prisma.organization.config.ts',
+    'prisma.tasks.config.ts',
   ]) {
     execFileSync(
       process.execPath,
