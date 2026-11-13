@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { generateUuidV7 } from '../../common/uuidv7';
 import {
   MediaNotFoundException,
   MediaTooLargeException,
@@ -56,7 +56,7 @@ export class MediaService {
 
     const mime = dto.mime as AllowedMimeType;
     const ext = EXTENSION_MAP[mime];
-    const mediaId = randomUUID();
+    const mediaId = generateUuidV7();
     const storageKey = `${actor.tenantId}/${mediaId}.${ext}`;
     const ttlSeconds = envs.mediaUrlTtlSeconds ?? 300;
 
