@@ -2,6 +2,8 @@ const mockPrismaPg = jest.fn((poolCfg: unknown, opts: unknown) => ({
   poolCfg,
   opts,
 }));
+const mockConnect = jest.fn(async () => undefined);
+const mockDisconnect = jest.fn(async () => undefined);
 
 jest.mock('../../config', () => ({
   envs: {
@@ -12,8 +14,8 @@ jest.mock('../../config', () => ({
 jest.mock('@prisma/adapter-pg', () => ({ PrismaPg: mockPrismaPg }));
 jest.mock('./generated/client', () => ({
   PrismaClient: class {
-    $connect = jest.fn(async () => undefined);
-    $disconnect = jest.fn(async () => undefined);
+    $connect = mockConnect;
+    $disconnect = mockDisconnect;
     constructor(public readonly options: unknown) {}
   },
 }));
@@ -23,6 +25,8 @@ import { NotificationsPrismaService, schemaFromUrl } from './prisma.service';
 describe('NotificationsPrismaService', () => {
   beforeEach(() => {
     mockPrismaPg.mockClear();
+    mockConnect.mockClear();
+    mockDisconnect.mockClear();
   });
 
   it('extracts schema query param and falls back to notifications', () => {
@@ -49,7 +53,7 @@ describe('NotificationsPrismaService', () => {
     await service.onModuleInit();
     await service.onModuleDestroy();
 
-    expect(service.$connect).toHaveBeenCalledTimes(1);
-    expect(service.$disconnect).toHaveBeenCalledTimes(1);
+    expect(mockConnect).toHaveBeenCalledTimes(1);
+    expect(mockDisconnect).toHaveBeenCalledTimes(1);
   });
 });
