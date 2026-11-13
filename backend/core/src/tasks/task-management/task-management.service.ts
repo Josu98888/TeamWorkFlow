@@ -12,7 +12,7 @@ import {
 import { OrganizationService } from '../../organization/organization.service';
 import { validateTaskAnswers } from '../domain/answer-validator';
 import type { FormFieldDefinition } from '../domain/form-validator';
-import { MediaService } from '../media/media.service';
+import { MediaVerificationService } from '../media/media-verification.service';
 import { TasksPrismaService } from '../prisma/prisma.service';
 import { TasksEventsService } from '../events/tasks-events.service';
 import { TASKS_EVENTS } from '../events/tasks.events';
@@ -59,7 +59,7 @@ export interface ListTasksQuery {
 export class TaskManagementService {
   constructor(
     private readonly prisma: TasksPrismaService,
-    private readonly mediaService: MediaService,
+    private readonly mediaVerification: MediaVerificationService,
     private readonly eventsService: TasksEventsService,
     private readonly organizationService: OrganizationService,
   ) {}
@@ -281,7 +281,7 @@ export class TaskManagementService {
       if (field.type === 'photo') {
         const mediaId = validatedAnswers[field.key] as string;
         if (mediaId) {
-          await this.mediaService.verifyMediaForAnswer(
+          await this.mediaVerification.verifyMediaForAnswer(
             actor.tenantId,
             actor.userId,
             mediaId,
@@ -408,12 +408,14 @@ export class TaskManagementService {
         {
           employeeId,
           siteId,
-          status: 'in_progress',
-        } as any,
+          pageSize: 100,
+        },
       );
 
       const hasMatchingShift = shifts.items.some(
-        (shift: any) => shift.postId === postId && shift.status === 'in_progress',
+        (shift) =>
+          shift.postId === postId &&
+          String(shift.status).toUpperCase() === 'IN_PROGRESS',
       );
 
       if (!hasMatchingShift) {

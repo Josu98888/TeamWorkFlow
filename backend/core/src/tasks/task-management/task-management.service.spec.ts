@@ -20,7 +20,7 @@ import {
   type TaskActor,
 } from './task-management.service';
 import type { TasksPrismaService } from '../prisma/prisma.service';
-import type { MediaService } from '../media/media.service';
+import type { MediaVerificationService } from '../media/media-verification.service';
 import type { TasksEventsService } from '../events/tasks-events.service';
 import type { OrganizationService } from '../../organization/organization.service';
 
@@ -75,13 +75,13 @@ describe('TaskManagementService', () => {
     mockOrg = {
       getEmployeeForTenant: jest.fn().mockResolvedValue({ id: 'emp-1', userId: 'emp-user-1' }),
       listShifts: jest.fn().mockResolvedValue({
-        items: [{ id: 'shift-1', postId: 'post-1', status: 'in_progress' }],
+        items: [{ id: 'shift-1', postId: 'post-1', status: 'IN_PROGRESS' }],
       }),
     };
 
     service = new TaskManagementService(
       mockPrisma as unknown as TasksPrismaService,
-      mockMedia as unknown as MediaService,
+      mockMedia as unknown as MediaVerificationService,
       mockEvents as unknown as TasksEventsService,
       mockOrg as unknown as OrganizationService,
     );
@@ -187,10 +187,23 @@ describe('TaskManagementService', () => {
       siteId: 'site-1',
       postId: 'post-1',
     });
-    mockOrg.listShifts.mockResolvedValueOnce({ items: [] });
+    mockOrg.listShifts.mockResolvedValueOnce({
+      items: [{ id: 'shift-2', postId: 'post-1', status: 'SCHEDULED' }],
+    });
 
     await expect(service.claim(employeeActor, 'task-1')).rejects.toThrow(
       NoShiftInProgressException,
+    );
+    expect(mockOrg.listShifts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-1',
+        userId: 'emp-user-1',
+      }),
+      {
+        employeeId: 'emp-1',
+        siteId: 'site-1',
+        pageSize: 100,
+      },
     );
   });
 
