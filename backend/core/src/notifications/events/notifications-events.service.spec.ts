@@ -1,4 +1,3 @@
-import { jest } from '@jest/globals';
 import type { JsMsg } from '@nats-io/jetstream';
 import {
   MAX_DELIVERIES,
