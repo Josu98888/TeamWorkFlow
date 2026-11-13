@@ -35,7 +35,9 @@ export type AppErrorCode =
   | 'answer_too_old'
   | 'media_too_large'
   | 'media_type_not_allowed'
-  | 'media_not_uploaded';
+  | 'media_not_uploaded'
+  | 'notification_not_found'
+  | 'invalid_push_token';
 
 export interface ValidationErrorItem {
   field: string;
@@ -345,7 +347,7 @@ export class NotificationNotFoundException extends AppException {
 }
 
 export class InvalidPushTokenException extends AppException {
-  constructor() {
-    super(422, 'invalid_push_token', 'Push token is empty or malformed');
+  constructor(message = 'Push token is empty or malformed') {
+    super(422, 'invalid_push_token', message);
   }
 }
