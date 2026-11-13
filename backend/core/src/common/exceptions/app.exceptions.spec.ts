@@ -36,6 +36,8 @@ import {
   MediaTooLargeException,
   MediaTypeNotAllowedException,
   MediaNotUploadedException,
+  NotificationNotFoundException,
+  InvalidPushTokenException,
 } from './app.exceptions';
 
 describe('app.exceptions', () => {
@@ -78,6 +80,8 @@ describe('app.exceptions', () => {
     [new MediaTooLargeException(), 422, 'media_too_large'],
     [new MediaTypeNotAllowedException(), 422, 'media_type_not_allowed'],
     [new MediaNotUploadedException(), 422, 'media_not_uploaded'],
+    [new NotificationNotFoundException(), 404, 'notification_not_found'],
+    [new InvalidPushTokenException(), 422, 'invalid_push_token'],
   ])(
     '%p carries status %i and code %s',
     (exception: AppException, status: number, code: string) => {

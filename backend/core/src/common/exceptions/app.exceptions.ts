@@ -337,3 +337,15 @@ export class MediaNotUploadedException extends AppException {
     );
   }
 }
+
+export class NotificationNotFoundException extends AppException {
+  constructor() {
+    super(404, 'notification_not_found', 'Notification not found');
+  }
+}
+
+export class InvalidPushTokenException extends AppException {
+  constructor() {
+    super(422, 'invalid_push_token', 'Push token is empty or malformed');
+  }
+}
