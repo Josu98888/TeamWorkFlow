@@ -1,27 +1,29 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import type * as Leaflet from 'leaflet';
 import { formatMeters } from '@/shared/lib/format';
+
+export type MapPersonMarker = {
+  id: string;
+  name: string;
+  postName?: string;
+};
 
 type SiteMapProps = {
   siteName: string;
   latitude: number;
   longitude: number;
   radiusMeters: number;
-  /** Small variant for cards: no caption, no scale bar. */
+  /** Small variant for cards: static preview, no zoom controls. */
   compact?: boolean;
-  /** Optional operational telemetry for live radar and personnel dots. */
   isActive?: boolean;
   activeShifts?: number;
+  activePersonnel?: MapPersonMarker[];
 };
 
-const WIDTH = 400;
-const HEIGHT = 240;
-const MIN_RADIUS_PX = 36;
-const MAX_RADIUS_PX = 96;
-const MAX_REFERENCE_METERS = 300;
+const OSM_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
-/**
- * Tactical vector map: deterministic urban blocks, 2.5D building reliefs,
- * geofence radar, and live shift presence markers using theme tokens.
- */
 export function SiteMap({
   siteName,
   latitude,
@@ -30,178 +32,201 @@ export function SiteMap({
   compact = false,
   isActive = true,
   activeShifts = 0,
+  activePersonnel = [],
 }: SiteMapProps) {
-  const seed = Math.abs(Math.round(latitude * 1000 + longitude * 1000));
-  const tilt = (seed % 41) - 20;
-  const radiusPx = Math.min(
-    MAX_RADIUS_PX,
-    MIN_RADIUS_PX + (Math.min(radiusMeters, MAX_REFERENCE_METERS) / MAX_REFERENCE_METERS) * (MAX_RADIUS_PX - MIN_RADIUS_PX),
-  );
-  const cx = WIDTH / 2;
-  const cy = HEIGHT / 2;
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<Leaflet.Map | null>(null);
+  const [isDark, setIsDark] = useState(false);
 
-  const visibleDots = Math.min(activeShifts, 6);
-  const presenceMarkers = Array.from({ length: visibleDots }, (_, idx) => {
-    const angle = ((seed + idx * 137.5) % 360) * (Math.PI / 180);
-    const dist = radiusPx * (0.28 + ((idx * 29) % 45) / 100);
-    return {
-      x: cx + Math.cos(angle) * dist,
-      y: cy + Math.sin(angle) * dist,
+  useEffect(() => {
+    const checkTheme = () => setIsDark(document.documentElement.getAttribute('data-theme') === 'dark');
+    checkTheme();
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const el = containerRef.current;
+    if (!el) return;
+
+    (async () => {
+      const L = await import('leaflet');
+      if (cancelled || !containerRef.current) return;
+
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+
+      const zoom = radiusMeters <= 100 ? 17 : radiusMeters <= 250 ? 16 : 15;
+      const map = L.map(containerRef.current, {
+        center: [latitude, longitude],
+        zoom,
+        zoomControl: !compact,
+        attributionControl: false,
+        dragging: !compact,
+        scrollWheelZoom: false,
+        doubleClickZoom: !compact,
+        boxZoom: !compact,
+        keyboard: !compact,
+      });
+
+      L.tileLayer(OSM_TILES, { maxZoom: 19 }).addTo(map);
+
+      const accent = isActive ? '#0d9488' : '#64748b';
+
+      L.circle([latitude, longitude], {
+        radius: radiusMeters,
+        color: accent,
+        weight: 2,
+        dashArray: '6 5',
+        fillColor: accent,
+        fillOpacity: 0.14,
+      }).addTo(map);
+
+      // True 3D hollow-center teardrop pin (no white fill, no white outline)
+      const pinPalette = isActive
+        ? { light: '#5eead4', mid: '#0d9488', deep: '#0f766e', edge: '#042f2e' }
+        : { light: '#cbd5e1', mid: '#64748b', deep: '#475569', edge: '#1e293b' };
+
+      const uid = `${Math.abs(Math.round(latitude * 10000))}-${isActive ? 'a' : 'i'}`;
+      const beaconHtml = `
+        <div style="position:relative;width:34px;height:42px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 5px 6px rgba(15,23,42,0.38));">
+          <svg width="34" height="42" viewBox="0 0 34 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <radialGradient id="body-${uid}" cx="32%" cy="22%" r="78%">
+                <stop offset="0%" stop-color="${pinPalette.light}" />
+                <stop offset="48%" stop-color="${pinPalette.mid}" />
+                <stop offset="88%" stop-color="${pinPalette.deep}" />
+                <stop offset="100%" stop-color="${pinPalette.edge}" />
+              </radialGradient>
+              <linearGradient id="bevel-${uid}" x1="17" y1="8" x2="17" y2="21" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="${pinPalette.edge}" stop-opacity="0.75" />
+                <stop offset="100%" stop-color="${pinPalette.light}" stop-opacity="0.85" />
+              </linearGradient>
+            </defs>
+            <!-- Hollow 3D body using evenodd so the center hole is genuinely transparent -->
+            <path
+              fill-rule="evenodd"
+              clip-rule="evenodd"
+              d="M17 1.5C9.27 1.5 3 7.77 3 15.5C3 24.9 15.15 36.2 16.18 37.12C16.65 37.54 17.35 37.54 17.82 37.12C18.85 36.2 31 24.9 31 15.5C31 7.77 24.73 1.5 17 1.5ZM17 20.8C19.93 20.8 22.3 18.43 22.3 15.5C22.3 12.57 19.93 10.2 17 10.2C14.07 10.2 11.7 12.57 11.7 15.5C11.7 18.43 14.07 20.8 17 20.8Z"
+              fill="url(#body-${uid})"
+            />
+            <!-- Inner 3D ring bevel -->
+            <circle cx="17" cy="15.5" r="5.6" stroke="url(#bevel-${uid})" stroke-width="1.3" fill="none" />
+            <!-- Soft top-left 3D specular gloss -->
+            <path
+              d="M7.6 12.2C8.4 7.8 12.2 4.6 16.8 4.5"
+              stroke="rgba(255,255,255,0.55)"
+              stroke-width="1.8"
+              stroke-linecap="round"
+            />
+          </svg>
+        </div>
+      `;
+
+      L.marker([latitude, longitude], {
+        icon: L.divIcon({
+          html: beaconHtml,
+          className: '',
+          iconSize: [34, 42],
+          iconAnchor: [17, 38],
+        }),
+      })
+        .bindTooltip(`${siteName} · ${formatMeters(radiusMeters)}`, { direction: 'top', offset: [0, -36] })
+        .addTo(map);
+
+      // Personnel markers as clean 3D spheres (no white border)
+      const peopleList: MapPersonMarker[] =
+        activePersonnel.length > 0
+          ? activePersonnel
+          : Array.from({ length: Math.min(activeShifts, 6) }, (_, i) => ({
+              id: `shift-${i}`,
+              name: `Personal en turno #${i + 1}`,
+            }));
+
+      if (isActive && peopleList.length > 0) {
+        const seed = Math.abs(Math.round(latitude * 1000 + longitude * 1000));
+        const metersToLat = 1 / 111320;
+        const metersToLng = 1 / (111320 * Math.cos((latitude * Math.PI) / 180));
+
+        peopleList.forEach((person, idx) => {
+          const angle = ((seed + idx * 137.5) % 360) * (Math.PI / 180);
+          const distMeters = radiusMeters * (0.25 + ((idx * 29) % 45) / 100);
+          const pLat = latitude + Math.sin(angle) * distMeters * metersToLat;
+          const pLng = longitude + Math.cos(angle) * distMeters * metersToLng;
+
+          const personHtml = `
+            <div style="width:12px;height:12px;border-radius:9999px;background:radial-gradient(circle at 32% 28%, #8b5cf6 0%, #3b1f54 65%, #1e102c 100%);box-shadow:0 2px 5px rgba(15,23,42,0.45);"></div>
+          `;
+          const marker = L.marker([pLat, pLng], {
+            icon: L.divIcon({
+              html: personHtml,
+              className: '',
+              iconSize: [12, 12],
+              iconAnchor: [6, 6],
+            }),
+          }).addTo(map);
+
+          if (!compact) {
+            const label = person.postName ? `${person.name} · ${person.postName}` : person.name;
+            marker.bindTooltip(label, { direction: 'top', offset: [0, -6] });
+          }
+        });
+      }
+
+      mapRef.current = map;
+    })();
+
+    return () => {
+      cancelled = true;
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
     };
-  });
+  }, [latitude, longitude, radiusMeters, compact, isActive, siteName, activeShifts, activePersonnel]);
+
+  const handleRecenter = () => {
+    if (!mapRef.current) return;
+    const zoom = radiusMeters <= 100 ? 17 : radiusMeters <= 250 ? 16 : 15;
+    mapRef.current.setView([latitude, longitude], zoom, { animate: true });
+  };
 
   return (
-    <svg
-      viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-      role="img"
-      aria-label={`Mapa referencial de ${siteName}: geocerca de ${formatMeters(radiusMeters)}`}
-      className="block h-auto w-full rounded-lg"
-      preserveAspectRatio="xMidYMid slice"
+    <div
+      className={`relative w-full overflow-hidden bg-alt ${compact ? 'h-48' : 'h-80 sm:h-96'}`}
+      aria-label={`Mapa de ${siteName}: geocerca de ${formatMeters(radiusMeters)}`}
     >
-      <rect width={WIDTH} height={HEIGHT} className="fill-alt" />
-
-      {/* Subtle tactical coordinate grid */}
-      <g className="stroke-line/40" strokeWidth={0.5} strokeDasharray="2 4">
-        <line x1={0} y1={cy - 60} x2={WIDTH} y2={cy - 60} />
-        <line x1={0} y1={cy + 60} x2={WIDTH} y2={cy + 60} />
-        <line x1={cx - 100} y1={0} x2={cx - 100} y2={HEIGHT} />
-        <line x1={cx + 100} y1={0} x2={cx + 100} y2={HEIGHT} />
-      </g>
-
-      <g transform={`rotate(${tilt} ${cx} ${cy})`}>
-        {/* Urban blocks with subtle 2.5D isometric depth */}
-        {[-120, 0, 120, 240, 360, 480].flatMap((x, xi) =>
-          [-80, 20, 120, 220, 320].map((y, yi) => {
-            const isGreenZone = (xi + yi + seed) % 7 === 0;
-            return (
-              <g key={`${x}-${y}`}>
-                <rect x={x - 37} y={y - 36} width={96} height={72} rx={6} className="fill-line/45" />
-                <rect
-                  x={x - 40}
-                  y={y - 40}
-                  width={96}
-                  height={72}
-                  rx={6}
-                  className={isGreenZone ? 'fill-brand-teal/10 stroke-brand-teal/25' : 'fill-card stroke-line/60'}
-                  strokeWidth={0.75}
-                />
-              </g>
-            );
-          }),
-        )}
-
-        {/* Main avenues with center lane markings */}
-        <rect x={-100} y={cy - 8} width={WIDTH + 200} height={16} className="fill-hover" />
-        <line
-          x1={-100}
-          y1={cy}
-          x2={WIDTH + 100}
-          y2={cy}
-          className="stroke-line"
-          strokeWidth={1}
-          strokeDasharray="6 6"
-        />
-
-        <rect x={cx + 52} y={-100} width={16} height={HEIGHT + 200} className="fill-hover" />
-        <line
-          x1={cx + 60}
-          y1={-100}
-          x2={cx + 60}
-          y2={HEIGHT + 100}
-          className="stroke-line"
-          strokeWidth={1}
-          strokeDasharray="6 6"
-        />
-
-        {/* Secondary curved road */}
-        <path
-          d={`M -100 ${cy + 70} Q ${cx} ${cy + 20} ${WIDTH + 100} ${cy + 90}`}
-          className="fill-none stroke-line"
-          strokeWidth={5}
-        />
-      </g>
-
-      {/* Outer buffer ring */}
-      <circle
-        cx={cx}
-        cy={cy}
-        r={radiusPx + 10}
-        className="fill-none stroke-brand-teal/25"
-        strokeWidth={1}
-        strokeDasharray="2 3"
+      <div
+        ref={containerRef}
+        className={`z-0 h-full w-full ${isDark ? '[&_.leaflet-tile-pane]:brightness-90 [&_.leaflet-tile-pane]:contrast-95 [&_.leaflet-tile-pane]:hue-rotate-180 [&_.leaflet-tile-pane]:invert' : '[&_.leaflet-tile-pane]:saturate-90'}`}
       />
 
-      {/* Active Geofence */}
-      <circle
-        cx={cx}
-        cy={cy}
-        r={radiusPx}
-        className={isActive ? 'fill-brand-teal/15 stroke-brand-teal' : 'fill-muted/10 stroke-muted'}
-        strokeWidth={2}
-        strokeDasharray="6 4"
-      />
-      <line
-        x1={cx}
-        y1={cy}
-        x2={cx + radiusPx}
-        y2={cy}
-        className={isActive ? 'stroke-brand-teal' : 'stroke-muted'}
-        strokeWidth={1.5}
-      />
-
-      {/* Live personnel markers inside perimeter */}
-      {isActive &&
-        presenceMarkers.map((dot, idx) => (
-          <g key={idx} transform={`translate(${dot.x} ${dot.y})`}>
-            <circle r={4.5} className="fill-brand-dark stroke-card" strokeWidth={1.5} />
-          </g>
-        ))}
-
-      {/* Center beacon */}
-      {isActive && (
-        <circle cx={cx} cy={cy} r={14} className="fill-brand-teal/20" />
-      )}
-      <circle
-        cx={cx}
-        cy={cy}
-        r={6.5}
-        className={isActive ? 'fill-brand-teal stroke-card' : 'fill-muted stroke-card'}
-        strokeWidth={2.5}
-      />
-
-      {/* GPS coordinates pill (visible in both compact & detail views) */}
-      <g transform={`translate(12 ${HEIGHT - 24})`}>
-        <rect width={132} height={16} rx={8} className="fill-card/90 stroke-line/80" strokeWidth={0.75} />
-        <text x={66} y={11} textAnchor="middle" className="fill-subtitle font-mono text-[8.5px] font-medium">
+      <div className="pointer-events-none absolute inset-x-3 bottom-3 z-[400] flex items-center justify-between gap-2">
+        <span className="rounded-lg border border-line bg-card/95 px-2.5 py-1 font-mono text-[11px] font-medium text-subtitle shadow-sm backdrop-blur-xs">
           {latitude.toFixed(4)}, {longitude.toFixed(4)}
-        </text>
-      </g>
+        </span>
 
-      {/* Radius badge */}
-      <g transform={`translate(${cx + radiusPx / 2 - 22} ${cy - 21})`}>
-        <rect width={44} height={16} rx={8} className="fill-card stroke-line" strokeWidth={0.75} />
-        <text x={22} y={11.5} textAnchor="middle" className="fill-body text-[9px] font-semibold">
-          {formatMeters(radiusMeters)}
-        </text>
-      </g>
+        <div className="pointer-events-auto flex items-center gap-1.5">
+          <span className="rounded-lg border border-line bg-card/95 px-2.5 py-1 text-[11px] font-semibold text-body shadow-sm backdrop-blur-xs">
+            Radio {formatMeters(radiusMeters)}
+          </span>
 
-      {!compact && (
-        <>
-          <g transform={`translate(${WIDTH - 36} 32)`} className="text-[10px] font-bold">
-            <circle r={14} className="fill-card stroke-line" />
-            <path d="M 0 -8 L 4 4 L 0 1 L -4 4 Z" className="fill-brand-dark" />
-            <text y={-17} textAnchor="middle" className="fill-muted text-[8px] font-bold">
-              N
-            </text>
-          </g>
-          <g transform={`translate(${WIDTH - 116} ${HEIGHT - 24})`}>
-            <rect width={104} height={16} rx={8} className="fill-card/90 stroke-line/80" strokeWidth={0.75} />
-            <text x={52} y={11} textAnchor="middle" className="fill-muted text-[8px] font-semibold uppercase tracking-wider">
-              Geocerca GPS
-            </text>
-          </g>
-        </>
-      )}
-    </svg>
+          {!compact && (
+            <button
+              type="button"
+              onClick={handleRecenter}
+              className="rounded-lg border border-line bg-card/95 px-2.5 py-1 text-[11px] font-semibold text-title shadow-sm transition-colors hover:bg-alt cursor-pointer"
+              title="Centrar en la geocerca"
+            >
+              Centrar
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
