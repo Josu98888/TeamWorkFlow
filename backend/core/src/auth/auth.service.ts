@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { hashPassword, hashToken, verifyPassword } from './crypto';
 import { normalizeEmail } from '../common/email';
@@ -18,6 +18,8 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { VerifyTokenDto } from './dto/verify-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { TokenPair, TokenService } from './token.service';
+import type { ListRecipientsDto } from './users/dto/user-list-recipients.dto';
+import { UserListRecipientsService } from './users/user-list-recipients.service';
 import type { VerifiedActor } from './verified-actor';
 
 const UNIQUE_VIOLATION = 'P2002';
@@ -51,6 +53,7 @@ export class AuthService {
     private readonly tokens: TokenService,
     private readonly jwt: JwtService,
     private readonly events: JetStreamService,
+    @Optional() private readonly userListRecipients?: UserListRecipientsService,
   ) {}
 
   // Creates a tenant and its OWNER in one transaction (AGENTS § Tenants and
@@ -290,6 +293,15 @@ export class AuthService {
       throw new InvalidTokenException();
     }
     return { sub, tenantId };
+  }
+
+  // Internal-only facade method for core modules (`auth.user.list-recipients`);
+  // never expose via HTTP controllers or NATS responders.
+  async listRecipients(dto: ListRecipientsDto): Promise<{ userIds: string[] }> {
+    if (!this.userListRecipients) {
+      throw new Error('UserListRecipientsService is not available');
+    }
+    return this.userListRecipients.listRecipients(dto);
   }
 
   // The increment is atomic; the 5th consecutive failure sets the lock and
