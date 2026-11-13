@@ -1,10 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useLogout, useSession } from '@/shared/hooks/useSession';
 
 export function Topbar() {
   const [isDark, setIsDark] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const session = useSession();
+  const logout = useLogout();
 
   useEffect(() => {
    
@@ -74,6 +77,11 @@ export function Topbar() {
       </div>
 
       <div className="flex items-center gap-4">
+        {session && (
+          <span className="text-xs" style={{ color: 'var(--text-subtitle)' }} title={session.userId}>
+            <span className="font-semibold capitalize">{session.role}</span> · {session.userId.slice(0, 8)}
+          </span>
+        )}
         <button
           onClick={toggleTheme}
           className="px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide uppercase transition-colors cursor-pointer border"
@@ -84,6 +92,13 @@ export function Topbar() {
           }}
         >
          {isDark ? 'Tema Claro' : 'Tema Oscuro'}
+        </button>
+        <button
+          onClick={logout}
+          className="px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide uppercase cursor-pointer border"
+          style={{ borderColor: 'var(--border-main)', backgroundColor: 'var(--bg-main)', color: 'var(--status-danger)' }}
+        >
+          Salir
         </button>
       </div>
     </header>

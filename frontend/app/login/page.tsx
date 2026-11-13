@@ -2,10 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  clearLegacyTokenStorage,
-  scheduleProactiveRefresh,
-} from '../../shared/lib/http';
+import { ApiError, startSession } from '../../shared/lib/http';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,43 +17,22 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/v1/auth/login', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        if (response.status === 429) {
-          throw new Error('Demasiados intentos fallidos. Tu cuenta fue bloqueada temporalmente por 15 minutos.');
-        }
-
-        if (data.code === 'tenant_suspended' || data.message === 'tenant_suspended') {
-          throw new Error('La empresa se encuentra suspendida por mora.');
-        }
-
-        if (data.code === 'tenant_cancelled' || data.message === 'tenant_cancelled') {
-          throw new Error('La suscripción de la empresa fue cancelada.');
-        }
-
-        throw new Error(data.detail || data.message || 'Credenciales inválidas. Verificá tu correo y contraseña.');
-      }
-
-      // La sesión se gestiona mediante cookies httpOnly + CSRF; limpiamos cualquier token legado en localStorage.
-      clearLegacyTokenStorage();
-      scheduleProactiveRefresh(
-        typeof data.expiresIn === 'number' ? data.expiresIn : undefined,
-      );
+      await startSession('/auth/login', { email, password });
 
       // Redirigir a la pantalla principal
       router.push('/');
     } catch (err: unknown) {
-      if (err instanceof Error) {
+      if (err instanceof ApiError) {
+        if (err.status === 429) {
+          setErrorMessage('Demasiados intentos fallidos. Tu cuenta fue bloqueada temporalmente por 15 minutos.');
+        } else if (err.code === 'tenant_suspended') {
+          setErrorMessage('La empresa se encuentra suspendida por mora.');
+        } else if (err.code === 'tenant_cancelled') {
+          setErrorMessage('La suscripción de la empresa fue cancelada.');
+        } else {
+          setErrorMessage(err.status === 401 ? 'Credenciales inválidas. Verificá tu correo y contraseña.' : err.message);
+        }
+      } else if (err instanceof Error) {
         setErrorMessage(err.message);
       } else {
         setErrorMessage('Ocurrió un error inesperado al iniciar sesión.');

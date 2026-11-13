@@ -1,4 +1,4 @@
-import { minutesFromNow, mockResponse } from '@/shared/lib/mock';
+import { minutesFromNow, mockResponse, mockUnavailable } from '@/shared/lib/mock';
 import {
   CURRENT_ASSIGNMENTS,
   MOCK_TIMEZONE,
@@ -157,6 +157,18 @@ function paginate<T>(items: T[]): Paginated<T> {
 }
 
 export const organizationMockApi: OrganizationApi = {
+  createSite: mockUnavailable,
+  updateSite: mockUnavailable,
+  rotateSiteQr: mockUnavailable,
+  createPost: mockUnavailable,
+  updatePost: mockUnavailable,
+  createEmployee: mockUnavailable,
+  updateEmployee: mockUnavailable,
+  createShift: mockUnavailable,
+  updateShift: mockUnavailable,
+  reassignShift: mockUnavailable,
+  cancelShift: mockUnavailable,
+
   listSites: () => mockResponse(paginate(SITES)),
 
   getSite: async (id) => {

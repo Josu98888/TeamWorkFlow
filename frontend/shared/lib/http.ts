@@ -1,4 +1,5 @@
 import { API_PREFIX } from './config';
+import { clearSession, setSessionFromToken } from './session';
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const DEFAULT_ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
@@ -15,6 +16,14 @@ export class ApiError extends Error {
     this.name = 'ApiError';
   }
 }
+
+/** Spanish copy for the 403 codes every screen can hit (`forbidden`, plan gating, tenant billing state). */
+const FORBIDDEN_MESSAGES: Record<string, string> = {
+  forbidden: 'No tenés permiso para realizar esta acción.',
+  feature_not_in_plan: 'Tu plan no incluye esta función. Podés cambiarlo desde Facturación.',
+  tenant_suspended: 'La cuenta de tu empresa está suspendida por falta de pago. Regularizala desde Facturación.',
+  tenant_cancelled: 'La suscripción de tu empresa está cancelada. Podés volver a suscribirte desde Facturación.',
+};
 
 let refreshInFlight: Promise<boolean> | null = null;
 let proactiveRefreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -119,8 +128,10 @@ export async function refreshAccessToken(prefix = API_PREFIX): Promise<boolean> 
       }
 
       const data = (await response.json().catch(() => null)) as {
+        accessToken?: string;
         expiresIn?: number;
       } | null;
+      setSessionFromToken(data?.accessToken);
       clearLegacyTokenStorage();
       scheduleProactiveRefresh(
         typeof data?.expiresIn === 'number'
@@ -142,6 +153,7 @@ export async function refreshAccessToken(prefix = API_PREFIX): Promise<boolean> 
 export async function logoutSession(prefix = API_PREFIX): Promise<void> {
   stopProactiveRefresh();
   clearLegacyTokenStorage();
+  clearSession();
   if (typeof window === 'undefined') return;
 
   try {
@@ -160,12 +172,29 @@ export async function logoutSession(prefix = API_PREFIX): Promise<void> {
   }
 }
 
+/** Body of login/register/accept-invitation in `core`; the tokens also arrive as cookies set by core. */
+export type TokenPair = { accessToken: string; refreshToken: string; expiresIn: number };
+
+/**
+ * POSTs to a public `/auth/*` route that opens a session (`login`, `register`): core sets the httpOnly
+ * session cookies plus the CSRF cookie, and this keeps the token claims and schedules the rotation.
+ */
+export async function startSession(path: string, body: unknown, prefix = API_PREFIX): Promise<TokenPair> {
+  const pair = await apiFetch<TokenPair>(path, { method: 'POST', body: JSON.stringify(body), prefix });
+  setSessionFromToken(pair.accessToken);
+  clearLegacyTokenStorage();
+  scheduleProactiveRefresh(typeof pair.expiresIn === 'number' ? pair.expiresIn : undefined);
+  return pair;
+}
+
 function isAuthLifecyclePath(path: string): boolean {
   return (
     path.startsWith('/auth/login') ||
     path.startsWith('/auth/register') ||
     path.startsWith('/auth/refresh') ||
-    path.startsWith('/auth/logout')
+    path.startsWith('/auth/logout') ||
+    path.startsWith('/auth/invitations/accept') ||
+    path.startsWith('/auth/password-reset/confirm')
   );
 }
 
@@ -207,11 +236,9 @@ export async function apiFetch<T>(
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     const error = (body ?? {}) as { detail?: string; code?: string };
-    throw new ApiError(
-      response.status,
-      error.code,
-      error.detail ?? 'No se pudo completar la solicitud.',
-    );
+    const message =
+      (response.status === 403 && FORBIDDEN_MESSAGES[error.code ?? '']) || (error.detail ?? 'No se pudo completar la solicitud.');
+    throw new ApiError(response.status, error.code, message);
   }
   return body as T;
 }

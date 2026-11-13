@@ -2,10 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  clearLegacyTokenStorage,
-  scheduleProactiveRefresh,
-} from '../../shared/lib/http';
+import { ApiError, startSession } from '../../shared/lib/http';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -22,39 +19,14 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/v1/auth/register', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          tenantName,
-          name,
-          email,
-          password,
-        }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        if (data.code === 'email_taken') {
-          throw new Error('Ese correo ya está registrado en el sistema.');
-        }
-        throw new Error(data.detail || data.message || 'No se pudo completar el registro.');
-      }
-
-      // La sesión se gestiona mediante cookies httpOnly + CSRF; limpiamos cualquier token legado en localStorage.
-      clearLegacyTokenStorage();
-      scheduleProactiveRefresh(
-        typeof data.expiresIn === 'number' ? data.expiresIn : undefined,
-      );
+      await startSession('/auth/register', { tenantName, name, email, password });
 
       // Redirigir a la app principal
       router.push('/');
     } catch (err: unknown) {
-      if (err instanceof Error) {
+      if (err instanceof ApiError && err.code === 'email_taken') {
+        setErrorMessage('Ese correo ya está registrado en el sistema.');
+      } else if (err instanceof Error) {
         setErrorMessage(err.message);
       } else {
         setErrorMessage('Error inesperado al registrar la empresa.');
