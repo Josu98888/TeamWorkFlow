@@ -139,6 +139,8 @@ export function SitesView() {
                       latitude={site.latitude}
                       longitude={site.longitude}
                       radiusMeters={site.geofenceRadiusMeters}
+                      isActive={site.isActive}
+                      activeShifts={live}
                     />
                     <div className="p-5">
                       <div className="flex items-start justify-between gap-3">
