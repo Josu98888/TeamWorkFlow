@@ -25,16 +25,16 @@ Out of scope (do NOT implement here):
 
 The `tasks` module is fully implemented in `backend/core/src/tasks/` (`TasksModule`). It includes:
 - Pure domain engines: form validator (`form-validator.ts`), answer validator (`answer-validator.ts`), and deadline calculator (`deadline-calculator.ts`).
-- Data access: Prisma 7 (`TasksPrismaService`, `schema.prisma`) with migrations and independent schema `tasks`.
-- Media and Storage: S3/MinIO presigned upload/download URLs (`StorageService`, `MediaService`).
+- Data access: Prisma 7 (`TasksPrismaService`, `schema.prisma`) with offline-generated `init_tasks` SQL migration and independent schema `tasks` (live `migrate deploy`/`status` pending Docker PostgreSQL).
+- Media and Storage: S3/MinIO presigned upload/download URLs and answer photo verification (`StorageService`, `MediaService`, `MediaVerificationService`).
 - Forms sub-module: draft editing, validation, immutable versions (`FormsService`, `FormsController`).
 - Task Templates: recurring task templates per site/post (`TaskTemplatesService`, `TaskTemplatesController`).
 - Task Management: task creation, claiming, answering, supervisor review, and status lifecycle (`TaskManagementService`, `TasksController`).
-- Background expiration job: hourly cron job expiring overdue pending tasks (`TaskExpirationJob`).
+- Background expiration job: cron job every 5 minutes expiring overdue pending tasks (`TaskExpirationJob`).
 - Event bus & consumed events: JetStream service (`TASKS_EVENTS` stream) and consumer processor (`ConsumedEventsProcessor`) handling shift start/cancellation, tenant status changes, plan/feature gating, and data retention purge.
 - Public facade: `TasksService` exporting operations cleanly without leaking internal Prisma entities.
-- HTTP routing: fully wired under `/api/v1/` with `@Roles` guards and `@RequiresFeature('tasks')` gating.
-- E2E testing: `test/e2e/tasks.e2e-spec.ts` verifying full lifecycle and cross-tenant isolation.
+- HTTP routing: wired under `/api/v1/` with inline role checks and `@RequiresFeature('tasks')` gating.
+- E2E testing: `test/e2e/tasks.e2e-spec.ts` covering full lifecycle and cross-tenant isolation (live `pnpm test:e2e` pending Docker test stack).
 
 ## Business Rules
 

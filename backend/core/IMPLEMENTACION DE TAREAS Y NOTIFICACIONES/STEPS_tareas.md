@@ -2,7 +2,7 @@
 
 Follow /STEPS.rules.md. Order: /STEPS.index.md (row B6). Backend conventions: /backend/STEPS.template.md.
 
-**Status:** last verified: S13.6 · done · next: — · in progress: — · blocked: —
+**Status:** last verified: S13.5 (lint/build/unit) · blocked · next: run Docker Compose/migrate/E2E on host with Docker · in progress: — · blocked: S0.2, S2.4, S11.1, S12.1, S12.2, S13.2
 
 Source of truth: `backend/core/src/tasks/AGENTS.md` and `backend/core/AGENTS.md`. Commands run from `backend/core/`.
 
@@ -28,9 +28,10 @@ Commits: (none, read-only phase)
   - Ensure the active branch is `feat/core-tasks-module` (created from `develop`, never from `main`/`master`).
   - Verify that row B6 (`core: tasks module`) dependencies are accounted for: B1 (`auth`), B2 (`HTTP layer`), B3 (`billing`), B4 (`organization`).
   Check: `git branch --show-current` outputs `feat/core-tasks-module`; `git branch --show-current` is not `main` or `master`.
-- [x] **S0.2** Toolchain and test environment check:
+- [!] **S0.2** Toolchain and test environment check:
   - Check Node.js, `pnpm`, Docker Compose test stack (`backend/docker-compose.test.yml`), and MinIO local storage availability.
   Check: `pnpm --version && docker compose version` print clean outputs; test database container responds via `docker compose -f ../docker-compose.test.yml exec postgres-test pg_isready`.
+  Blocked: `docker` CLI is not installed/available on this host (`pnpm` passes, Docker Compose checks cannot execute).
 - [x] **S0.3** Contract inventory and alignment check:
   - Inventory all 11 facade operations (`tasks.form.create`, `tasks.form.update`, `tasks.form.publish`, `tasks.form.get`, `tasks.form.list`, `tasks.task-template.create`, `tasks.task-template.update`, `tasks.task-template.list`, `tasks.task.create`, `tasks.task.get`, `tasks.task.list`, `tasks.task.claim`, `tasks.task.answer`, `tasks.task.review`, `tasks.media.request-upload`, `tasks.media.get-url`).
   - Inventory 3 emitted domain events (`task_assigned`, `task_completed`, `task_expired`).
@@ -104,7 +105,7 @@ Commits: c29817e, 6419288, 45e57f3, 6967e8d, aa6e59d, d2e7dab
 
 ## Phase 2 — Data model (Prisma schema, migrations, PrismaService)
 
-Commits: 7b42cd6, 1cf402d
+Commits: 7b42cd6, 1cf402d, 29f82c0
 
 - [x] **S2.1** Prisma configuration:
   - Create `prisma.tasks.config.ts` pointing to `src/tasks/prisma/schema.prisma`, migrations at `src/tasks/prisma/migrations`, and datasource `TASKS_DATABASE_URL`.
@@ -146,10 +147,11 @@ Commits: 7b42cd6, 1cf402d
     - `forms(tenant_id, created_at)`
     - `media(tenant_id, created_at)`
   Check: `prisma:tasks:generate` compiles client successfully without schema errors.
-- [x] **S2.4** First migration `init_tasks`:
+- [!] **S2.4** First migration `init_tasks`:
   - Run `prisma migrate dev` to generate initial migration file.
   - Verify migration SQL creates schema `tasks` and all declared tables, constraints, and indexes.
   Check: `pnpm run prisma:tasks:migrate:dev --name init_tasks` executes; `pnpm run prisma:tasks:migrate:status` reports schema up to date.
+  Blocked: Migration `20261112214500_init_tasks` (including partial unique index and `ProcessedEvent.tenant_id`) generated via `prisma migrate diff` and validated via `prisma validate`, but live `migrate dev` / `migrate status` requires Docker PostgreSQL unavailable on host.
 - [x] **S2.5** Database access layer in `src/tasks/prisma/prisma.service.ts` + `prisma.module.ts`:
   - Extends PrismaClient using `@prisma/adapter-pg` connecting to schema `tasks` via `tasks_svc` role.
   Check: `<test> tasks-prisma` passes: connects to test database and disconnects cleanly.
@@ -218,7 +220,7 @@ Commits: 6fb06c4
 
 ## Phase 6 — Sub-module Media (Presigned Uploads & Photo Verification)
 
-Commits: cc77d2f
+Commits: cc77d2f, 8ab7378, 25f6c12, 14684c4
 
 - [x] **S6.1** `tasks.media.request-upload`:
   - Employee requests upload URL with `{ mime, sizeBytes, sha256, takenAt }`.
@@ -244,7 +246,7 @@ Commits: cc77d2f
 
 ## Phase 7 — Sub-module Tasks (Single Tasks, Claiming & Answering)
 
-Commits: 090b4ac
+Commits: 090b4ac, 290a01b
 
 - [x] **S7.1** `tasks.task.create` (Single task creation):
   - Owner/Admin/Supervisor creates single task with `formVersionId`, `deadline`, and assignee (`employeeId` or `siteId` + `postId`), optional `expectedQr`.
@@ -291,7 +293,7 @@ Commits: 090b4ac
 
 ## Phase 8 — Events consumed (Per-shift generation, shift cancellation & tenant lifecycle)
 
-Commits: 345a764
+Commits: 345a764, 49770ca
 
 - [x] **S8.1** Consumes `t.<tenant>.organization.shift_started`:
   - Verifies tenant has `features.tasks` and is not suspended/cancelled; skips silently if absent.
@@ -378,14 +380,15 @@ Commits: 9f19c95, 51e522d
 
 ## Phase 11 — Close the loop
 
-Commits: a91305f
+Commits: a91305f, c73a297
 
-- [x] **S11.1** Docker Compose MinIO configuration:
+- [!] **S11.1** Docker Compose MinIO configuration:
   - Add MinIO container in `backend/docker-compose.yml` and `backend/docker-compose.test.yml`:
     - Service `minio` on port 9000 (API) and 9001 (Console).
     - Persistent volume `minio_data`.
     - Automatic bucket creation script / init container for `teamworkflow-tasks`.
   Check: `docker compose -f ../docker-compose.yml config` passes validation; MinIO starts and bucket exists.
+  Blocked: Compose files and `minio-init`/`minio-test-init` services created (`minio-test` isolated on ports 9002/9003), but `docker compose config` and container startup require Docker on host.
 - [x] **S11.2** Module registration in `src/app.module.ts`:
   - Import `TasksModule` into `AppModule`.
   Check: `<build>` passes cleanly; `rg -n "TasksModule" src/app.module.ts` has a hit.
@@ -397,12 +400,13 @@ Commits: a91305f
 
 ## Phase 12 — E2E Tests
 
-Commits: 16e3264, 40e5e60, bec6a40, d61289f, c72de98
+Commits: 16e3264, 40e5e60, bec6a40, d61289f, c72de98, 6321eb7, f15a431
 
-- [x] **S12.1** E2E test harness in `test/e2e/tasks.e2e-spec.ts`:
+- [!] **S12.1** E2E test harness in `test/e2e/tasks.e2e-spec.ts`:
   - Sets up supertest client against real `AppModule` with test database and test MinIO bucket.
   Check: `<e2e> tasks.e2e-spec` executes and connects to test database and NATS instance.
-- [x] **S12.2** Complete lifecycle E2E flow:
+  Blocked: Harness and spec aligned with actual DTOs, UUIDv7, `billing` migrations, and MinIO test ports, but live `pnpm test:e2e` requires Docker (`docker-compose.test.yml`) unavailable on host.
+- [!] **S12.2** Complete lifecycle E2E flow:
   1. Owner creates form draft -> publishes version 1.
   2. Owner creates task template for site/post.
   3. Emit `organization.shift_started` -> verifies per-shift task is generated for employee.
@@ -410,6 +414,7 @@ Commits: 16e3264, 40e5e60, bec6a40, d61289f, c72de98
   5. Employee submits answer with photo and QR -> task marked `COMPLETED` -> `task_completed` emitted.
   6. Supervisor reviews answer as `approved`.
   Check: Full flow passes cleanly from HTTP down to MinIO and JetStream events.
+  Blocked: `pnpm test:e2e` blocked on host without Docker (`nats-test`, `postgres-test`, `minio-test`).
 
 ---
 
@@ -420,9 +425,10 @@ Commits: (verification phase, documented in checklist update)
 - [x] **S13.1** Grep plant check:
   - Plant a hit in `src/__plant.ts`, confirm grep finds it, delete the file.
   Check: `test ! -e src/__plant.ts`.
-- [x] **S13.2** Quality gate:
+- [!] **S13.2** Quality gate:
   - Run lint, typecheck, unit tests, build, and E2E.
   Check: `<lint>`, `<typecheck>`, `<test>`, `<build>` and `<e2e>` pass without errors or warnings.
+  Blocked: `pnpm lint` (0 errors, 8 pre-existing warnings in unrelated modules), `pnpm build`, and `pnpm test` (`101` suites / `1388` tests) pass locally; `<e2e>` blocked pending Docker on host.
 - [x] **S13.3** Tenant isolation sweep:
   - Automated test verifying an actor of tenant A cannot read, answer, claim, or review tasks/forms/media of tenant B.
   Check: `<test> tasks-tenant-isolation` passes 100%.
