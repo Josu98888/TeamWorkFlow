@@ -1,64 +1,85 @@
 import { Pool } from 'pg';
 import { assertTestTargets } from './test-env';
 
-let pool: Pool | undefined;
-let tasksPool: Pool | undefined;
+const pools = new Map<string, Pool>();
 
-function getPool() {
+const SCHEMA_ENV_KEYS = {
+  auth: 'AUTH_DATABASE_URL',
+  organization: 'ORGANIZATION_DATABASE_URL',
+  billing: 'BILLING_DATABASE_URL',
+  tasks: 'TASKS_DATABASE_URL',
+} as const;
+
+type SchemaName = keyof typeof SCHEMA_ENV_KEYS;
+
+function getSchemaPool(schema: SchemaName): Pool {
   assertTestTargets();
-  // `?schema=` is a Prisma parameter; the role search_path already is `auth`.
-  const url = new URL(process.env.AUTH_DATABASE_URL!);
+  const existing = pools.get(schema);
+  if (existing) {
+    return existing;
+  }
+
+  const rawUrl = process.env[SCHEMA_ENV_KEYS[schema]];
+  if (!rawUrl) {
+    throw new Error(`${SCHEMA_ENV_KEYS[schema]} is not configured for e2e tests`);
+  }
+
+  // `?schema=` is a Prisma parameter; each role search_path already targets its schema.
+  const url = new URL(rawUrl);
   url.searchParams.delete('schema');
-  pool ??= new Pool({ connectionString: url.toString(), max: 2 });
-  return pool;
+  const created = new Pool({ connectionString: url.toString(), max: 2 });
+  pools.set(schema, created);
+  return created;
 }
 
-function getTasksPool() {
-  assertTestTargets();
-  const url = new URL(process.env.TASKS_DATABASE_URL!);
-  url.searchParams.delete('schema');
-  tasksPool ??= new Pool({ connectionString: url.toString(), max: 2 });
-  return tasksPool;
-}
-
-// Raw SQL access to the test database, to inspect rows.
+// Raw SQL access to the test database, to inspect or seed rows by owning schema.
 export function db() {
-  return getPool();
+  return getSchemaPool('auth');
+}
+
+export function orgDb() {
+  return getSchemaPool('organization');
+}
+
+export function billingDb() {
+  return getSchemaPool('billing');
 }
 
 export function tasksDb() {
-  return getTasksPool();
+  return getSchemaPool('tasks');
 }
 
-// Empties every table of the `auth` and `tasks` schemas (keeps `_prisma_migrations`).
-export async function cleanDatabase() {
-  const { rows } = await getPool().query<{ tablename: string }>(
+async function truncateSchema(schema: SchemaName) {
+  if (!process.env[SCHEMA_ENV_KEYS[schema]]) {
+    return;
+  }
+  const clientPool = getSchemaPool(schema);
+  const { rows } = await clientPool.query<{ tablename: string }>(
     `SELECT tablename FROM pg_tables
-     WHERE schemaname = 'auth' AND tablename <> '_prisma_migrations'`,
+     WHERE schemaname = $1 AND tablename <> '_prisma_migrations'`,
+    [schema],
   );
   if (rows.length > 0) {
-    const tables = rows.map(({ tablename }) => `auth."${tablename}"`).join(', ');
-    await getPool().query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
+    const tables = rows
+      .map(({ tablename }) => `${schema}."${tablename}"`)
+      .join(', ');
+    await clientPool.query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
   }
+}
 
-  if (process.env.TASKS_DATABASE_URL) {
+// Empties every table of each module schema (keeps `_prisma_migrations`).
+export async function cleanDatabase() {
+  await truncateSchema('auth');
+  for (const schema of ['organization', 'billing', 'tasks'] as const) {
     try {
-      const { rows: taskRows } = await getTasksPool().query<{ tablename: string }>(
-        `SELECT tablename FROM pg_tables
-         WHERE schemaname = 'tasks' AND tablename <> '_prisma_migrations'`,
-      );
-      if (taskRows.length > 0) {
-        const tables = taskRows.map(({ tablename }) => `tasks."${tablename}"`).join(', ');
-        await getTasksPool().query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
-      }
+      await truncateSchema(schema);
     } catch {
-      // Ignore if tasks schema/tables not initialized
+      // Ignore if optional module schema/tables are not initialized yet.
     }
   }
 }
 
 export async function closeDatabase() {
-  await Promise.all([pool?.end(), tasksPool?.end()]);
-  pool = undefined;
-  tasksPool = undefined;
+  await Promise.all([...pools.values()].map((p) => p.end()));
+  pools.clear();
 }
