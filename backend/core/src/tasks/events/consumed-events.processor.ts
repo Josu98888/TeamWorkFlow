@@ -13,6 +13,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function isPrismaUniqueError(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    (err as { code?: unknown }).code === 'P2002'
+  );
+}
+
+type PrismaTx = Pick<
+  TasksPrismaService,
+  | 'processedEvent'
+  | 'tenantFeatures'
+  | 'tenantState'
+  | 'taskTemplate'
+  | 'task'
+  | 'media'
+  | 'taskAnswer'
+  | 'formVersion'
+  | 'form'
+>;
+
 @Injectable()
 export class ConsumedEventsProcessor implements OnModuleInit {
   private readonly logger = new Logger(ConsumedEventsProcessor.name);
@@ -50,22 +72,61 @@ export class ConsumedEventsProcessor implements OnModuleInit {
     );
   }
 
+  private async claimEvent(
+    tx: PrismaTx,
+    payload: Record<string, unknown>,
+    tenantId: string,
+  ): Promise<boolean> {
+    const eventId = typeof payload.eventId === 'string' ? payload.eventId : '';
+    if (!eventId) {
+      return true;
+    }
+    const inserted = await tx.processedEvent.createMany({
+      data: [{ eventId, tenantId }],
+      skipDuplicates: true,
+    });
+    return inserted.count > 0;
+  }
+
   async handleShiftStarted(message: ConsumedMessage): Promise<void> {
     if (!isRecord(message.payload) || !message.tenantId) return;
 
+    const tenantId = message.tenantId;
     const payload = message.payload;
+    if (typeof payload.tenantId === 'string' && payload.tenantId !== tenantId) {
+      return;
+    }
+
     const shiftId = typeof payload.shiftId === 'string' ? payload.shiftId : '';
     const siteId = typeof payload.siteId === 'string' ? payload.siteId : '';
     const postId = typeof payload.postId === 'string' ? payload.postId : '';
     const employeeId = typeof payload.employeeId === 'string' ? payload.employeeId : null;
-    const startStr = typeof payload.start === 'string' ? payload.start : (typeof payload.startTime === 'string' ? payload.startTime : '');
-    const endStr = typeof payload.end === 'string' ? payload.end : (typeof payload.endTime === 'string' ? payload.endTime : '');
+    const startStr =
+      typeof payload.startsAt === 'string'
+        ? payload.startsAt
+        : typeof payload.start === 'string'
+          ? payload.start
+          : typeof payload.startTime === 'string'
+            ? payload.startTime
+            : '';
+    const endStr =
+      typeof payload.endsAt === 'string'
+        ? payload.endsAt
+        : typeof payload.end === 'string'
+          ? payload.end
+          : typeof payload.endTime === 'string'
+            ? payload.endTime
+            : '';
 
     if (!shiftId || !siteId || !postId || !startStr || !endStr) {
       return;
     }
 
-    const tenantId = message.tenantId;
+    const shiftStart = new Date(startStr);
+    const shiftEnd = new Date(endStr);
+    if (Number.isNaN(shiftStart.getTime()) || Number.isNaN(shiftEnd.getTime())) {
+      return;
+    }
 
     // Check plan gating & suspension
     const [features, state] = await Promise.all([
@@ -100,125 +161,200 @@ export class ConsumedEventsProcessor implements OnModuleInit {
       return;
     }
 
-    const shiftStart = new Date(startStr);
-    const shiftEnd = new Date(endStr);
+    let createdTasks: Array<{
+      id: string;
+      employeeId: string | null;
+      siteId: string;
+      postId: string;
+      shiftId: string | null;
+      title: string;
+      deadline: Date;
+    }> = [];
 
-    for (const template of templates) {
-      const deadline = calculateTaskDeadline({
-        shiftStart,
-        shiftEnd,
-        deadlineMode: template.deadlineMode,
-        deadlineMinutes: template.deadlineMinutes,
+    try {
+      createdTasks = await this.prisma.$transaction(async (tx) => {
+        const shouldProcess = await this.claimEvent(tx, payload, tenantId);
+        if (!shouldProcess) {
+          return [];
+        }
+
+        const inserted: typeof createdTasks = [];
+        for (const template of templates) {
+          const deadline = calculateTaskDeadline({
+            shiftStart,
+            shiftEnd,
+            deadlineMode: template.deadlineMode,
+            deadlineMinutes: template.deadlineMinutes,
+          });
+
+          const existing = await tx.task.findFirst({
+            where: {
+              tenantId,
+              shiftId,
+              templateId: template.id,
+            },
+          });
+
+          if (!existing) {
+            const created = await tx.task.create({
+              data: {
+                tenantId,
+                kind: 'PER_SHIFT',
+                status: 'PENDING',
+                formVersionId: template.formVersionId,
+                title: template.formVersion.name,
+                deadline,
+                employeeId,
+                siteId,
+                postId,
+                shiftId,
+                templateId: template.id,
+              },
+            });
+            inserted.push(created);
+          }
+        }
+        return inserted;
       });
-
-      // Idempotency: find or create
-      const existing = await this.prisma.task.findFirst({
-        where: {
-          tenantId,
-          shiftId,
-          templateId: template.id,
-        },
-      });
-
-      if (!existing) {
-        const created = await this.prisma.task.create({
-          data: {
-            tenantId,
-            kind: 'PER_SHIFT',
-            status: 'PENDING',
-            formVersionId: template.formVersionId,
-            title: template.formVersion.name,
-            deadline,
-            employeeId,
-            siteId,
-            postId,
-            shiftId,
-            templateId: template.id,
-          },
-        });
-
-        await this.events.publish(tenantId, TASKS_EVENTS.taskAssigned, {
-          tenantId,
-          taskId: created.id,
-          employeeId: created.employeeId,
-          siteId: created.siteId,
-          postId: created.postId,
-          shiftId: created.shiftId,
-          title: created.title,
-          deadline: created.deadline.toISOString(),
-        });
+    } catch (err) {
+      if (isPrismaUniqueError(err)) {
+        this.logger.warn(
+          `Concurrent shift_started duplicate for tenant=${tenantId} shift=${shiftId}; skipping`,
+        );
+        return;
       }
+      throw err;
+    }
+
+    for (const created of createdTasks) {
+      await this.events.publish(tenantId, TASKS_EVENTS.taskAssigned, {
+        tenantId,
+        taskId: created.id,
+        employeeId: created.employeeId,
+        siteId: created.siteId,
+        postId: created.postId,
+        shiftId: created.shiftId,
+        title: created.title,
+        deadline: created.deadline.toISOString(),
+      });
     }
   }
 
   async handleShiftCancelled(message: ConsumedMessage): Promise<void> {
     if (!isRecord(message.payload) || !message.tenantId) return;
 
-    const shiftId = typeof message.payload.shiftId === 'string' ? message.payload.shiftId : '';
+    const tenantId = message.tenantId;
+    const payload = message.payload;
+    if (typeof payload.tenantId === 'string' && payload.tenantId !== tenantId) {
+      return;
+    }
+
+    const shiftId = typeof payload.shiftId === 'string' ? payload.shiftId : '';
     if (!shiftId) return;
 
-    await this.prisma.task.updateMany({
-      where: {
-        tenantId: message.tenantId,
-        shiftId,
-        status: 'PENDING',
-      },
-      data: {
-        status: 'CANCELLED',
-      },
+    await this.prisma.$transaction(async (tx) => {
+      const shouldProcess = await this.claimEvent(tx, payload, tenantId);
+      if (!shouldProcess) return;
+
+      await tx.task.updateMany({
+        where: {
+          tenantId,
+          shiftId,
+          status: 'PENDING',
+        },
+        data: {
+          status: 'CANCELLED',
+        },
+      });
     });
   }
 
   async handleTenantState(message: ConsumedMessage, isSuspended: boolean): Promise<void> {
     if (!message.tenantId) return;
 
-    await this.prisma.tenantState.upsert({
-      where: { tenantId: message.tenantId },
-      create: {
-        tenantId: message.tenantId,
-        isSuspended,
-        updatedAt: new Date(),
-      },
-      update: {
-        isSuspended,
-        updatedAt: new Date(),
-      },
+    const tenantId = message.tenantId;
+    const payload = isRecord(message.payload) ? message.payload : {};
+    if (typeof payload.tenantId === 'string' && payload.tenantId !== tenantId) {
+      return;
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const shouldProcess = await this.claimEvent(tx, payload, tenantId);
+      if (!shouldProcess) return;
+
+      await tx.tenantState.upsert({
+        where: { tenantId },
+        create: {
+          tenantId,
+          isSuspended,
+          updatedAt: new Date(),
+        },
+        update: {
+          isSuspended,
+          updatedAt: new Date(),
+        },
+      });
     });
   }
 
   async handlePlanFeatures(message: ConsumedMessage): Promise<void> {
     if (!isRecord(message.payload) || !message.tenantId) return;
 
+    const tenantId = message.tenantId;
     const payload = message.payload;
-    const effectiveAtStr = typeof payload.effectiveAt === 'string' ? payload.effectiveAt : (typeof payload.occurredAt === 'string' ? payload.occurredAt : '');
-    const effectiveAt = new Date(effectiveAtStr);
-    const features = (payload.features ?? {}) as object;
-
-    const existing = await this.prisma.tenantFeatures.findFirst({
-      where: { tenantId: message.tenantId },
-    });
-
-    if (existing && existing.effectiveAt >= effectiveAt) {
-      return; // Ignore stale event
+    if (typeof payload.tenantId === 'string' && payload.tenantId !== tenantId) {
+      return;
     }
 
-    await this.prisma.tenantFeatures.upsert({
-      where: { tenantId: message.tenantId },
-      create: {
-        tenantId: message.tenantId,
-        features,
-        effectiveAt,
-      },
-      update: {
-        features,
-        effectiveAt,
-      },
+    const effectiveAtStr =
+      typeof payload.effectiveAt === 'string'
+        ? payload.effectiveAt
+        : typeof payload.occurredAt === 'string'
+          ? payload.occurredAt
+          : '';
+    if (!effectiveAtStr) return;
+
+    const effectiveAt = new Date(effectiveAtStr);
+    if (Number.isNaN(effectiveAt.getTime())) {
+      return;
+    }
+
+    const features = (isRecord(payload.features) ? payload.features : {}) as object;
+
+    await this.prisma.$transaction(async (tx) => {
+      const shouldProcess = await this.claimEvent(tx, payload, tenantId);
+      if (!shouldProcess) return;
+
+      const existing = await tx.tenantFeatures.findFirst({
+        where: { tenantId },
+      });
+
+      if (existing && existing.effectiveAt >= effectiveAt) {
+        return; // Ignore stale event
+      }
+
+      await tx.tenantFeatures.upsert({
+        where: { tenantId },
+        create: {
+          tenantId,
+          features,
+          effectiveAt,
+        },
+        update: {
+          features,
+          effectiveAt,
+        },
+      });
     });
   }
 
   async handleDataRetentionExpired(message: ConsumedMessage): Promise<void> {
     if (!message.tenantId) return;
     const tenantId = message.tenantId;
+    const payload = isRecord(message.payload) ? message.payload : {};
+    if (typeof payload.tenantId === 'string' && payload.tenantId !== tenantId) {
+      return;
+    }
 
     // 1. Delete all S3 photos under <tenantId>/ prefix
     await this.storage.deleteObjectsByPrefix(`${tenantId}/`);
@@ -233,9 +369,7 @@ export class ConsumedEventsProcessor implements OnModuleInit {
       await tx.form.deleteMany({ where: { tenantId } });
       await tx.tenantState.deleteMany({ where: { tenantId } });
       await tx.tenantFeatures.deleteMany({ where: { tenantId } });
-      await tx.processedEvent.deleteMany({
-        where: { eventId: { startsWith: tenantId } },
-      });
+      await tx.processedEvent.deleteMany({ where: { tenantId } });
     });
   }
 }

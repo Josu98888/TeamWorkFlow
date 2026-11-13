@@ -32,7 +32,10 @@ describe('ConsumedEventsProcessor', () => {
       taskAnswer: { deleteMany: jest.fn() },
       formVersion: { deleteMany: jest.fn() },
       form: { deleteMany: jest.fn() },
-      processedEvent: { deleteMany: jest.fn() },
+      processedEvent: {
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
+        deleteMany: jest.fn(),
+      },
       $transaction: jest.fn().mockImplementation((fn: (tx: any) => Promise<any>) => fn(mockPrisma)),
     };
     mockEvents = {
@@ -130,5 +133,103 @@ describe('ConsumedEventsProcessor', () => {
 
     expect(mockStorage.deleteObjectsByPrefix).toHaveBeenCalledWith('tenant-1/');
     expect(mockPrisma.$transaction).toHaveBeenCalled();
+    expect(mockPrisma.processedEvent.deleteMany).toHaveBeenCalledWith({
+      where: { tenantId: 'tenant-1' },
+    });
+  });
+
+  it('supports organization startsAt/endsAt contract and records ProcessedEvent', async () => {
+    mockPrisma.tenantFeatures.findFirst.mockResolvedValueOnce({
+      features: { tasks: true },
+    });
+    mockPrisma.tenantState.findFirst.mockResolvedValueOnce(null);
+    mockPrisma.taskTemplate.findMany.mockResolvedValueOnce([
+      {
+        id: 'tpl-1',
+        formVersionId: 'ver-1',
+        deadlineMode: 'AT_SHIFT_END',
+        deadlineMinutes: null,
+        formVersion: { name: 'Cierre de Turno' },
+      },
+    ]);
+    mockPrisma.task.findFirst.mockResolvedValueOnce(null);
+    mockPrisma.task.create.mockResolvedValueOnce({
+      id: 'task-gen-2',
+      employeeId: 'emp-1',
+      siteId: 'site-1',
+      postId: 'post-1',
+      shiftId: 'shift-1',
+      title: 'Cierre de Turno',
+      deadline: new Date('2026-11-12T16:00:00Z'),
+    });
+
+    await processor.handleShiftStarted({
+      subject: 't.tenant-1.organization.shift_started',
+      tenantId: 'tenant-1',
+      payload: {
+        eventId: 'evt-1',
+        tenantId: 'tenant-1',
+        shiftId: 'shift-1',
+        siteId: 'site-1',
+        postId: 'post-1',
+        employeeId: 'emp-1',
+        startsAt: '2026-11-12T08:00:00.000Z',
+        endsAt: '2026-11-12T16:00:00.000Z',
+      },
+    });
+
+    expect(mockPrisma.processedEvent.createMany).toHaveBeenCalledWith({
+      data: [{ eventId: 'evt-1', tenantId: 'tenant-1' }],
+      skipDuplicates: true,
+    });
+    expect(mockPrisma.task.create).toHaveBeenCalledTimes(1);
+    expect(mockEvents.publish).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips duplicate eventId when ProcessedEvent was already recorded', async () => {
+    mockPrisma.tenantFeatures.findFirst.mockResolvedValueOnce({
+      features: { tasks: true },
+    });
+    mockPrisma.tenantState.findFirst.mockResolvedValueOnce(null);
+    mockPrisma.taskTemplate.findMany.mockResolvedValueOnce([
+      {
+        id: 'tpl-1',
+        formVersionId: 'ver-1',
+        deadlineMode: 'AFTER_START',
+        deadlineMinutes: 30,
+        formVersion: { name: 'Ronda' },
+      },
+    ]);
+    mockPrisma.processedEvent.createMany.mockResolvedValueOnce({ count: 0 });
+
+    await processor.handleShiftStarted({
+      subject: 't.tenant-1.organization.shift_started',
+      tenantId: 'tenant-1',
+      payload: {
+        eventId: 'evt-dup',
+        shiftId: 'shift-1',
+        siteId: 'site-1',
+        postId: 'post-1',
+        startsAt: '2026-11-12T08:00:00.000Z',
+        endsAt: '2026-11-12T16:00:00.000Z',
+      },
+    });
+
+    expect(mockPrisma.task.create).not.toHaveBeenCalled();
+    expect(mockEvents.publish).not.toHaveBeenCalled();
+  });
+
+  it('ignores billing plan features events with missing or invalid effectiveAt', async () => {
+    await processor.handlePlanFeatures({
+      subject: 't.tenant-1.billing.plan_changed',
+      tenantId: 'tenant-1',
+      payload: {
+        eventId: 'evt-bad-date',
+        effectiveAt: 'not-a-date',
+        features: { tasks: true },
+      },
+    });
+
+    expect(mockPrisma.tenantFeatures.upsert).not.toHaveBeenCalled();
   });
 });
