@@ -5,14 +5,14 @@ import {
   type ListNotificationsResult,
   type MarkReadInput,
   type MarkReadResult,
-} from '../in-app/in-app-notifications.service';
+} from './in-app/in-app-notifications.service';
 import {
   PushTokensService,
   type NotificationActor,
   type RegisterPushTokenInput,
   type RegisteredDeviceSummary,
   type UnregisterPushTokenInput,
-} from '../push-tokens/push-tokens.service';
+} from './push-tokens/push-tokens.service';
 
 // Public facade of the notifications module (AGENTS § Module Boundaries).
 // Each method mirrors its stable `notifications.<resource>.<action>` contract.
