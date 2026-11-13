@@ -30,7 +30,7 @@ Rows map to the 2-service MVP (`docs/architecture.md`): B1–B4, B6, B7 are modu
 | B3 | core: billing module | `backend/core/src/billing/STEPS.md` | B1, B2 | done | — |
 | B4 | core: organization module | `backend/core/src/organization/STEPS.md` (not created) | B1, B2, B3 | not planned | — |
 | B5 | telemetry (attendance domain) | `backend/telemetry/STEPS.md` (not created) | B4 | not planned | — |
-| B6 | core: tasks module | `backend/core/src/tasks/STEPS.md` (not created) | B4 | not planned | — |
+| B6 | core: tasks module | `backend/core/IMPLEMENTACION DE TAREAS Y NOTIFICACIONES/STEPS_tareas.md` | B4 | done | — |
 | B7 | core: notifications module | `backend/core/src/notifications/STEPS.md` (not created) | B1, B3, B4, B5, B6 | not planned | — |
 
 ### Frontend
