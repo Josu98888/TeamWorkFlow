@@ -48,7 +48,18 @@ services:
       - MINIO_ROOT_USER=minioadmin
       - MINIO_ROOT_PASSWORD=minioadmin
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9002:9000"
+      - "9003:9001"
     tmpfs:
       - /data
+
+  minio-test-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio-test
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until mc alias set local http://minio-test:9000 minioadmin minioadmin; do sleep 1; done
+        mc mb --ignore-existing local/teamworkflow-tasks
