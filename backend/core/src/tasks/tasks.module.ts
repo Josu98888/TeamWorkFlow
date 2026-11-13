@@ -9,6 +9,7 @@ import { TaskTemplatesController } from './http/task-templates.controller';
 import { TasksController } from './http/tasks.controller';
 import { TaskExpirationJob } from './jobs/task-expiration.job';
 import { MediaService } from './media/media.service';
+import { MediaVerificationService } from './media/media-verification.service';
 import { StorageService } from './media/storage.service';
 import { TasksPrismaService } from './prisma/prisma.service';
 import { TaskManagementService } from './task-management/task-management.service';
@@ -29,6 +30,7 @@ import { TasksService } from './tasks.service';
     FormsService,
     TaskTemplatesService,
     MediaService,
+    MediaVerificationService,
     TaskManagementService,
     TasksService,
     ConsumedEventsProcessor,
