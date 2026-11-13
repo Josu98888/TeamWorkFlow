@@ -51,6 +51,10 @@ services:
       - ORGANIZATION_DATABASE_URL=postgresql://organization_svc:${ORGANIZATION_DB_PASSWORD}@postgres:5432/teamworkflow?schema=organization
       - BILLING_DATABASE_URL=postgresql://billing_svc:${BILLING_DB_PASSWORD}@postgres:5432/teamworkflow?schema=billing
       - TASKS_DATABASE_URL=postgresql://tasks_svc:${TASKS_DB_PASSWORD}@postgres:5432/teamworkflow?schema=tasks
+      - NOTIFICATIONS_DATABASE_URL=postgresql://notifications_svc:${NOTIFICATIONS_DB_PASSWORD}@postgres:5432/teamworkflow?schema=notifications
+      - FCM_ENABLED=${FCM_ENABLED:-false}
+      - FCM_PROJECT_ID=${FCM_PROJECT_ID:-}
+      - FCM_CREDENTIALS=${FCM_CREDENTIALS:-}
       - S3_ENDPOINT=http://minio:9000
       - S3_REGION=us-east-1
       - S3_BUCKET=teamworkflow-tasks
