@@ -79,6 +79,19 @@ export function SiteDetailView({ siteId }: { siteId: string }) {
   const postById = new Map(posts.data.items.map((post) => [post.id, post]));
   const allShifts = shifts.data.items;
   const orderedShifts = [...allShifts].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const activePersonnel = allShifts
+    .filter((shift) => shift.status === 'IN_PROGRESS' && shift.employeeId)
+    .map((shift) => {
+      const person = shift.employeeId ? employeeById.get(shift.employeeId) : undefined;
+      return person
+        ? {
+            id: person.id,
+            name: fullName(person),
+            postName: postById.get(shift.postId)?.name,
+          }
+        : null;
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
 
   return (
     <>
@@ -119,12 +132,14 @@ export function SiteDetailView({ siteId }: { siteId: string }) {
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card flush className="overflow-hidden lg:col-span-2">
+      <Card flush className="overflow-hidden lg:col-span-2">
           <SiteMap
             siteName={current.name}
             latitude={current.latitude}
             longitude={current.longitude}
             radiusMeters={current.geofenceRadiusMeters}
+            isActive={current.isActive}
+            activePersonnel={activePersonnel}
           />
         </Card>
 

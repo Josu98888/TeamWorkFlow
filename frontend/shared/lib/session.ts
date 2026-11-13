@@ -76,6 +76,7 @@ export function setSessionFromToken(accessToken: string | undefined): void {
 export function clearSession(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(DEMO_SIM_KEY);
   } catch {
     // ignore
   }
@@ -84,4 +85,35 @@ export function clearSession(): void {
 
 export function useStoredSession(): Session | null {
   return useSyncExternalStore(subscribe, getSnapshot, () => null);
+}
+
+const DEMO_SIM_KEY = 'tw.demo_simulating';
+
+export function isDemoSimulating(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem(DEMO_SIM_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function setDemoRole(role: 'owner' | 'employee'): void {
+  const current = getSnapshot();
+  const next: Session = {
+    userId: current?.userId && current.userId !== '00000000-0000-4000-8000-000000000001' ? current.userId : 'user-1',
+    tenantId: current?.tenantId ?? '00000000-0000-4000-8000-000000000010',
+    role,
+  };
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    if (role === 'employee') {
+      localStorage.setItem(DEMO_SIM_KEY, '1');
+    } else {
+      localStorage.removeItem(DEMO_SIM_KEY);
+    }
+  } catch {
+    // ignore
+  }
+  emit();
 }
