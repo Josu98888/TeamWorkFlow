@@ -191,7 +191,9 @@ model TenantFeatures {
 
 model ProcessedEvent {
   eventId     String   @id @map("event_id")
+  tenantId    String?  @map("tenant_id") @db.Uuid
   processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(3)
 
+  @@index([tenantId])
   @@map("processed_events")
 }
