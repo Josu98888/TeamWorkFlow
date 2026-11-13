@@ -10,6 +10,7 @@ export interface Envs {
   organizationDatabaseUrl: string;
   billingDatabaseUrl: string;
   tasksDatabaseUrl: string;
+  notificationsDatabaseUrl: string;
   s3Endpoint: string;
   s3Region: string;
   s3Bucket: string;
@@ -17,6 +18,9 @@ export interface Envs {
   s3SecretKey: string;
   s3ForcePathStyle: boolean;
   mediaUrlTtlSeconds: number;
+  fcmEnabled: boolean;
+  fcmProjectId?: string;
+  fcmCredentials?: string;
   paymentProvider: 'mercadopago' | 'fake';
   mpAccessToken?: string;
   mpWebhookSecret?: string;
@@ -39,6 +43,7 @@ interface EnvVars {
   ORGANIZATION_DATABASE_URL: string;
   BILLING_DATABASE_URL: string;
   TASKS_DATABASE_URL: string;
+  NOTIFICATIONS_DATABASE_URL: string;
   S3_ENDPOINT: string;
   S3_REGION: string;
   S3_BUCKET: string;
@@ -46,6 +51,9 @@ interface EnvVars {
   S3_SECRET_KEY: string;
   S3_FORCE_PATH_STYLE: boolean;
   MEDIA_URL_TTL_SECONDS: number;
+  FCM_ENABLED: boolean;
+  FCM_PROJECT_ID?: string;
+  FCM_CREDENTIALS?: string;
   PAYMENT_PROVIDER: 'mercadopago' | 'fake';
   MP_ACCESS_TOKEN?: string;
   MP_WEBHOOK_SECRET?: string;
@@ -81,6 +89,10 @@ const envsSchema = joi
       .string()
       .uri({ scheme: ['postgresql', 'postgres'] })
       .required(),
+    NOTIFICATIONS_DATABASE_URL: joi
+      .string()
+      .uri({ scheme: ['postgresql', 'postgres'] })
+      .required(),
     S3_ENDPOINT: joi.string().uri().default('http://localhost:9000'),
     S3_REGION: joi.string().default('us-east-1'),
     S3_BUCKET: joi.string().default('teamworkflow-tasks'),
@@ -88,6 +100,17 @@ const envsSchema = joi
     S3_SECRET_KEY: joi.string().default('minioadmin'),
     S3_FORCE_PATH_STYLE: joi.boolean().default(true),
     MEDIA_URL_TTL_SECONDS: joi.number().integer().positive().default(300),
+    FCM_ENABLED: joi.boolean().default(false),
+    FCM_PROJECT_ID: joi.string().when('FCM_ENABLED', {
+      is: true,
+      then: joi.required(),
+      otherwise: joi.optional().allow(''),
+    }),
+    FCM_CREDENTIALS: joi.string().when('FCM_ENABLED', {
+      is: true,
+      then: joi.required(),
+      otherwise: joi.optional().allow(''),
+    }),
     PAYMENT_PROVIDER: joi
       .string()
       .valid('mercadopago', 'fake')
@@ -142,6 +165,7 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
     organizationDatabaseUrl: envVars.ORGANIZATION_DATABASE_URL,
     billingDatabaseUrl: envVars.BILLING_DATABASE_URL,
     tasksDatabaseUrl: envVars.TASKS_DATABASE_URL,
+    notificationsDatabaseUrl: envVars.NOTIFICATIONS_DATABASE_URL,
     s3Endpoint: envVars.S3_ENDPOINT,
     s3Region: envVars.S3_REGION,
     s3Bucket: envVars.S3_BUCKET,
@@ -149,6 +173,9 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
     s3SecretKey: envVars.S3_SECRET_KEY,
     s3ForcePathStyle: envVars.S3_FORCE_PATH_STYLE,
     mediaUrlTtlSeconds: envVars.MEDIA_URL_TTL_SECONDS,
+    fcmEnabled: envVars.FCM_ENABLED,
+    fcmProjectId: envVars.FCM_PROJECT_ID || undefined,
+    fcmCredentials: envVars.FCM_CREDENTIALS || undefined,
     paymentProvider: envVars.PAYMENT_PROVIDER,
     mpAccessToken: envVars.MP_ACCESS_TOKEN,
     mpWebhookSecret: envVars.MP_WEBHOOK_SECRET,
