@@ -31,7 +31,7 @@ Rows map to the 2-service MVP (`docs/architecture.md`): B1–B4, B6, B7 are modu
 | B4 | core: organization module | `backend/core/src/organization/STEPS.md` (not created) | B1, B2, B3 | not planned | — |
 | B5 | telemetry (attendance domain) | `backend/telemetry/STEPS.md` (not created) | B4 | not planned | — |
 | B6 | core: tasks module | `backend/core/IMPLEMENTACION DE TAREAS Y NOTIFICACIONES/STEPS_tareas.md` | B4 | blocked | blocked on host Docker for migrate status/deploy, compose config, and tasks.e2e-spec (unit/lint/build verified) |
-| B7 | core: notifications module | `backend/core/src/notifications/STEPS.md` (not created) | B1, B3, B4, B5, B6 | not planned | — |
+| B7 | core: notifications module | `backend/core/IMPLEMENTACION DE TAREAS Y NOTIFICACIONES/STEPS_notificaciones.md` | B1, B3, B4, B5, B6 | blocked | run Docker Compose/migrate/E2E on host with Docker (S0.2, S2.1, S2.4, S11.1, S11.2, S12.2; unit/lint/build verified) |
 
 ### Frontend
 

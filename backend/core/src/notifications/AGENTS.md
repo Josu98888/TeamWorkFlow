@@ -23,6 +23,18 @@ Out of scope (do NOT implement here):
 - User, role and site data: owned by `auth` and `organization`. This module never reads their tables.
 - User notification preferences, quiet hours, digests, complex backoff or dead-letter processing. Future work; ask before adding.
 
+### Current status
+
+The `notifications` module is implemented in `backend/core/src/notifications/` (`NotificationsModule`) and registered in `AppModule`:
+
+- **Events & JetStream (`src/notifications/events/`):** `NotificationsEventsService` ensures the `NOTIFICATIONS_EVENTS` stream (`t.*.notifications.>`) and manages durable consumers (`notifications-generic`, `notifications-telemetry`, `notifications-tasks`, `notifications-auth`, `notifications-billing`).
+- **Data access (`src/notifications/prisma/`):** Prisma 7 (`NotificationsPrismaService`, `NotificationsPrismaModule`) with offline-generated `20261112234500_init_notifications/migration.sql` validated via `prisma validate` (`migrate deploy`/`status` live execution pending host Docker PostgreSQL).
+- **Templates (`src/notifications/templates/template-registry.ts`):** Spanish (`es`) templates for all 7 domain and billing templates with safe fallback and null-on-unknown handling.
+- **Push Tokens & In-App (`push-tokens/`, `in-app/`):** Device token registration/reassignment/unregistration without token disclosure; paginated in-app list, unread count, and single/`all` mark-read with strict `(tenantId, userId)` isolation.
+- **Delivery & Retries (`delivery/`, `jobs/`, `providers/`):** Transactional staging (`IN_APP` `SENT` + `PUSH` `PENDING`), post-commit `FcmProvider` dispatch (`FakeFcmProviderService` when `FCM_ENABLED=false`, `FirebaseAdminProviderService` when `FCM_ENABLED=true`), immediate token deactivation on unregistered errors, and `@Cron` `DeliveryRetryJob` (max 3 attempts, skipping suspended tenants).
+- **Routing & Lifecycle (`routing/consumed-events.processor.ts`):** Handles `notifications.send` (with `billing_*` exception during suspension and `owner`/`admin` resolution when `recipientUserIds` is empty), `attendance.alert_opened` (`features.alerts` + `AuthService.listRecipients`), `tasks.task_assigned` (`OrganizationService.getEmployeeForTenant`), tenant state/plan feature sync, and `billing.data_retention_expired` full purge.
+- **HTTP & E2E (`http/`, `notifications.service.ts`, `test/e2e/notifications.e2e-spec.ts`):** `PushTokensController` and `NotificationsController` under `NotificationsService` facade; E2E suite authored and linted/typechecked cleanly (live execution blocked on host Docker).
+
 ## Business Rules
 
 ### Channels
