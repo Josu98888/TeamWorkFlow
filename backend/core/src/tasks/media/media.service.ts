@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import {
   MediaNotFoundException,
-  MediaNotUploadedException,
   MediaTooLargeException,
   MediaTypeNotAllowedException,
 } from '../../common/exceptions/app.exceptions';
@@ -114,37 +113,4 @@ export class MediaService {
     };
   }
 
-  async verifyMediaForAnswer(
-    tenantId: string,
-    userId: string,
-    mediaId: string,
-  ): Promise<void> {
-    const media = await this.prisma.media.findFirst({
-      where: {
-        id: mediaId,
-        tenantId,
-        uploadedByUserId: userId,
-      },
-    });
-
-    if (!media) {
-      throw new MediaNotUploadedException();
-    }
-
-    const existsAndMatches = await this.storage.checkObjectExistsAndSize(
-      media.storageKey,
-      media.sizeBytes,
-    );
-
-    if (!existsAndMatches) {
-      throw new MediaNotUploadedException();
-    }
-
-    if (media.status !== 'UPLOADED') {
-      await this.prisma.media.update({
-        where: { id: mediaId },
-        data: { status: 'UPLOADED' },
-      });
-    }
-  }
 }

@@ -9,7 +9,6 @@ jest.mock('../prisma/generated/client', () => ({ PrismaClient: class {} }));
 
 import {
   MediaNotFoundException,
-  MediaNotUploadedException,
   MediaTooLargeException,
   MediaTypeNotAllowedException,
 } from '../../common/exceptions/app.exceptions';
@@ -114,38 +113,5 @@ describe('MediaService', () => {
 
     const res = await service.getUrl(actor, 'm1');
     expect(res.url).toBe('https://s3.example.com/get');
-  });
-
-  it('verifies media for task answer and updates status to UPLOADED', async () => {
-    mockPrisma.media.findFirst.mockResolvedValueOnce({
-      id: 'm1',
-      tenantId: 'tenant-1',
-      storageKey: 'tenant-1/m1.jpg',
-      sizeBytes: 2048,
-      status: 'PENDING',
-    });
-
-    await service.verifyMediaForAnswer('tenant-1', 'user-1', 'm1');
-
-    expect(mockStorage.checkObjectExistsAndSize).toHaveBeenCalledWith('tenant-1/m1.jpg', 2048);
-    expect(mockPrisma.media.update).toHaveBeenCalledWith({
-      where: { id: 'm1' },
-      data: { status: 'UPLOADED' },
-    });
-  });
-
-  it('fails verification if S3 object does not exist or size differs', async () => {
-    mockPrisma.media.findFirst.mockResolvedValueOnce({
-      id: 'm1',
-      tenantId: 'tenant-1',
-      storageKey: 'tenant-1/m1.jpg',
-      sizeBytes: 2048,
-      status: 'PENDING',
-    });
-    mockStorage.checkObjectExistsAndSize.mockResolvedValueOnce(false);
-
-    await expect(
-      service.verifyMediaForAnswer('tenant-1', 'user-1', 'm1'),
-    ).rejects.toThrow(MediaNotUploadedException);
   });
 });
