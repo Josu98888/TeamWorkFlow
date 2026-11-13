@@ -3,8 +3,10 @@ fetchTimeout: 300000
 fetchRetries: 5
 
 allowBuilds:
+  '@firebase/util': false
   '@parcel/watcher': false
   '@prisma/engines': true
   argon2: false
   prisma: true
+  protobufjs: false
   unrs-resolver: false
