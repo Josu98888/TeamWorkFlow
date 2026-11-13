@@ -14,6 +14,8 @@ export const TEST_ENV = {
   ORGANIZATION_DATABASE_URL: `postgresql://organization_svc:test@localhost:${TEST_DB_PORT}/teamworkflow?schema=organization`,
   BILLING_DATABASE_URL: `postgresql://billing_svc:test@localhost:${TEST_DB_PORT}/teamworkflow?schema=billing`,
   TASKS_DATABASE_URL: `postgresql://tasks_svc:test@localhost:${TEST_DB_PORT}/teamworkflow?schema=tasks`,
+  NOTIFICATIONS_DATABASE_URL: `postgresql://notifications_svc:test@localhost:${TEST_DB_PORT}/teamworkflow?schema=notifications`,
+  FCM_ENABLED: 'false',
   S3_ENDPOINT: `http://localhost:${TEST_MINIO_PORT}`,
   S3_REGION: 'us-east-1',
   S3_BUCKET: 'teamworkflow-tasks',

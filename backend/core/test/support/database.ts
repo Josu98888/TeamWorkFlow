@@ -8,6 +8,7 @@ const SCHEMA_ENV_KEYS = {
   organization: 'ORGANIZATION_DATABASE_URL',
   billing: 'BILLING_DATABASE_URL',
   tasks: 'TASKS_DATABASE_URL',
+  notifications: 'NOTIFICATIONS_DATABASE_URL',
 } as const;
 
 type SchemaName = keyof typeof SCHEMA_ENV_KEYS;
@@ -49,6 +50,10 @@ export function tasksDb() {
   return getSchemaPool('tasks');
 }
 
+export function notificationsDb() {
+  return getSchemaPool('notifications');
+}
+
 async function truncateSchema(schema: SchemaName) {
   if (!process.env[SCHEMA_ENV_KEYS[schema]]) {
     return;
@@ -70,7 +75,12 @@ async function truncateSchema(schema: SchemaName) {
 // Empties every table of each module schema (keeps `_prisma_migrations`).
 export async function cleanDatabase() {
   await truncateSchema('auth');
-  for (const schema of ['organization', 'billing', 'tasks'] as const) {
+  for (const schema of [
+    'organization',
+    'billing',
+    'tasks',
+    'notifications',
+  ] as const) {
     try {
       await truncateSchema(schema);
     } catch {

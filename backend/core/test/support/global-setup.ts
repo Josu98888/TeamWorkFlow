@@ -51,6 +51,7 @@ export default async function globalSetup() {
     'prisma.organization.config.ts',
     'prisma.billing.config.ts',
     'prisma.tasks.config.ts',
+    'prisma.notifications.config.ts',
   ]) {
     execFileSync(
       process.execPath,
