@@ -860,7 +860,7 @@ export class SiteFiltersDto extends PaginationDto {
 | Info disclosure | Generic error messages; no stack traces; Prisma errors translated; never log tokens, cookies or `Authorization` headers |
 | Passwords | Hash with argon2 (used by the `auth` module); never store or log plain text |
 | NATS | Never exposed to the internet. Only `core` and `telemetry` are published, behind one reverse proxy. Do not publish `4222`/`8222` beyond local development; use credentials/TLS when deployed (ask) |
-| CORS / cookies / CSRF | `core` allows only `WEB_ORIGIN` with credentials; httpOnly cookies and CSRF for web, bearer for mobile (rules in `backend/core/AGENTS.md`) |
+| CORS / cookies / CSRF | `core` has no CORS (same origin through the proxy); `telemetry` allows only `WEB_ORIGIN` with credentials; httpOnly cookies and CSRF for web, bearer for mobile (rules in `backend/core/AGENTS.md`) |
 
 ### Auth
 

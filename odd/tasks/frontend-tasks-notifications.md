@@ -18,7 +18,7 @@ Connect the frontend Tasks screen to the real `core` tasks API, add in-app notif
 - Follow `teamworkflow-frontend`, `teamworkflow-nextjs`, `teamworkflow-react`, `teamworkflow-tailwind`, `teamworkflow-typescript` skills.
 - Same pattern as `features/organization` and `features/billing` (`api.ts` switch, `http.ts` via `shared/lib/http.ts` `apiFetch`, `mock.ts`, `types.ts` mirroring backend DTOs).
 - UI copy in Spanish (existing project convention), code and comments in English.
-- No backend changes. `WEB_ORIGIN` is not read by any backend code (only `docker-compose.yml:91`); document it, do not implement CORS.
+- No backend code changes. `WEB_ORIGIN` is read only by `telemetry` (CORS and Socket.IO origin, `backend/telemetry/src/config/env.schema.ts`); `core` never read it and has no CORS, so it was removed from the `core` docs (user request 2026-11-16) and kept for `telemetry`.
 
 ## TDD
 

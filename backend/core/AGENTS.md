@@ -111,7 +111,8 @@ Rules inherited from the former gateway design. They apply to every route of eve
 
 ### CORS
 
-- Target (not implemented in `core` yet; `WEB_ORIGIN` is declared here and in `docker-compose.yml` but no `core` code reads it): allow only the origin in `WEB_ORIGIN`, with `credentials: true`, explicit allowed methods and headers (including `X-CSRF-Token`). Never use `*` together with credentials. Mobile apps are not subject to browser CORS.
+- Not enabled in `core`, and `core` has no `WEB_ORIGIN` variable: the web reaches `core` from the same origin through the reverse proxy, so no CORS is needed. (`WEB_ORIGIN` belongs to `telemetry`, which uses it for CORS and the Socket.IO origin.)
+- If `core` ever serves a cross-origin web client: add the allowed origin to `src/config/envs.ts`, allow only that origin with `credentials: true` and explicit methods and headers (including `X-CSRF-Token`). Never use `*` together with credentials. Mobile apps are not subject to browser CORS.
 
 ### Role checks
 
@@ -263,7 +264,6 @@ Shared by `core` (each module adds its own, listed in its `AGENTS.md`; final nam
 |----------|-------------|
 | `PORT` | HTTP port |
 | `NATS_SERVER` | Comma-separated NATS URLs |
-| `WEB_ORIGIN` | Allowed web origin for CORS (credentials enabled). Not read by `core` code yet (CORS is not enabled); only `telemetry` uses it |
 | `COOKIE_SECURE` | `true` in production; if absent, derive from `NODE_ENV` (`true` unless `development`) |
 | `RATE_LIMIT_PUBLIC_TTL_MS` / `RATE_LIMIT_PUBLIC_LIMIT` | Public routes per IP. Initial values: `60000` / `30` |
 | `RATE_LIMIT_AUTH_TTL_MS` / `RATE_LIMIT_AUTH_LIMIT` | Authenticated routes per user. Initial values: `60000` / `300` |
@@ -275,7 +275,7 @@ All defaults are initial values to tune with real traffic. Validate every variab
 1. The actor comes only from `auth.token.verify`. Never from body, query, path or headers.
 2. Never log passwords, tokens, cookies, `Authorization` headers, raw webhook bodies or full login/register payloads.
 3. Auth cookies are `httpOnly`, `Secure` (outside local development) and `SameSite`; state-changing cookie requests need CSRF.
-4. CORS allows only `WEB_ORIGIN`; never `*` with credentials.
+4. CORS stays disabled (same origin through the proxy); if it is ever enabled, never `*` with credentials.
 5. Never expose `auth.user.list-recipients` or any internal-only operation.
 6. Never trust the webhook: hand it raw to `billing` and let it validate.
 7. Never put a tenant in a NATS subject for requests; the tenant travels in the actor payload.
@@ -289,7 +289,6 @@ All defaults are initial values to tune with real traffic. Validate every variab
   - Guard: no token, invalid token, valid token builds the actor only from the verify result (a body/header `tenantId` is ignored).
   - Cookie path vs bearer path; mobile refresh through the body; cookies set on login/refresh/accept and cleared on logout.
   - CSRF: cookie request without or with a wrong token is rejected; bearer request skips CSRF; webhook is exempt.
-  - CORS: only `WEB_ORIGIN` allowed.
   - Role decorators: `billing.admin.*` rejects every role but `platform_admin`; `platform_admin` is refused on tenant routes.
   - Plan gating: missing or `null` feature answers 403 `feature_not_in_plan` for `tasks` routes.
   - Tenant status: `suspended` and `cancelled` allow only the billing routes for owner/admin (with the `cancelled` extras) and answer 403 `tenant_suspended` / `tenant_cancelled` elsewhere; `past_due` is unrestricted.
