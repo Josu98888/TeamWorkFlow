@@ -31,8 +31,8 @@ A reverse proxy publishes both under one origin. Verify against the real files b
 
 | Piece | State |
 |-------|-------|
-| `backend/core` | Real code since T6: scaffold, `src/common` (errors, pipe, filters), `src/http` (global `AuthGuard`, `@Public()`, `@CurrentActor()`), `src/auth` (HTTP controllers, services, Prisma, JetStream events, `auth.token.verify` responder, platform admin seed) and `test/e2e`. The other four modules (`organization`, `tasks`, `notifications`, `billing`) are docs only (`src/<module>/AGENTS.md`). It replaced the legacy `backend/gateway` and `backend/auth` apps, removed in T7 |
-| `backend/telemetry` | Docs only (`AGENTS.md`, `README.md`). No code, no `package.json`, no Prisma |
+| `backend/core` | Real code since T6: scaffold, `src/common` (errors, pipe, filters), `src/http` (global `AuthGuard`, `@Public()`, `@CurrentActor()`), `src/auth` (HTTP controllers, services, Prisma, JetStream events, `auth.token.verify` responder, platform admin seed) and `test/e2e`. The other four modules (`organization`, `tasks`, `notifications`, `billing`) are implemented too (design docs in `src/<module>/AGENTS.md`); their Docker e2e verification is pending. It replaced the legacy `backend/gateway` and `backend/auth` apps, removed in T7 |
+| `backend/telemetry` | Real code: `src/` with `clock-ins`, `workdays`, `alerts`, `tower`, `consumers`, `nats`, `prisma`, plus `AGENTS.md`, `README.md`, `STEPS.md` and `test/` |
 | Tooling | pnpm per app (no root workspace), TypeScript, Jest (+ ts-jest), supertest, oxlint (`--type-aware`), prettier |
 | `backend/docker-compose.yml` | `nats-server` (4222, 8222), `postgres` and `core` (3000, built from `backend/core`, hot reload, `JWT_SECRET` required from `backend/.env`). Migrations do not run on start: `docker compose exec core pnpm prisma:auth:migrate:deploy`. `telemetry` is added when it exists |
 
@@ -594,7 +594,7 @@ export class HttpErrorFilter implements ExceptionFilter {
 }
 ```
 
-- Telemetry guidance (its filter in `telemetry/src/http/filters/`, not built yet): add a `TimeoutError` (rxjs) branch answering 504 `{ detail: "Service timeout", code: "upstream_timeout" }`, and map an `RpcException` coming back from `core` (`{ status, code, message, errors? }`) to the same `{ detail, code }` body.
+- Telemetry guidance (`telemetry/src/http` has guards and decorators but no `filters/` folder yet, so this is a target, not current behavior): add a `TimeoutError` (rxjs) branch answering 504 `{ detail: "Service timeout", code: "upstream_timeout" }`, and map an `RpcException` coming back from `core` (`{ status, code, message, errors? }`) to the same `{ detail, code }` body.
 - When the NATS server or `core` is unreachable (telemetry side), the error arrives as an `Empty response` / connection message, not an `RpcException` with `status`. Map it to 503 `upstream_unavailable` with its own branch (verify the real error text first).
 - In `core`, `configureApp` registers the global pipe and filter; do not repeat `app.useGlobalFilters(...)` in `main.ts`.
 - Codes owned by the HTTP layer (`feature_not_in_plan`, `rate_limited`, `csrf_invalid`, `invalid_token`, `tenant_suspended`, `tenant_cancelled`) are listed in `backend/core/AGENTS.md` and `backend/telemetry/AGENTS.md`.
