@@ -1,3 +1,5 @@
+import { USE_MOCKS } from '@/shared/lib/config';
+import { tasksHttpApi } from './http';
 import { tasksMockApi } from './mock';
 import type { ListTasksQuery, Task, TaskReport } from './types';
 
@@ -6,6 +8,5 @@ export type TasksApi = {
   getTaskReport: () => Promise<TaskReport>;
 };
 
-// TODO(tasks): the `tasks` module has no HTTP controllers yet. When it does, add `http.ts` and
-// switch on `USE_MOCKS` like `organization` and `telemetry` do. Until then it is always mocked.
-export const tasksApi: TasksApi = tasksMockApi;
+// The only mock/real switch of this domain (see `shared/lib/config.ts`).
+export const tasksApi: TasksApi = USE_MOCKS ? tasksMockApi : tasksHttpApi;

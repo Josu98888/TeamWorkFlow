@@ -89,7 +89,10 @@ export function can(role: string | null | undefined, capability: Capability): bo
   return isRole(role) && CAPABILITY_ROLES[capability].includes(role);
 }
 
-/** Route prefix -> capability required to open it. A route without a rule is open to any signed-in user. */
+/**
+ * Route prefix -> capability required to open it. A route without a rule is open to any signed-in user
+ * (e.g. `/notificaciones`: core `notifications` serves every role, scoped to the actor's own inbox).
+ */
 export const ROUTE_RULES: readonly { path: string; exact?: boolean; capability: Capability }[] = [
   { path: '/', exact: true, capability: 'dashboard.view' },
   { path: '/torre-control', capability: 'tower.view' },

@@ -2,7 +2,7 @@
 
 > Follow `/STEPS.rules.md`. This file is the ONLY place the order is written. Domain `STEPS.md` files reference it, never copy it.
 
-**Next action:** continue B1 auth module (`backend/core/src/auth/STEPS.md`, next S8.1; S9.1 and S9.2 blocked on the HTTP layer and producers). Architecture change in progress: MVP is 2 services (`core`, `telemetry`), see `docs/architecture.md` and `odd/tasks/two-service-architecture.md`.
+**Next action:** close the open B1 auth steps (`backend/core/src/auth/STEPS.md`: S8.1, S10.3, S11; S9.1 and S9.2 are still marked blocked there), then run the pending Docker verification of B6 and B7 (migrate, compose config, e2e) and the end-of-project tests and CI/CD. The MVP is 2 services (`core`, `telemetry`), see `docs/architecture.md`.
 
 ## 1. How an agent uses this file
 
@@ -20,26 +20,26 @@ Status values: `not planned` (no `STEPS.md` yet) · `planned` (`STEPS.md` writte
 
 ### Backend
 
-Rows map to the 2-service MVP (`docs/architecture.md`): B1–B4, B6, B7 are modules of `backend/core`, B2 is the HTTP layer of `core` (the former gateway), B5 is the `telemetry` service. STEPS file paths are the target ones (next to the module code, per the 2026-10-24 decision). Only `backend/core/src/auth/STEPS.md` exists today; the others are "not created" and are written when the row starts. B1 and B2 describe code that today still lives in `backend/auth` and `backend/gateway` until task T6 of `odd/tasks/two-service-architecture.md` moves it into `backend/core`.
+Rows map to the 2-service MVP (`docs/architecture.md`): B1–B4, B6, B7 are modules of `backend/core`, B2 is the HTTP layer of `core` (the former gateway), B5 is the `telemetry` service. STEPS file paths are the target ones (next to the module code, per the 2026-10-24 decision). `STEPS.md` exists for B0, B1, B3, B5, B6 and B7; B2 and B4 were built without one. The legacy `backend/auth` and `backend/gateway` apps were merged into `backend/core` (tasks T6 and T7 of `odd/tasks/two-service-architecture.md`).
 
 | # | Domain | STEPS file | Depends on | Status | Next |
 |---|--------|-----------|------------|--------|------|
 | B0 | backend foundation | `backend/STEPS.md` | — | done | — |
 | B1 | core: auth module | `backend/core/src/auth/STEPS.md` | B0 | in progress | S8.1 (S9.1, S9.2 blocked; S10.3, S11 pending) |
-| B2 | core: HTTP layer (former gateway) | `backend/core/src/http/STEPS.md` (not created) | B1 | not planned | — |
+| B2 | core: HTTP layer (former gateway) | no `STEPS.md` (never written) | B1 | done | Implemented in `backend/core/src/http/` and the module controllers |
 | B3 | core: billing module | `backend/core/src/billing/STEPS.md` | B1, B2 | done | — |
-| B4 | core: organization module | `backend/core/src/organization/STEPS.md` (not created) | B1, B2, B3 | not planned | — |
-| B5 | telemetry (attendance domain) | `backend/telemetry/STEPS.md` (not created) | B4 | not planned | — |
-| B6 | core: tasks module | `backend/core/IMPLEMENTACION DE TAREAS Y NOTIFICACIONES/STEPS_tareas.md` | B4 | blocked | blocked on host Docker for migrate status/deploy, compose config, and tasks.e2e-spec (unit/lint/build verified) |
-| B7 | core: notifications module | `backend/core/IMPLEMENTACION DE TAREAS Y NOTIFICACIONES/STEPS_notificaciones.md` | B1, B3, B4, B5, B6 | blocked | run Docker Compose/migrate/E2E on host with Docker (S0.2, S2.1, S2.4, S11.1, S11.2, S12.2; unit/lint/build verified) |
+| B4 | core: organization module | no `STEPS.md` (never written) | B1, B2, B3 | done | Implemented in `backend/core/src/organization/` (sites, employees, shifts) |
+| B5 | telemetry (attendance domain) | `backend/telemetry/STEPS.md` | B4 | done | — |
+| B6 | core: tasks module | `backend/core/IMPLEMENTACION DE TAREAS Y NOTIFICACIONES/STEPS_tareas.md` | B4 | in progress | implemented; unit/lint/build verified; Docker verification pending (migrate status/deploy, compose config, `tasks.e2e-spec`) |
+| B7 | core: notifications module | `backend/core/IMPLEMENTACION DE TAREAS Y NOTIFICACIONES/STEPS_notificaciones.md` | B1, B3, B4, B5, B6 | in progress | implemented; unit/lint/build verified; Docker Compose/migrate/e2e pending (S0.2, S2.1, S2.4, S11.1, S11.2, S12.2) |
 
 ### Frontend
 
 | # | Domain | STEPS file | Depends on | Status | Next |
 |---|--------|-----------|------------|--------|------|
-| F0 | frontend template | `frontend/STEPS.template.md` | — | not planned | Write it (commands, phases, step shapes) |
-| F1 | frontend foundation | `frontend/shared/STEPS.md` | F0, B2 | not planned | — |
-| F2… | frontend domains | `frontend/domains/<domain>/STEPS.md` | F1 + the backend rows that own its contract | not planned | TODO(frontend) list the domains |
+| F0 | frontend template | `frontend/STEPS.template.md` (not created) | — | not planned | Superseded: frontend work is tracked in `odd/tasks/*.md` feature documents |
+| F1 | frontend foundation | no `STEPS.md` (see `odd/tasks/frontend-full-integration.md`) | F0, B2 | done | Cookie auth, shared http client, mock/real switch, role-based access |
+| F2… | frontend domains | no `STEPS.md` (see `odd/tasks/frontend-full-integration.md`, `odd/tasks/frontend-tasks-notifications.md`) | F1 + the backend rows that own its contract | done | Every screen is integrated (auth, organization, attendance, tower, users, billing, tasks, notifications); tests and CI pending |
 
 A frontend domain never starts before the backend rows that own its endpoints are `done` (rules §8: the backend owns the contract).
 
@@ -70,7 +70,7 @@ Declared scopes for `TODO(<scope>)` / `DEFAULT(<scope>)` that are not a single d
 
 Open:
 
-- `TODO(frontend)` List of frontend domains for rows F2….
+- `TODO(frontend)` Decide whether the frontend domains get `STEPS.md` files or stay tracked in `odd/tasks/*.md`.
 
 Answered decisions move to the **Decisions** section of the file that owns them (`backend/STEPS.md`, `frontend/shared/STEPS.md`) and are removed from this list.
 

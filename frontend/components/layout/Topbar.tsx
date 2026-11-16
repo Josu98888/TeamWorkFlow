@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
+import { NotificationBell } from '@/features/notifications';
 import { useLogout, useSession } from '@/shared/hooks/useSession';
 import { USE_MOCKS } from '@/shared/lib/config';
 import { isDemoSimulating, setDemoRole } from '@/shared/lib/session';
@@ -131,6 +132,8 @@ export function Topbar() {
             <span className="h-4 w-px" style={{ backgroundColor: 'var(--border-main)' }} aria-hidden="true" />
           </>
         )}
+
+        <NotificationBell />
 
         <button
           onClick={toggleTheme}

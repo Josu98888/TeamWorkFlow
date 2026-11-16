@@ -10,7 +10,7 @@ The other backend service is `telemetry` (`backend/telemetry/AGENTS.md`): the wh
 
 ### Current status (READ FIRST)
 
-`backend/core` has the scaffold (T6.1), the domain errors, filters and validation pipe (T6.2), the `auth` data layer (T6.3) and, since T6.4a, the `auth` HTTP routes (`POST /api/v1/auth/register|login|refresh|logout`; since T6.4b also the invitations, users and password-reset routes of the route map below), the global `AuthGuard` (`src/http/guards/auth.guard.ts`: in-process `auth.token.verify`, `Authorization: Bearer` only) with `@Public()` and `@CurrentActor()` (`src/http/decorators/`), and a hybrid `main.ts` (HTTP plus a NATS microservice) with the `auth.token.verify` responder (`src/auth/auth-token.responder.ts`). Task T6 of `odd/tasks/two-service-architecture.md` merged `backend/gateway` and `backend/auth` into it ([src/auth/STEPS.md](src/auth/STEPS.md) holds the auth steps) and task T7 removed those legacy apps and switched `backend/docker-compose.yml` to the `core` service. Since T6.5 the `auth` event consumers (JetStream durable consumers `auth-organization` and `auth-billing`), the tenant handlers and the platform admin seed (`pnpm seed:platform-admin`) live in `src/auth/` too. Still missing: cookies, CSRF, CORS, the `@Roles` decorator (the owner/admin rules of the auth routes are enforced today by the auth services, which answer 403 `forbidden`), plan gating and rate limiting. Since T6.6 the e2e suite (`test/e2e/`, supertest over the real `AppModule` plus a NATS client for the `auth.token.verify` responder) runs against the isolated test stack; it was written without Docker and has not run yet (see Tests). The `organization` module has its scaffold (module, Prisma schema and migration, patterns, `ORGANIZATION_EVENTS` stream) and the `sites` sub-module (site and post routes) and the `employees` sub-module (employee routes and the `auth.user_created` consumer) and the `shifts` sub-module (shift routes, `shift_created|updated|cancelled` events) and the shift lifecycle job (`@nestjs/schedule`, `ScheduleModule.forRoot()` in `AppModule`; `shift_starting|started|ended` events); shift templates are not built yet. The other modules (`tasks`, `notifications`, `billing`) are documented but not built. Everything below is the target design; check what exists before importing or assuming.
+`backend/core` has the scaffold (T6.1), the domain errors, filters and validation pipe (T6.2), the `auth` data layer (T6.3) and, since T6.4a, the `auth` HTTP routes (`POST /api/v1/auth/register|login|refresh|logout`; since T6.4b also the invitations, users and password-reset routes of the route map below), the global `AuthGuard` (`src/http/guards/auth.guard.ts`: in-process `auth.token.verify`; `Authorization: Bearer` or the `access_token` cookie with the CSRF check) with `@Public()` and `@CurrentActor()` (`src/http/decorators/`), and a hybrid `main.ts` (HTTP plus a NATS microservice) with the `auth.token.verify` responder (`src/auth/auth-token.responder.ts`). Task T6 of `odd/tasks/two-service-architecture.md` merged `backend/gateway` and `backend/auth` into it ([src/auth/STEPS.md](src/auth/STEPS.md) holds the auth steps) and task T7 removed those legacy apps and switched `backend/docker-compose.yml` to the `core` service. Since T6.5 the `auth` event consumers (JetStream durable consumers `auth-organization` and `auth-billing`), the tenant handlers and the platform admin seed (`pnpm seed:platform-admin`) live in `src/auth/` too. Cookie auth and CSRF are implemented (`src/http/guards/auth.guard.ts`, `src/auth/auth.controller.ts`) and plan gating exists as `@RequiresFeature` (`src/http/decorators/`). Still missing: CORS (`main.ts` never calls `enableCors`; `WEB_ORIGIN` is not read by any code in `backend/core`, it is only passed to the `telemetry` service in `backend/docker-compose.yml`, where `backend/telemetry/src/main.ts` uses it), the `@Roles` decorator (role checks are inline in the controllers and services, which answer 403 `forbidden`) and rate limiting. The web app works without CORS because `frontend/next.config.ts` rewrites `/api/v1` to the reverse proxy, so the browser sees one origin. Since T6.6 the e2e suite (`test/e2e/`, supertest over the real `AppModule` plus a NATS client for the `auth.token.verify` responder) runs against the isolated test stack; it was written without Docker and has not run yet (see Tests). The `organization` module has its scaffold (module, Prisma schema and migration, patterns, `ORGANIZATION_EVENTS` stream) and the `sites` sub-module (site and post routes) and the `employees` sub-module (employee routes and the `auth.user_created` consumer) and the `shifts` sub-module (shift routes, `shift_created|updated|cancelled` events) and the shift lifecycle job (`@nestjs/schedule`, `ScheduleModule.forRoot()` in `AppModule`; `shift_starting|started|ended` events); shift templates are not built yet. The `billing`, `tasks` and `notifications` modules are implemented too (unit, lint and build verified; their Docker e2e suites `test/e2e/*.e2e-spec.ts` and migrations on Docker are pending, see `STEPS.index.md`). Everything below is the target design; check what exists before importing or assuming.
 
 ### Modules
 
@@ -111,7 +111,8 @@ Rules inherited from the former gateway design. They apply to every route of eve
 
 ### CORS
 
-- Allow only the origin in `WEB_ORIGIN`, with `credentials: true`, explicit allowed methods and headers (including `X-CSRF-Token`). Never use `*` together with credentials. Mobile apps are not subject to browser CORS.
+- Not enabled in `core`, and `core` has no `WEB_ORIGIN` variable: the web reaches `core` from the same origin through the reverse proxy, so no CORS is needed. (`WEB_ORIGIN` belongs to `telemetry`, which uses it for CORS and the Socket.IO origin.)
+- If `core` ever serves a cross-origin web client: add the allowed origin to `src/config/envs.ts`, allow only that origin with `credentials: true` and explicit methods and headers (including `X-CSRF-Token`). Never use `*` together with credentials. Mobile apps are not subject to browser CORS.
 
 ### Role checks
 
@@ -263,7 +264,6 @@ Shared by `core` (each module adds its own, listed in its `AGENTS.md`; final nam
 |----------|-------------|
 | `PORT` | HTTP port |
 | `NATS_SERVER` | Comma-separated NATS URLs |
-| `WEB_ORIGIN` | Allowed web origin for CORS (credentials enabled) |
 | `COOKIE_SECURE` | `true` in production; if absent, derive from `NODE_ENV` (`true` unless `development`) |
 | `RATE_LIMIT_PUBLIC_TTL_MS` / `RATE_LIMIT_PUBLIC_LIMIT` | Public routes per IP. Initial values: `60000` / `30` |
 | `RATE_LIMIT_AUTH_TTL_MS` / `RATE_LIMIT_AUTH_LIMIT` | Authenticated routes per user. Initial values: `60000` / `300` |
@@ -275,7 +275,7 @@ All defaults are initial values to tune with real traffic. Validate every variab
 1. The actor comes only from `auth.token.verify`. Never from body, query, path or headers.
 2. Never log passwords, tokens, cookies, `Authorization` headers, raw webhook bodies or full login/register payloads.
 3. Auth cookies are `httpOnly`, `Secure` (outside local development) and `SameSite`; state-changing cookie requests need CSRF.
-4. CORS allows only `WEB_ORIGIN`; never `*` with credentials.
+4. CORS stays disabled (same origin through the proxy); if it is ever enabled, never `*` with credentials.
 5. Never expose `auth.user.list-recipients` or any internal-only operation.
 6. Never trust the webhook: hand it raw to `billing` and let it validate.
 7. Never put a tenant in a NATS subject for requests; the tenant travels in the actor payload.
@@ -289,7 +289,6 @@ All defaults are initial values to tune with real traffic. Validate every variab
   - Guard: no token, invalid token, valid token builds the actor only from the verify result (a body/header `tenantId` is ignored).
   - Cookie path vs bearer path; mobile refresh through the body; cookies set on login/refresh/accept and cleared on logout.
   - CSRF: cookie request without or with a wrong token is rejected; bearer request skips CSRF; webhook is exempt.
-  - CORS: only `WEB_ORIGIN` allowed.
   - Role decorators: `billing.admin.*` rejects every role but `platform_admin`; `platform_admin` is refused on tenant routes.
   - Plan gating: missing or `null` feature answers 403 `feature_not_in_plan` for `tasks` routes.
   - Tenant status: `suspended` and `cancelled` allow only the billing routes for owner/admin (with the `cancelled` extras) and answer 403 `tenant_suspended` / `tenant_cancelled` elsewhere; `past_due` is unrestricted.
