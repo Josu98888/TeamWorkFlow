@@ -1,6 +1,6 @@
-// Shape documented in backend/core/src/tasks/AGENTS.md (§ Data Model). The `tasks` module is NOT built
-// yet, so there is no HTTP contract: these types follow the design doc and may change.
-// TODO(tasks): re-check against the real response DTOs once `tasks` exposes its controllers.
+// Mirrors `GET /api/v1/tasks` of core (`backend/core/src/tasks`, DTOs in `http/dto/tasks.dto.ts`).
+// Enum values are the Prisma enums (uppercase). The backend also embeds `formVersion` and `answer` in
+// each item; the Tasks screen does not use them, so they are not typed here.
 
 export const TASK_KINDS = ['SINGLE', 'PER_SHIFT'] as const;
 export type TaskKind = (typeof TASK_KINDS)[number];
@@ -25,13 +25,19 @@ export type Task = {
   createdAt: string;
 };
 
+/** Lists return `{ items, total }` (query: `page`, `pageSize` up to 100). */
+export type TasksPage = {
+  items: Task[];
+  total: number;
+};
+
 export type ListTasksQuery = {
   status?: TaskStatus;
   employeeId?: string;
   siteId?: string;
 };
 
-/** Report numbers are mock-only: no reporting endpoint is designed yet. */
+/** Computed client-side from the task list: core has no reporting endpoint. */
 export type TaskReportBySite = {
   siteId: string;
   total: number;

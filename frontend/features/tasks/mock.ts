@@ -1,7 +1,8 @@
 import { minutesFromNow, mockResponse } from '@/shared/lib/mock';
-import { SITE_COUNT, TENANT_ID, employeeId, mockId, postId, shiftId, siteId } from '@/shared/mocks/world';
+import { TENANT_ID, employeeId, mockId, postId, shiftId, siteId } from '@/shared/mocks/world';
 import type { TasksApi } from './api';
-import { TASK_STATUSES, type Task, type TaskReport, type TaskStatus } from './types';
+import { buildTaskReport } from './report';
+import type { Task, TaskStatus } from './types';
 
 type Seed = {
   title: string;
@@ -49,29 +50,6 @@ const TASKS: Task[] = SEEDS.map((seed, index) => ({
   createdAt: minutesFromNow(-600),
 }));
 
-function buildReport(tasks: Task[]): TaskReport {
-  const byStatus = Object.fromEntries(
-    TASK_STATUSES.map((status) => [status, tasks.filter((task) => task.status === status).length]),
-  ) as Record<TaskStatus, number>;
-  const closed = byStatus.COMPLETED + byStatus.EXPIRED;
-
-  return {
-    total: tasks.length,
-    byStatus,
-    complianceRate: closed === 0 ? 0 : byStatus.COMPLETED / closed,
-    bySite: Array.from({ length: SITE_COUNT - 1 }, (_, site) => {
-      const siteTasks = tasks.filter((task) => task.siteId === siteId(site));
-      return {
-        siteId: siteId(site),
-        total: siteTasks.length,
-        completed: siteTasks.filter((task) => task.status === 'COMPLETED').length,
-        expired: siteTasks.filter((task) => task.status === 'EXPIRED').length,
-        pending: siteTasks.filter((task) => task.status === 'PENDING').length,
-      };
-    }),
-  };
-}
-
 export const tasksMockApi: TasksApi = {
   listTasks: (query = {}) =>
     mockResponse(
@@ -82,5 +60,5 @@ export const tasksMockApi: TasksApi = {
           (!query.employeeId || task.employeeId === query.employeeId),
       ).sort((a, b) => a.deadline.localeCompare(b.deadline)),
     ),
-  getTaskReport: () => mockResponse(buildReport(TASKS)),
+  getTaskReport: () => mockResponse(buildTaskReport(TASKS)),
 };
