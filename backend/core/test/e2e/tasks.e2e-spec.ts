@@ -261,7 +261,7 @@ describe('Tasks E2E Suite', () => {
   });
 
   describe('Complete Tasks & Forms Lifecycle', () => {
-    it('executes full form publishing, template, task claiming, MinIO upload, answering and review flow', async () => {
+    it('executes full form publishing, template, task claiming, S3 upload, answering and review flow', async () => {
       const owner = await registerOwner('lifecycle');
       const supervisor = await addMember(
         owner,
@@ -404,7 +404,7 @@ describe('Tasks E2E Suite', () => {
       expect(taskClaimed.body.status).toBe('PENDING');
       expect(taskClaimed.body.employeeId).toBe(employeeOrgId);
 
-      // 8. Employee requests media upload URL and uploads real bytes to MinIO
+      // 8. Employee requests media upload URL and uploads real bytes to the S3 emulator
       const photoBytes = Buffer.from('e2e-jpeg-binary-payload-content');
       const sha256 = createHash('sha256').update(photoBytes).digest('hex');
 
