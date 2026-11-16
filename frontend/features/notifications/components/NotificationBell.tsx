@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useResource } from '@/shared/hooks/useResource';
+import { ApiError } from '@/shared/lib/http';
 import { notificationsApi } from '../api';
 import { NOTIFICATIONS_CHANGED_EVENT, announceNotificationsChanged } from '../events';
 import { NotificationItem } from './NotificationItem';
@@ -19,17 +20,22 @@ function useUnreadCount() {
   useEffect(() => {
     let cancelled = false;
     const load = () => {
+      // Skip background polls; the next visible tick (or an explicit refresh) catches up.
+      if (document.hidden) return;
       notificationsApi
         .getUnreadCount()
         .then((value) => {
           if (!cancelled) setCount(value);
         })
-        .catch(() => {
-          // Keep the last known count; the next poll retries.
+        .catch((error: unknown) => {
+          // Session gone: stop polling instead of retrying auth every minute.
+          if (error instanceof ApiError && error.status === 401) clearInterval(timer);
+          // Otherwise keep the last known count; the next poll retries.
         });
     };
-    load();
+    // Created before the first load so its async catch can always clear it.
     const timer = setInterval(load, POLL_INTERVAL_MS);
+    load();
     return () => {
       cancelled = true;
       clearInterval(timer);
