@@ -6,12 +6,13 @@
 
 ## Estado actual del repositorio
 
-Hoy solo existen:
+Hoy existen:
 
-- `backend/core`: monolito modular con el módulo `auth` y la capa HTTP pública (guard de autenticación, filtro de excepciones, rutas de auth), ya implementados.
-- `frontend/`: esqueleto de Next.js.
+- `backend/core`: monolito modular con los módulos `auth`, `organization`, `tasks`, `notifications` y `billing` y la capa HTTP pública (guard de autenticación, filtro de excepciones), ya implementados.
+- `backend/telemetry`: dominio `attendance` (fichadas, jornadas, alertas) y Torre de Control, ya implementado.
+- `frontend/`: aplicación Next.js integrada con la API HTTP pública (con modo demo mediante datos simulados).
 
-El MVP se rediseñó como **2 servicios** (`core` y `telemetry`; ver [MVP](#mvp) y [docs/architecture.md](docs/architecture.md)). `backend/core` ya contiene la capa HTTP y el módulo `auth` (las apps `backend/gateway` y `backend/auth` se fusionaron en él y se eliminaron). `backend/telemetry` no existe todavía. También hay documentación de diseño (sin código) de los módulos del MVP en `backend/organization`, `backend/attendance`, `backend/tasks`, `backend/notifications` y `backend/billing`; esa documentación se reorganizará en `backend/core` y `backend/telemetry`. Todo lo demás (esos módulos, las bases de datos, la Torre de Control, etc.) está **planificado**; consulte la sección [MVP](#mvp) y, más abajo, la arquitectura objetivo.
+El MVP se rediseñó como **2 servicios** (`core` y `telemetry`; ver [MVP](#mvp) y [docs/architecture.md](docs/architecture.md)). `backend/core` ya contiene la capa HTTP y los módulos `auth`, `organization`, `tasks`, `notifications` y `billing` (las apps `backend/gateway` y `backend/auth` se fusionaron en él y se eliminaron), y `backend/telemetry` implementa el dominio `attendance` y la Torre de Control. Cada módulo tiene su esquema de PostgreSQL, rol, cliente Prisma y migraciones. Quedan pendientes las pruebas automatizadas, el CI/CD y la verificación con Docker de `tasks` y `notifications`. La documentación de diseño de cada módulo está en `backend/core/src/<módulo>/AGENTS.md` y en `backend/telemetry/AGENTS.md`. Los servicios de la arquitectura objetivo que no son parte del MVP siguen **planificados**; consulte la sección [MVP](#mvp) y, más abajo, la arquitectura objetivo.
 
 ## Descripción de la aplicación
 
@@ -65,8 +66,8 @@ El MVP se construye con **2 servicios de backend** (los nombres de carpetas, los
 
 | Servicio del MVP | Carpeta | Contiene | Expone |
 |---|---|---|---|
-| `core` (monolito modular) | `backend/core/` (`auth` y capa HTTP implementados; el resto de módulos por crear) | Módulos `auth`, `organization`, `tasks`, `notifications` y `billing`, y la API HTTP pública (el antiguo `gateway`) | HTTP `/api/v1`; responde las peticiones NATS de telemetría (`auth.token.verify`, `organization.*.get`) |
-| `telemetry` | `backend/telemetry/` (por crear) | Todo el dominio `attendance`: ingesta de fichadas, correcciones, jornadas, alertas en tiempo real y Torre de Control | HTTP `/api/v1/telemetry`; WebSocket (Socket.IO) de la Torre de Control |
+| `core` (monolito modular) | `backend/core/` (`auth`, `organization`, `tasks`, `notifications`, `billing` y capa HTTP implementados) | Módulos `auth`, `organization`, `tasks`, `notifications` y `billing`, y la API HTTP pública (el antiguo `gateway`) | HTTP `/api/v1`; responde las peticiones NATS de telemetría (`auth.token.verify`, `organization.*.get`) |
+| `telemetry` | `backend/telemetry/` (implementado) | Todo el dominio `attendance`: ingesta de fichadas, correcciones, jornadas, alertas en tiempo real y Torre de Control | HTTP `/api/v1/telemetry`; WebSocket (Socket.IO) de la Torre de Control |
 
 Un proxy inverso publica ambos servicios bajo el mismo origen y enruta por path (`/api/v1/telemetry` y `/ws` hacia `telemetry`, el resto de `/api/v1` hacia `core`; gana el prefijo más largo), de modo que el frontend sigue viendo una sola API y nunca se conecta a NATS.
 
