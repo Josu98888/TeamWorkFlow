@@ -18,6 +18,7 @@ export function Sidebar() {
     { label: 'Torre de Control', href: '/torre-control' },
     { label: 'Sedes y Geocercas', href: '/sedes' },
     { label: 'Tareas y Reportes', href: '/tareas' },
+    { label: 'Notificaciones', href: '/notificaciones' },
     { label: 'Empleados', href: '/empleados' },
     { label: 'Turnos', href: '/turnos' },
     { label: 'Asistencia', href: '/asistencia' },
