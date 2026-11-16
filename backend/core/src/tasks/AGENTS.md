@@ -132,15 +132,7 @@ Ask before installing any dependency.
 
 ## Current Status (READ FIRST)
 
-`backend/core` exists (scaffold, HTTP layer and `auth` module) but this module is not built. This folder contains only this `AGENTS.md`: there is no `TasksModule`, no Prisma schema, no controllers, no SeaweedFS container in `backend/docker-compose.yml`.
-
-First tasks, in order (ask before each install):
-
-- [ ] Create `TasksModule` in `backend/core/src/tasks/` (needs `backend/core` from T6), its config in `src/config/envs.ts` and `.env.example`.
-- [ ] Prisma schema and first migration (`Form`, `FormVersion`).
-- [ ] Sub-modules `forms`, `tasks`, `media`, with their HTTP controllers, the exported facade service and operation-name constants.
-- [ ] Consumers of `organization` and `auth` events and the expiration job.
-- [ ] SeaweedFS in `backend/docker-compose.yml` and the module routes in its HTTP controllers (feature `tasks` required on every route).
+The module is built (see "Current status" above): `TasksModule`, Prisma schema and migration, sub-modules with HTTP controllers, event consumers, the expiration job, and SeaweedFS in both compose files. Pending: the first real run of the Docker e2e suite and migrations (`STEPS.index.md` B6).
 
 ## NATS Contract
 
