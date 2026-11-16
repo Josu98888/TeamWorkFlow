@@ -55,11 +55,12 @@ services:
       - FCM_ENABLED=${FCM_ENABLED:-false}
       - FCM_PROJECT_ID=${FCM_PROJECT_ID:-}
       - FCM_CREDENTIALS=${FCM_CREDENTIALS:-}
-      - S3_ENDPOINT=http://minio:9000
+      # Local S3 emulator (SeaweedFS). On AWS leave S3_ENDPOINT and the keys unset.
+      - S3_ENDPOINT=http://seaweedfs:8333
       - S3_REGION=us-east-1
       - S3_BUCKET=teamworkflow-tasks
-      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
-      - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-local-s3-access}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-local-s3-secret-key}
       - S3_FORCE_PATH_STYLE=true
       - MEDIA_URL_TTL_SECONDS=300
       - JWT_SECRET=${JWT_SECRET:?set JWT_SECRET in backend/.env}
@@ -72,7 +73,7 @@ services:
         condition: service_started
       postgres:
         condition: service_healthy
-      minio-init:
+      seaweedfs-init:
         condition: service_completed_successfully
 
   telemetry:
@@ -97,32 +98,40 @@ services:
       postgres:
         condition: service_healthy
 
-  minio:
-    image: minio/minio:latest
-    command: ["server", "/data", "--console-address", ":9001"]
+  # S3-compatible storage for local development (the app uses Amazon S3 in production).
+  # Local dev credentials only; the S3 gateway admin identity comes from the AWS_* variables.
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    command: ["server", "-s3", "-s3.port=8333"]
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "8333:8333"
     environment:
-      - MINIO_ROOT_USER=${S3_ACCESS_KEY:-minioadmin}
-      - MINIO_ROOT_PASSWORD=${S3_SECRET_KEY:-minioadmin}
+      - AWS_ACCESS_KEY_ID=${S3_ACCESS_KEY:-local-s3-access}
+      - AWS_SECRET_ACCESS_KEY=${S3_SECRET_KEY:-local-s3-secret-key}
     volumes:
-      - minio-data:/data
+      - seaweedfs-data:/data
 
-  minio-init:
-    image: minio/mc:latest
+  # Creates the bucket (idempotent) and exits 0.
+  seaweedfs-init:
+    image: chrislusf/seaweedfs:latest
     depends_on:
-      - minio
+      - seaweedfs
+    restart: "no"
     environment:
-      - MINIO_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
-      - MINIO_SECRET_KEY=${S3_SECRET_KEY:-minioadmin}
-      - S3_BUCKET=${S3_BUCKET:-teamworkflow-tasks}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-local-s3-access}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-local-s3-secret-key}
+      - S3_BUCKET=teamworkflow-tasks
     entrypoint:
       - /bin/sh
       - -c
       - |
-        until mc alias set local http://minio:9000 "$$MINIO_ACCESS_KEY" "$$MINIO_SECRET_KEY"; do sleep 1; done
-        mc mb --ignore-existing "local/$$S3_BUCKET"
+        for i in $$(seq 1 60); do
+          code=$$(curl -s -o /dev/null -w '%{http_code}' -X PUT --aws-sigv4 'aws:amz:us-east-1:s3' --user "$$S3_ACCESS_KEY:$$S3_SECRET_KEY" "http://seaweedfs:8333/$$S3_BUCKET")
+          case "$$code" in 200|409) echo "bucket $$S3_BUCKET ready ($$code)"; exit 0;; esac
+          sleep 2
+        done
+        echo "could not create bucket $$S3_BUCKET" >&2
+        exit 1
 
   proxy:
     image: nginx:alpine
@@ -137,4 +146,4 @@ services:
 volumes:
   nats-data:
   postgres-data:
-  minio-data:
+  seaweedfs-data:
