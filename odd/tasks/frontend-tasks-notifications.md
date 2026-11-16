@@ -28,7 +28,7 @@ Mode: off. Source: frontend has no test runner or test script (`frontend/package
 
 - [x] T1 Tasks HTTP client: `features/tasks/http.ts` for `GET /tasks` (paginated `page`/`pageSize`, map to the view), report computed client-side from the list (no backend report endpoint), `USE_MOCKS` switch in `api.ts`; align `types.ts` with the backend task response. Route: delegated (writer trigger, 2+ non-trivial files).
 - [x] T2 Notifications feature: `features/notifications/` (types, mock, http, api) for `GET /notifications`, `GET /notifications/unread-count`, `POST /notifications/:id/read` (and `all`); Topbar bell with unread badge and dropdown; `app/(dashboard)/notificaciones/page.tsx`; sidebar entry and access rule for every role. Route: delegated (writer trigger).
-- [~] T3 Config and docs: `frontend/.env.example` (`NEXT_PUBLIC_USE_MOCKS`, `NEXT_PUBLIC_WS_URL`, `BACKEND_URL`); sync root `AGENTS.md`, `STEPS.index.md`, `backend/core/AGENTS.md`, `README.md`, and Project Status of `teamworkflow-nest`, `teamworkflow-frontend`, `teamworkflow-nextjs` skills. Route: delegated (preparation trigger, 4+ files).
+- [x] T3 Config and docs: `frontend/.env.example` (`NEXT_PUBLIC_USE_MOCKS`, `NEXT_PUBLIC_WS_URL`, `BACKEND_URL`); sync root `AGENTS.md`, `STEPS.index.md`, `backend/core/AGENTS.md`, `README.md`, and Project Status of `teamworkflow-nest`, `teamworkflow-frontend`, `teamworkflow-nextjs` skills. Route: delegated (preparation trigger, 4+ files).
 
 ## Acceptance criteria
 
@@ -53,4 +53,4 @@ Strategy: `single-pr` (user choice 2026-11-16, despite forecast over budget). Fo
 
 ## Next step
 
-User creates `frontend/.env.example` (write denied by permission rules; content in the T3 progress line and the final report), then open the single PR `feat/frontend/tasks-notifications` -> `develop` after confirming push.
+Done. `frontend/.env.example` added by the user and committed in `525b3fd`; single PR to `develop`. Remaining project work: Docker e2e/migrations for tasks and notifications, organization T7 smoke, CI/CD (deferred by the user).
