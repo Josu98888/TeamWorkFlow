@@ -11,11 +11,11 @@ export interface Envs {
   billingDatabaseUrl: string;
   tasksDatabaseUrl: string;
   notificationsDatabaseUrl: string;
-  s3Endpoint: string;
+  s3Endpoint?: string;
   s3Region: string;
   s3Bucket: string;
-  s3AccessKey: string;
-  s3SecretKey: string;
+  s3AccessKey?: string;
+  s3SecretKey?: string;
   s3ForcePathStyle: boolean;
   mediaUrlTtlSeconds: number;
   fcmEnabled: boolean;
@@ -44,11 +44,11 @@ interface EnvVars {
   BILLING_DATABASE_URL: string;
   TASKS_DATABASE_URL: string;
   NOTIFICATIONS_DATABASE_URL: string;
-  S3_ENDPOINT: string;
+  S3_ENDPOINT?: string;
   S3_REGION: string;
   S3_BUCKET: string;
-  S3_ACCESS_KEY: string;
-  S3_SECRET_KEY: string;
+  S3_ACCESS_KEY?: string;
+  S3_SECRET_KEY?: string;
   S3_FORCE_PATH_STYLE: boolean;
   MEDIA_URL_TTL_SECONDS: number;
   FCM_ENABLED: boolean;
@@ -93,12 +93,16 @@ const envsSchema = joi
       .string()
       .uri({ scheme: ['postgresql', 'postgres'] })
       .required(),
-    S3_ENDPOINT: joi.string().uri().default('http://localhost:9000'),
+    // Unset on AWS (the SDK targets Amazon S3); set for an S3-compatible
+    // emulator such as SeaweedFS. An empty value counts as unset.
+    S3_ENDPOINT: joi.string().uri().optional().allow(''),
     S3_REGION: joi.string().default('us-east-1'),
     S3_BUCKET: joi.string().default('teamworkflow-tasks'),
-    S3_ACCESS_KEY: joi.string().default('minioadmin'),
-    S3_SECRET_KEY: joi.string().default('minioadmin'),
-    S3_FORCE_PATH_STYLE: joi.boolean().default(true),
+    // Static keys are for emulators only. Unset on AWS: the SDK default
+    // credential chain (IAM role, instance profile, ECS task role) applies.
+    S3_ACCESS_KEY: joi.string().optional().allow(''),
+    S3_SECRET_KEY: joi.string().optional().allow(''),
+    S3_FORCE_PATH_STYLE: joi.boolean().default(false),
     MEDIA_URL_TTL_SECONDS: joi.number().integer().positive().default(300),
     FCM_ENABLED: joi.boolean().default(false),
     FCM_PROJECT_ID: joi.string().when('FCM_ENABLED', {
@@ -158,6 +162,14 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
 
   const envVars = value as EnvVars;
 
+  // Static keys come as a pair: half a pair is a misconfiguration, not a
+  // reason to silently fall back to the default credential chain.
+  if (Boolean(envVars.S3_ACCESS_KEY) !== Boolean(envVars.S3_SECRET_KEY)) {
+    throw new Error(
+      'Config validation error: invalid or missing S3_ACCESS_KEY, S3_SECRET_KEY (set both or neither)',
+    );
+  }
+
   return {
     port: envVars.PORT,
     natsServers: envVars.NATS_SERVER,
@@ -166,11 +178,11 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
     billingDatabaseUrl: envVars.BILLING_DATABASE_URL,
     tasksDatabaseUrl: envVars.TASKS_DATABASE_URL,
     notificationsDatabaseUrl: envVars.NOTIFICATIONS_DATABASE_URL,
-    s3Endpoint: envVars.S3_ENDPOINT,
+    s3Endpoint: envVars.S3_ENDPOINT || undefined,
     s3Region: envVars.S3_REGION,
     s3Bucket: envVars.S3_BUCKET,
-    s3AccessKey: envVars.S3_ACCESS_KEY,
-    s3SecretKey: envVars.S3_SECRET_KEY,
+    s3AccessKey: envVars.S3_ACCESS_KEY || undefined,
+    s3SecretKey: envVars.S3_SECRET_KEY || undefined,
     s3ForcePathStyle: envVars.S3_FORCE_PATH_STYLE,
     mediaUrlTtlSeconds: envVars.MEDIA_URL_TTL_SECONDS,
     fcmEnabled: envVars.FCM_ENABLED,

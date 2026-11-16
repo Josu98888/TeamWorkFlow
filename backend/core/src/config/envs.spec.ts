@@ -26,12 +26,12 @@ describe('envs', () => {
       billingDatabaseUrl: validEnv.BILLING_DATABASE_URL,
       tasksDatabaseUrl: validEnv.TASKS_DATABASE_URL,
       notificationsDatabaseUrl: validEnv.NOTIFICATIONS_DATABASE_URL,
-      s3Endpoint: 'http://localhost:9000',
+      s3Endpoint: undefined,
       s3Region: 'us-east-1',
       s3Bucket: 'teamworkflow-tasks',
-      s3AccessKey: 'minioadmin',
-      s3SecretKey: 'minioadmin',
-      s3ForcePathStyle: true,
+      s3AccessKey: undefined,
+      s3SecretKey: undefined,
+      s3ForcePathStyle: false,
       mediaUrlTtlSeconds: 300,
       fcmEnabled: false,
       fcmProjectId: undefined,
@@ -50,6 +50,51 @@ describe('envs', () => {
       accessTokenTtl: '15m',
       refreshTokenTtl: '7d',
     });
+  });
+
+  it('accepts AWS mode: no endpoint and no keys, treating empty values as unset', () => {
+    const envs = validateEnvs({
+      ...validEnv,
+      S3_ENDPOINT: '',
+      S3_ACCESS_KEY: '',
+      S3_SECRET_KEY: '',
+    });
+
+    expect(envs.s3Endpoint).toBeUndefined();
+    expect(envs.s3AccessKey).toBeUndefined();
+    expect(envs.s3SecretKey).toBeUndefined();
+    expect(envs.s3ForcePathStyle).toBe(false);
+  });
+
+  it('accepts custom endpoint mode (SeaweedFS) with keys and path style', () => {
+    const envs = validateEnvs({
+      ...validEnv,
+      S3_ENDPOINT: 'http://seaweedfs:8333',
+      S3_ACCESS_KEY: 'local-key',
+      S3_SECRET_KEY: 'local-secret',
+      S3_FORCE_PATH_STYLE: 'true',
+    });
+
+    expect(envs.s3Endpoint).toBe('http://seaweedfs:8333');
+    expect(envs.s3AccessKey).toBe('local-key');
+    expect(envs.s3SecretKey).toBe('local-secret');
+    expect(envs.s3ForcePathStyle).toBe(true);
+  });
+
+  it('rejects S3 keys that are only half set', () => {
+    expect(() =>
+      validateEnvs({ ...validEnv, S3_ACCESS_KEY: 'only-access' }),
+    ).toThrow('S3_ACCESS_KEY');
+    expect(() =>
+      validateEnvs({ ...validEnv, S3_SECRET_KEY: 'only-secret' }),
+    ).toThrow('S3_SECRET_KEY');
+    expect(() =>
+      validateEnvs({
+        ...validEnv,
+        S3_ACCESS_KEY: 'only-access',
+        S3_SECRET_KEY: '',
+      }),
+    ).toThrow('S3_SECRET_KEY');
   });
 
   it('accepts custom token TTLs', () => {

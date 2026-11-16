@@ -11,11 +11,11 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { envs } from '../../config';
 
 export interface StorageConfig {
-  endpoint: string;
+  endpoint?: string;
   region: string;
   bucket: string;
-  accessKey: string;
-  secretKey: string;
+  accessKey?: string;
+  secretKey?: string;
   forcePathStyle: boolean;
 }
 
@@ -33,14 +33,24 @@ export class StorageService {
     const forcePathStyle = config?.forcePathStyle ?? envs.s3ForcePathStyle;
     this.bucket = config?.bucket ?? envs.s3Bucket;
 
+    // Endpoint and static credentials are optional: without them the SDK
+    // targets Amazon S3 and resolves credentials with its default provider
+    // chain (IAM role, instance profile, ECS task role).
     this.client = new S3Client({
-      endpoint,
       region,
-      credentials: {
-        accessKeyId: accessKey,
-        secretAccessKey: secretKey,
-      },
       forcePathStyle,
+      // Presigned PUT URLs are built before the body exists: the default CRC32
+      // checksum would be computed over an empty body and the upload rejected.
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      ...(endpoint ? { endpoint } : {}),
+      ...(accessKey && secretKey
+        ? {
+            credentials: {
+              accessKeyId: accessKey,
+              secretAccessKey: secretKey,
+            },
+          }
+        : {}),
     });
   }
 

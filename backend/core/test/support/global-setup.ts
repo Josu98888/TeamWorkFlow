@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import {
   applyTestEnv,
   TEST_DB_PORT,
-  TEST_MINIO_PORT,
+  TEST_S3_PORT,
   TEST_NATS_PORT,
 } from './test-env';
 
@@ -28,15 +28,15 @@ function isReachable(port: number, timeoutMs = 2_000) {
 export default async function globalSetup() {
   applyTestEnv();
 
-  const [nats, database, minio] = await Promise.all([
+  const [nats, database, s3] = await Promise.all([
     isReachable(TEST_NATS_PORT),
     isReachable(TEST_DB_PORT),
-    isReachable(TEST_MINIO_PORT),
+    isReachable(TEST_S3_PORT),
   ]);
   const down = [
     nats ? null : `NATS (localhost:${TEST_NATS_PORT})`,
     database ? null : `PostgreSQL (localhost:${TEST_DB_PORT})`,
-    minio ? null : `MinIO (localhost:${TEST_MINIO_PORT})`,
+    s3 ? null : `SeaweedFS S3 (localhost:${TEST_S3_PORT})`,
   ].filter(Boolean);
   if (down.length > 0) {
     throw new Error(

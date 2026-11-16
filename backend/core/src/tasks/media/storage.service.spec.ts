@@ -5,6 +5,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { envs } from '../../config';
 
 jest.mock('../../config', () => ({
   envs: {
@@ -39,6 +40,59 @@ describe('StorageService', () => {
       accessKey: 'test-key',
       secretKey: 'test-secret',
       forcePathStyle: true,
+    });
+  });
+
+  describe('client configuration', () => {
+    const lastClientConfig = () =>
+      (S3Client as unknown as jest.Mock).mock.calls.at(-1)?.[0] as Record<
+        string,
+        unknown
+      >;
+
+    it('passes endpoint and static credentials in custom endpoint mode', () => {
+      expect(lastClientConfig()).toEqual({
+        region: 'us-east-1',
+        forcePathStyle: true,
+        requestChecksumCalculation: 'WHEN_REQUIRED',
+        endpoint: 'http://localhost:9000',
+        credentials: {
+          accessKeyId: 'test-key',
+          secretAccessKey: 'test-secret',
+        },
+      });
+    });
+
+    describe('with the env values unset', () => {
+      const original = { ...envs };
+
+      afterEach(() => {
+        Object.assign(envs, original);
+      });
+
+      it('omits endpoint and credentials in AWS mode (default credential chain)', () => {
+        Object.assign(envs, {
+          s3Endpoint: undefined,
+          s3AccessKey: undefined,
+          s3SecretKey: undefined,
+          s3ForcePathStyle: false,
+        });
+
+        new StorageService();
+
+        const config = lastClientConfig();
+        expect(config).not.toHaveProperty('endpoint');
+        expect(config).not.toHaveProperty('credentials');
+        expect(config.forcePathStyle).toBe(false);
+      });
+
+      it('omits credentials when only one key is present', () => {
+        Object.assign(envs, { s3AccessKey: 'only-access', s3SecretKey: undefined });
+
+        new StorageService();
+
+        expect(lastClientConfig()).not.toHaveProperty('credentials');
+      });
     });
   });
 

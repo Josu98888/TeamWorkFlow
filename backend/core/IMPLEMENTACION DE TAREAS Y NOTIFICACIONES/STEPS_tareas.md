@@ -29,7 +29,7 @@ Commits: (none, read-only phase)
   - Verify that row B6 (`core: tasks module`) dependencies are accounted for: B1 (`auth`), B2 (`HTTP layer`), B3 (`billing`), B4 (`organization`).
   Check: `git branch --show-current` outputs `feat/core-tasks-module`; `git branch --show-current` is not `main` or `master`.
 - [!] **S0.2** Toolchain and test environment check:
-  - Check Node.js, `pnpm`, Docker Compose test stack (`backend/docker-compose.test.yml`), and MinIO local storage availability.
+  - Check Node.js, `pnpm`, Docker Compose test stack (`backend/docker-compose.test.yml`), and local S3 emulator (SeaweedFS) availability.
   Check: `pnpm --version && docker compose version` print clean outputs; test database container responds via `docker compose -f ../docker-compose.test.yml exec postgres-test pg_isready`.
   Blocked: `docker` CLI is not installed/available on this host (`pnpm` passes, Docker Compose checks cannot execute).
 - [x] **S0.3** Contract inventory and alignment check:
@@ -46,17 +46,16 @@ Commits: (none, read-only phase)
 Commits: c29817e, 6419288, 45e57f3, 6967e8d, aa6e59d, d2e7dab
 
 - [x] **S1.1** Dependencies for Tasks module:
-  - Verify `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner` for S3/MinIO presigned URLs.
+  - Verify `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner` for S3 presigned URLs.
   - Verify `@nestjs/schedule` (already installed in core) for the task expiration job.
   Check: `pnpm ls @aws-sdk/client-s3 @aws-sdk/s3-request-presigner @nestjs/schedule` confirms packages are present; `<build>` passes.
 - [x] **S1.2** Environment variables in `src/config/envs.ts` and `src/config/env.schema.ts` (AGENTS § Environment Variables):
   - `TASKS_DATABASE_URL` (uri postgres, required).
-  - `S3_ENDPOINT` (uri or string, default `http://localhost:9000` for MinIO).
+  - `S3_ENDPOINT` (uri, optional; unset on AWS, `http://seaweedfs:8333` locally).
   - `S3_REGION` (string, default `us-east-1`).
   - `S3_BUCKET` (string, default `teamworkflow-tasks`).
-  - `S3_ACCESS_KEY` (string, required in production, default `minioadmin` for local).
-  - `S3_SECRET_KEY` (string, required in production, default `minioadmin` for local).
-  - `S3_FORCE_PATH_STYLE` (boolean, default `true` for MinIO).
+  - `S3_ACCESS_KEY` / `S3_SECRET_KEY` (strings, optional and set together; unset on AWS so the SDK default credential chain applies).
+  - `S3_FORCE_PATH_STYLE` (boolean, default `false`; `true` for SeaweedFS).
   - `MEDIA_URL_TTL_SECONDS` (number, integer, default `300`).
   - Update `backend/core/.env.example` with placeholders only.
   Check: `<test> envs` passes: missing required database URL throws; defaults apply; `rg -n "S3_SECRET_KEY=.{5,}" .env.example` has no matches.
@@ -93,7 +92,7 @@ Commits: c29817e, 6419288, 45e57f3, 6967e8d, aa6e59d, d2e7dab
     - `tasks-auth` (filtered to `t.*.auth.>`)
     - `tasks-billing` (filtered to `t.*.billing.>`)
   Check: `<test> tasks-events` passes: stream configuration matches spec; consumer creation handles missing producer streams with backoff.
-- [x] **S1.7** S3 / MinIO Storage Client Service `src/tasks/media/storage.service.ts`:
+- [x] **S1.7** S3 Storage Client Service `src/tasks/media/storage.service.ts`:
   - Initializes `@aws-sdk/client-s3` using envs (`S3_ENDPOINT`, `S3_REGION`, credentials, path-style).
   - `getPresignedPutUrl(storageKey: string, mime: string, sizeBytes: number, ttlSeconds: number): Promise<string>`.
   - `getPresignedGetUrl(storageKey: string, ttlSeconds: number): Promise<string>`.
@@ -382,13 +381,13 @@ Commits: 9f19c95, 51e522d
 
 Commits: a91305f, c73a297
 
-- [!] **S11.1** Docker Compose MinIO configuration:
-  - Add MinIO container in `backend/docker-compose.yml` and `backend/docker-compose.test.yml`:
-    - Service `minio` on port 9000 (API) and 9001 (Console).
-    - Persistent volume `minio_data`.
+- [!] **S11.1** Docker Compose local S3 storage (originally MinIO, replaced by SeaweedFS in `odd/tasks/aws-s3-storage.md`):
+  - Add a SeaweedFS container in `backend/docker-compose.yml` and `backend/docker-compose.test.yml`:
+    - Service `seaweedfs` (S3 gateway on port 8333; the test stack maps it to 9002).
+    - Persistent volume `seaweedfs-data`.
     - Automatic bucket creation script / init container for `teamworkflow-tasks`.
-  Check: `docker compose -f ../docker-compose.yml config` passes validation; MinIO starts and bucket exists.
-  Blocked: Compose files and `minio-init`/`minio-test-init` services created (`minio-test` isolated on ports 9002/9003), but `docker compose config` and container startup require Docker on host.
+  Check: `docker compose -f ../docker-compose.yml config` passes validation; SeaweedFS starts and bucket exists.
+  Blocked: Compose files and `seaweedfs-init`/`seaweedfs-test-init` services created (`seaweedfs-test` isolated on port 9002), but `docker compose config` and container startup require Docker on host.
 - [x] **S11.2** Module registration in `src/app.module.ts`:
   - Import `TasksModule` into `AppModule`.
   Check: `<build>` passes cleanly; `rg -n "TasksModule" src/app.module.ts` has a hit.
@@ -403,18 +402,18 @@ Commits: a91305f, c73a297
 Commits: 16e3264, 40e5e60, bec6a40, d61289f, c72de98, 6321eb7, f15a431
 
 - [!] **S12.1** E2E test harness in `test/e2e/tasks.e2e-spec.ts`:
-  - Sets up supertest client against real `AppModule` with test database and test MinIO bucket.
+  - Sets up supertest client against real `AppModule` with test database and test S3 bucket.
   Check: `<e2e> tasks.e2e-spec` executes and connects to test database and NATS instance.
-  Blocked: Harness and spec aligned with actual DTOs, UUIDv7, `billing` migrations, and MinIO test ports, but live `pnpm test:e2e` requires Docker (`docker-compose.test.yml`) unavailable on host.
+  Blocked: Harness and spec aligned with actual DTOs, UUIDv7, `billing` migrations, and S3 emulator test ports, but live `pnpm test:e2e` requires Docker (`docker-compose.test.yml`) unavailable on host.
 - [!] **S12.2** Complete lifecycle E2E flow:
   1. Owner creates form draft -> publishes version 1.
   2. Owner creates task template for site/post.
   3. Emit `organization.shift_started` -> verifies per-shift task is generated for employee.
-  4. Employee requests upload -> presigned PUT URL generated -> mock file uploaded to MinIO.
+  4. Employee requests upload -> presigned PUT URL generated -> mock file uploaded to the S3 emulator.
   5. Employee submits answer with photo and QR -> task marked `COMPLETED` -> `task_completed` emitted.
   6. Supervisor reviews answer as `approved`.
-  Check: Full flow passes cleanly from HTTP down to MinIO and JetStream events.
-  Blocked: `pnpm test:e2e` blocked on host without Docker (`nats-test`, `postgres-test`, `minio-test`).
+  Check: Full flow passes cleanly from HTTP down to the S3 emulator and JetStream events.
+  Blocked: `pnpm test:e2e` blocked on host without Docker (`nats-test`, `postgres-test`, `seaweedfs-test`).
 
 ---
 
