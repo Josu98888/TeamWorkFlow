@@ -1,0 +1,115 @@
+// Data model of the notifications module (AGENTS § Data Model).
+// Lives in the `notifications` PostgreSQL schema of the shared `teamworkflow` database.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "./generated"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum DevicePlatform {
+  ANDROID
+  IOS
+
+  @@map("device_platform")
+}
+
+enum NotificationChannel {
+  PUSH
+  IN_APP
+
+  @@map("notification_channel")
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+
+  @@map("delivery_status")
+}
+
+model DeviceToken {
+  id         String         @id @default(uuid(7)) @db.Uuid
+  tenantId   String         @map("tenant_id") @db.Uuid
+  userId     String         @map("user_id") @db.Uuid
+  token      String         @unique
+  platform   DevicePlatform
+  isActive   Boolean        @default(true) @map("is_active")
+  lastSeenAt DateTime       @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([tenantId, userId, isActive])
+  @@map("device_tokens")
+}
+
+model Notification {
+  id            String                 @id @default(uuid(7)) @db.Uuid
+  tenantId      String                 @map("tenant_id") @db.Uuid
+  userId        String                 @map("user_id") @db.Uuid
+  templateCode  String                 @map("template_code")
+  locale        String                 @default("es")
+  title         String
+  body          String
+  data          Json?
+  sourceEventId String                 @map("source_event_id")
+  readAt        DateTime?              @map("read_at") @db.Timestamptz(3)
+  createdAt     DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  deliveries    NotificationDelivery[]
+
+  @@unique([tenantId, userId, sourceEventId])
+  @@index([tenantId, userId, readAt, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("notifications")
+}
+
+model NotificationDelivery {
+  id             String              @id @default(uuid(7)) @db.Uuid
+  tenantId       String              @map("tenant_id") @db.Uuid
+  notificationId String              @map("notification_id") @db.Uuid
+  channel        NotificationChannel
+  deviceTokenId  String?             @map("device_token_id") @db.Uuid
+  status         DeliveryStatus      @default(PENDING)
+  attempts       Int                 @default(0)
+  lastError      String?             @map("last_error")
+  sentAt         DateTime?           @map("sent_at") @db.Timestamptz(3)
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@index([notificationId])
+  @@index([tenantId, status, attempts])
+  @@index([status, attempts])
+  @@map("notification_deliveries")
+}
+
+model TenantState {
+  tenantId    String   @id @map("tenant_id") @db.Uuid
+  isSuspended Boolean  @default(false) @map("is_suspended")
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("tenant_state")
+}
+
+model TenantFeatures {
+  tenantId    String   @id @map("tenant_id") @db.Uuid
+  features    Json
+  effectiveAt DateTime @map("effective_at") @db.Timestamptz(3)
+
+  @@map("tenant_features")
+}
+
+model ProcessedEvent {
+  eventId     String   @id @map("event_id")
+  tenantId    String?  @map("tenant_id") @db.Uuid
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(3)
+
+  @@index([tenantId])
+  @@map("processed_events")
+}

@@ -3,9 +3,11 @@ import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AuthModule } from './auth/auth.module';
 import { BillingModule } from './billing/billing.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { OrganizationModule } from './organization/organization.module';
+import { TasksModule } from './tasks/tasks.module';
 import { AuthGuard } from './http/guards/auth.guard';
 import { FeatureGuard } from './http/guards/feature.guard';
-import { OrganizationModule } from './organization/organization.module';
 
 @Module({
   // ScheduleModule.forRoot() is registered once here for every module's jobs.
@@ -14,6 +16,8 @@ import { OrganizationModule } from './organization/organization.module';
     AuthModule,
     OrganizationModule,
     BillingModule,
+    TasksModule,
+    NotificationsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },

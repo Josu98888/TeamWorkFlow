@@ -13,7 +13,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
 COPY . .
 
 # The Prisma Clients are generated code (src/<module>/prisma/generated, gitignored): build them before nest build
-RUN pnpm run prisma:auth:generate && pnpm run prisma:organization:generate
+RUN pnpm run prisma:auth:generate && pnpm run prisma:organization:generate && pnpm run prisma:billing:generate && pnpm run prisma:tasks:generate && pnpm run prisma:notifications:generate
 
 EXPOSE 3000
 

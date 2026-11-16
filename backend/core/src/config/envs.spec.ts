@@ -10,16 +10,32 @@ describe('envs', () => {
       'postgresql://organization_svc:secret@localhost:5432/teamworkflow?schema=organization',
     BILLING_DATABASE_URL:
       'postgresql://billing_svc:secret@localhost:5432/teamworkflow?schema=billing',
+    TASKS_DATABASE_URL:
+      'postgresql://tasks_svc:secret@localhost:5432/teamworkflow?schema=tasks',
+    NOTIFICATIONS_DATABASE_URL:
+      'postgresql://notifications_svc:secret@localhost:5432/teamworkflow?schema=notifications',
     JWT_SECRET: 'a-secret-with-at-least-32-characters!',
   };
 
-  it('accepts a valid environment, converts PORT and defaults the TTLs and billing settings', () => {
+  it('accepts a valid environment, converts PORT and defaults the TTLs, billing and tasks settings', () => {
     expect(validateEnvs(validEnv)).toEqual({
       port: 3000,
       natsServers: ['nats://localhost:4222'],
       authDatabaseUrl: validEnv.AUTH_DATABASE_URL,
       organizationDatabaseUrl: validEnv.ORGANIZATION_DATABASE_URL,
       billingDatabaseUrl: validEnv.BILLING_DATABASE_URL,
+      tasksDatabaseUrl: validEnv.TASKS_DATABASE_URL,
+      notificationsDatabaseUrl: validEnv.NOTIFICATIONS_DATABASE_URL,
+      s3Endpoint: 'http://localhost:9000',
+      s3Region: 'us-east-1',
+      s3Bucket: 'teamworkflow-tasks',
+      s3AccessKey: 'minioadmin',
+      s3SecretKey: 'minioadmin',
+      s3ForcePathStyle: true,
+      mediaUrlTtlSeconds: 300,
+      fcmEnabled: false,
+      fcmProjectId: undefined,
+      fcmCredentials: undefined,
       paymentProvider: 'fake',
       mpAccessToken: undefined,
       mpWebhookSecret: undefined,
@@ -90,6 +106,50 @@ describe('envs', () => {
         BILLING_DATABASE_URL: 'mysql://localhost/db',
       }),
     ).toThrow('BILLING_DATABASE_URL');
+  });
+
+  it('throws when TASKS_DATABASE_URL is missing or not a postgres URI', () => {
+    const { TASKS_DATABASE_URL: _omitted, ...env } = validEnv;
+
+    expect(() => validateEnvs(env)).toThrow('TASKS_DATABASE_URL');
+    expect(() =>
+      validateEnvs({
+        ...validEnv,
+        TASKS_DATABASE_URL: 'mysql://localhost/db',
+      }),
+    ).toThrow('TASKS_DATABASE_URL');
+  });
+
+  it('throws when NOTIFICATIONS_DATABASE_URL is missing or not a postgres URI', () => {
+    const { NOTIFICATIONS_DATABASE_URL: _omitted, ...env } = validEnv;
+
+    expect(() => validateEnvs(env)).toThrow('NOTIFICATIONS_DATABASE_URL');
+    expect(() =>
+      validateEnvs({
+        ...validEnv,
+        NOTIFICATIONS_DATABASE_URL: 'mysql://localhost/db',
+      }),
+    ).toThrow('NOTIFICATIONS_DATABASE_URL');
+  });
+
+  it('requires FCM_PROJECT_ID and FCM_CREDENTIALS when FCM_ENABLED is true', () => {
+    expect(() =>
+      validateEnvs({
+        ...validEnv,
+        FCM_ENABLED: 'true',
+      }),
+    ).toThrow('FCM_PROJECT_ID');
+
+    const envs = validateEnvs({
+      ...validEnv,
+      FCM_ENABLED: 'true',
+      FCM_PROJECT_ID: 'twf-project',
+      FCM_CREDENTIALS: '{"type":"service_account"}',
+    });
+
+    expect(envs.fcmEnabled).toBe(true);
+    expect(envs.fcmProjectId).toBe('twf-project');
+    expect(envs.fcmCredentials).toBe('{"type":"service_account"}');
   });
 
   it('validates mercadopago payment provider requirements', () => {
