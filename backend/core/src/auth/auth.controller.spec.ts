@@ -1,5 +1,7 @@
+import { RequestMethod } from '@nestjs/common';
 import { envs } from '../config';
 import { IS_PUBLIC_KEY } from '../http/decorators/public.decorator';
+import { REQUIRES_FEATURE_KEY } from '../http/decorators/requires-feature.decorator';
 import { AuthController } from './auth.controller';
 import type { AuthService } from './auth.service';
 
@@ -15,6 +17,7 @@ jest.mock('../config', () => ({
 jest.mock('./prisma/generated/client', () => ({ PrismaClient: class {} }));
 
 const PAIR = { accessToken: 'a', refreshToken: 'r', expiresIn: 900 };
+const SOCKET = { token: 'socket.jwt.value', expiresIn: 60 };
 
 describe('AuthController', () => {
   const service = {
@@ -22,10 +25,57 @@ describe('AuthController', () => {
     login: jest.fn().mockResolvedValue(PAIR),
     refresh: jest.fn().mockResolvedValue(PAIR),
     logout: jest.fn().mockResolvedValue({ ok: true }),
+    issueSocketToken: jest.fn().mockResolvedValue(SOCKET),
   };
   const controller = new AuthController(service as unknown as AuthService);
 
   beforeEach(() => jest.clearAllMocks());
+
+  describe('socketToken', () => {
+    const actor = {
+      userId: 'u1',
+      tenantId: 't1',
+      role: 'owner' as const,
+      tenantStatus: 'active' as const,
+      plan: 'pro' as const,
+      features: { tower: true },
+    };
+
+    it('hands the verified actor to the facade and returns the token body', async () => {
+      await expect(controller.socketToken(actor)).resolves.toBe(SOCKET);
+
+      expect(service.issueSocketToken).toHaveBeenCalledWith(actor);
+    });
+
+    it('is guarded (not public) and requires the tower feature', () => {
+      expect(
+        Reflect.getMetadata(
+          IS_PUBLIC_KEY,
+          AuthController.prototype.socketToken,
+        ),
+      ).toBeUndefined();
+      expect(
+        Reflect.getMetadata(
+          REQUIRES_FEATURE_KEY,
+          AuthController.prototype.socketToken,
+        ),
+      ).toBe('tower');
+    });
+
+    it('is a POST on auth/socket-token', () => {
+      const method = Reflect.getMetadata(
+        'method',
+        AuthController.prototype.socketToken,
+      ) as number;
+      const path = Reflect.getMetadata(
+        'path',
+        AuthController.prototype.socketToken,
+      ) as string;
+
+      expect(method).toBe(RequestMethod.POST);
+      expect(path).toBe('socket-token');
+    });
+  });
 
   it('forwards each body to its facade operation', async () => {
     const register = {

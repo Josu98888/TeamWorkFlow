@@ -11,12 +11,15 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { envs } from '../config';
+import { CurrentActor } from '../http/decorators/current-actor.decorator';
 import { Public } from '../http/decorators/public.decorator';
+import { RequiresFeature } from '../http/decorators/requires-feature.decorator';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
-import type { TokenPair } from './token.service';
+import type { SocketToken, TokenPair } from './token.service';
+import type { VerifiedActor } from './verified-actor';
 
 const REFRESH_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
@@ -129,5 +132,14 @@ export class AuthController {
     const result = await this.authService.logout(body);
     clearAuthCookies(res);
     return result;
+  }
+
+  // Guarded like every non-public route (cookie + CSRF, or bearer). The token
+  // is returned in the body on purpose: JavaScript hands it to the socket
+  // handshake. It is never logged and never set as a cookie.
+  @RequiresFeature('tower')
+  @Post('socket-token')
+  socketToken(@CurrentActor() actor: VerifiedActor): Promise<SocketToken> {
+    return this.authService.issueSocketToken(actor);
   }
 }
