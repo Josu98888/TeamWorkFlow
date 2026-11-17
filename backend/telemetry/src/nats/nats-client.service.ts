@@ -61,8 +61,14 @@ function toAppException(body: RemoteErrorBody): AppException {
   return new AppException(body.status, body.code, body.message, body.errors);
 }
 
-function hashAccessToken(accessToken: string): string {
-  return createHash('sha256').update(accessToken).digest('hex');
+// What a token may be used for, as `auth.token.verify` understands it. `access`
+// is the HTTP session token; `socket` is the 60 second Tower WebSocket token.
+export type TokenPurpose = 'access' | 'socket';
+
+// The purpose is part of the key so a result verified for one purpose can never
+// be served for the other.
+function hashAccessToken(accessToken: string, purpose: TokenPurpose): string {
+  return createHash('sha256').update(`${purpose}:${accessToken}`).digest('hex');
 }
 
 export function verifyHs256JwtLocally(
@@ -91,13 +97,22 @@ export function verifyHs256JwtLocally(
     throw new InvalidTokenException();
   }
 
+  // Access tokens never carry `typ`; any token that does (a socket token) is
+  // not an access token and must not authenticate an HTTP request.
+  if (payload.typ !== undefined) {
+    throw new InvalidTokenException();
+  }
+
   const expectedSig = createHmac('sha256', secret)
     .update(`${headerB64}.${payloadB64}`)
     .digest('base64url');
 
   const sigBuf = Buffer.from(signatureB64);
   const expectedBuf = Buffer.from(expectedSig);
-  if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
+  if (
+    sigBuf.length !== expectedBuf.length ||
+    !timingSafeEqual(sigBuf, expectedBuf)
+  ) {
     throw new InvalidTokenException();
   }
 
@@ -113,7 +128,8 @@ export function verifyHs256JwtLocally(
     sub.length === 0 ||
     typeof role !== 'string' ||
     !VALID_ROLES.has(role as Role) ||
-    (role !== 'platform_admin' && (typeof tenantId !== 'string' || tenantId.length === 0))
+    (role !== 'platform_admin' &&
+      (typeof tenantId !== 'string' || tenantId.length === 0))
   ) {
     throw new InvalidTokenException();
   }
@@ -230,11 +246,26 @@ export class NatsClientService {
     }
   }
 
+  // `socket` tokens are one-shot tickets for the WebSocket handshake: they are
+  // never cached and never verified locally, so every handshake asks `core`
+  // (which re-reads user, tenant and plan) and a failing `core` closes the door.
   async verifyToken(
     accessToken: string,
-    options?: { jwtSecret?: string; cacheTtlMs?: number },
+    options?: {
+      jwtSecret?: string;
+      cacheTtlMs?: number;
+      purpose?: TokenPurpose;
+    },
   ): Promise<VerifiedActor> {
-    const cacheKey = hashAccessToken(accessToken);
+    const purpose = options?.purpose ?? 'access';
+    if (purpose === 'socket') {
+      return this.request<
+        { accessToken: string; purpose: TokenPurpose },
+        VerifiedActor
+      >(NATS_PATTERNS.AUTH_TOKEN_VERIFY, { accessToken, purpose });
+    }
+
+    const cacheKey = hashAccessToken(accessToken, purpose);
     const now = Date.now();
     const cached = this.tokenCache.get(cacheKey);
     if (cached && now < cached.cachedUntil && now < cached.jwtExpMs) {
@@ -244,10 +275,10 @@ export class NatsClientService {
     const ttlMs = options?.cacheTtlMs ?? envs.authCacheTtlMs;
 
     try {
-      const actor = await this.request<{ accessToken: string }, VerifiedActor>(
-        NATS_PATTERNS.AUTH_TOKEN_VERIFY,
-        { accessToken },
-      );
+      const actor = await this.request<
+        { accessToken: string; purpose: TokenPurpose },
+        VerifiedActor
+      >(NATS_PATTERNS.AUTH_TOKEN_VERIFY, { accessToken, purpose });
       if (ttlMs > 0) {
         this.cacheActor(cacheKey, actor, ttlMs);
       }
