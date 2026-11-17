@@ -1,3 +1,4 @@
+import { envs } from '../config';
 import { IS_PUBLIC_KEY } from '../http/decorators/public.decorator';
 import { AuthController } from './auth.controller';
 import type { AuthService } from './auth.service';
@@ -7,6 +8,7 @@ jest.mock('../config', () => ({
     jwtSecret: 'x'.repeat(40),
     accessTokenTtl: '15m',
     refreshTokenTtl: '7d',
+    cookieSecure: true,
   },
 }));
 // Only the class shape of the generated client is needed.
@@ -58,5 +60,53 @@ describe('AuthController', () => {
     ) as boolean | undefined;
 
     expect(flag === true).toBe(isPublic);
+  });
+
+  describe('cookie Secure flag', () => {
+    const mutableEnvs = envs as { cookieSecure: boolean };
+    const original = mutableEnvs.cookieSecure;
+    const fakeRes = () => {
+      const setHeader = jest.fn();
+      return { setHeader, res: { setHeader } as never };
+    };
+    const cookiesOf = (setHeader: jest.Mock): string[] =>
+      (setHeader.mock.calls[0] as [string, string[]])[1];
+
+    afterEach(() => {
+      mutableEnvs.cookieSecure = original;
+    });
+
+    it.each([
+      ['login', true],
+      ['login', false],
+      ['logout', true],
+      ['logout', false],
+    ] as const)('%s with COOKIE_SECURE=%s', async (method, secure) => {
+      mutableEnvs.cookieSecure = secure;
+      const { setHeader, res } = fakeRes();
+
+      await controller[method](
+        { email: 'a@acme.test', password: 'p', refreshToken: 'r' },
+        res,
+      );
+
+      const cookies = cookiesOf(setHeader);
+      expect(cookies).toHaveLength(3);
+      for (const cookie of cookies) {
+        expect(cookie.endsWith('; Secure')).toBe(secure);
+      }
+    });
+
+    it('ignores NODE_ENV', async () => {
+      const previous = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      mutableEnvs.cookieSecure = false;
+      const { setHeader, res } = fakeRes();
+
+      await controller.login({ email: 'a@acme.test', password: 'p' }, res);
+
+      process.env.NODE_ENV = previous;
+      expect(cookiesOf(setHeader).join(';')).not.toContain('Secure');
+    });
   });
 });

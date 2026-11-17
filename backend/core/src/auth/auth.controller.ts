@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { envs } from '../config';
 import { Public } from '../http/decorators/public.decorator';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -31,9 +32,14 @@ function parseCookies(header: string | undefined): Record<string, string> {
   return out;
 }
 
+// Secure is on by default (COOKIE_SECURE); never derived from NODE_ENV.
+function secureAttribute(): string {
+  return envs.cookieSecure ? '; Secure' : '';
+}
+
 function setAuthCookies(res: Response | undefined, pair: TokenPair): void {
   if (!res || typeof res.setHeader !== 'function') return;
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  const secure = secureAttribute();
   const csrfToken = randomBytes(24).toString('hex');
   const accessMaxAge = Math.max(1, pair.expiresIn);
 
@@ -46,7 +52,7 @@ function setAuthCookies(res: Response | undefined, pair: TokenPair): void {
 
 function clearAuthCookies(res: Response | undefined): void {
   if (!res || typeof res.setHeader !== 'function') return;
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  const secure = secureAttribute();
   res.setHeader('Set-Cookie', [
     `access_token=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0${secure}`,
     `refresh_token=; HttpOnly; Path=/api/v1/auth; SameSite=Lax; Max-Age=0${secure}`,
@@ -61,7 +67,10 @@ export class CookieRefreshHydratorGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const req = context.switchToHttp().getRequest<Request>();
     const body = (req.body ?? {}) as Record<string, unknown>;
-    if (typeof body.refreshToken !== 'string' || body.refreshToken.length === 0) {
+    if (
+      typeof body.refreshToken !== 'string' ||
+      body.refreshToken.length === 0
+    ) {
       const cookies = parseCookies(req.headers?.cookie);
       if (cookies.refresh_token) {
         req.body = { ...body, refreshToken: cookies.refresh_token };
