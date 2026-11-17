@@ -74,6 +74,7 @@ jobs:
               - 'frontend/pnpm-workspace.yaml'
               - 'backend/docker-compose.test.yml'
               - 'backend/postgres/**'
+              - 'deploy/**'
               - '.github/workflows/ci.yml'
 
   core:
@@ -244,6 +245,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
+
+      # Production stack config (deploy/): cheap, offline, runs before the image builds.
+      - name: Validate the production compose files
+        working-directory: deploy
+        run: |
+          cp compose.env.example .env
+          cp env/core.env.example env/core.env
+          cp env/telemetry.env.example env/telemetry.env
+          docker compose -f docker-compose.prod.yml --profile '*' config -q
+          docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml --profile '*' config -q
+      - name: Validate the nginx config (HTTP and HTTPS)
+        run: |
+          # Variable upstreams are resolved at request time, so `nginx -t` needs no other container.
+          # The HTTPS block needs certificate files: use a throwaway self-signed pair.
+          le="$RUNNER_TEMP/letsencrypt/live/teamworkflow"
+          mkdir -p "$le"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=ci" \
+            -keyout "$le/privkey.pem" -out "$le/fullchain.pem"
+          for conf in conf.d/http.conf tls/https.conf; do
+            echo "nginx -t with $conf"
+            docker run --rm \
+              -v "$PWD/deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
+              -v "$PWD/deploy/nginx/$conf:/etc/nginx/conf.d/default.conf:ro" \
+              -v "$PWD/deploy/nginx/snippets:/etc/nginx/snippets:ro" \
+              -v "$RUNNER_TEMP/letsencrypt:/etc/letsencrypt:ro" \
+              nginx:1.27-alpine nginx -t
+          done
 
       # Nothing is pushed. The GitHub cache keeps the layers between runs.
       # core and telemetry runners are only built: they need NATS, Postgres and
