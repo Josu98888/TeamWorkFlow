@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { envs } from '../../config';
+import { buildNatsOptions } from '../../config/nats-options';
 import {
   BILLING_EVENTS_OPTIONS,
   BillingEventsService,
@@ -9,7 +10,7 @@ import {
   providers: [
     {
       provide: BILLING_EVENTS_OPTIONS,
-      useFactory: () => ({ servers: envs.natsServers }),
+      useFactory: () => buildNatsOptions(envs.natsServers, envs.natsCreds),
     },
     BillingEventsService,
   ],
