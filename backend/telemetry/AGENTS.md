@@ -82,6 +82,7 @@ The operation names are the stable contract; the paths are proposed and move fro
 2. `gps` and `qr` events are created by the employee from the mobile app (the actor is the employee). `manual` events are created by a supervisor (within their sites) or admin on behalf of an employee, with a mandatory `reason`.
 3. Every clock event belongs to a shift. The service finds the employee's non-cancelled shift that matches the site and device time:
    - An `in` matches a shift from 60 minutes BEFORE the shift start until the shift end (constant `CLOCK_IN_EARLY_MINUTES = 60`). Outside that window (too early, or after the shift ended) it answers `no_matching_shift` (404); a supervisor can then add a manual clock event with a reason.
+   - When SEVERAL of the employee's shifts match the same `in` (back-to-back shifts, the early window of the next one overlaps the previous one), pick in this order: 1) a shift with an open pair, that is an `in` with no later `out` for this employee; 2) else a shift with no clock events yet for this employee; 3) else the first by `startsAt`. This keeps an `in` after shift A's `in` + `out` going to the next shift B. The `out` rule below (the latest open `in`) stays consistent with it.
    - An `out`, `break_start` or `break_end` belongs to the shift where the employee has an open `in`; with none it answers `no_matching_shift`.
 4. The employee is identified from the actor `userId` through the NATS request `organization.employee.get` (by `userId`) answered by `core`; the result is cached in memory per `(tenantId, userId)`.
 

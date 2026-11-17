@@ -27,6 +27,7 @@ describe('ShiftSnapshotService', () => {
         findMany: jest.fn(),
         upsert: jest.fn(),
       },
+      clockEvent: { findMany: jest.fn().mockResolvedValue([]) },
     };
     mockNatsClient = {
       getShift: jest.fn(),
@@ -139,6 +140,73 @@ describe('ShiftSnapshotService', () => {
       );
 
       expect(matched).toBeNull();
+    });
+
+    describe('several shifts match the same clock-in', () => {
+      const shiftA = {
+        ...shift,
+        shiftId: 'shift-a',
+        startsAt: new Date('2026-10-28T08:00:00.000Z'),
+        endsAt: new Date('2026-10-28T12:00:00.000Z'),
+      };
+      const shiftB = {
+        ...shift,
+        shiftId: 'shift-b',
+        startsAt: new Date('2026-10-28T12:00:00.000Z'),
+        endsAt: new Date('2026-10-28T16:00:00.000Z'),
+      };
+      // Inside A's window and B's early window.
+      const deviceTime = new Date('2026-10-28T11:30:00.000Z');
+      const at = (iso: string) => new Date(iso);
+      const match = () =>
+        service.findMatchingShiftForClockIn('tenant-1', 'emp-1', 'site-1', deviceTime);
+
+      beforeEach(() => {
+        mockPrisma.shiftSnapshot.findMany.mockResolvedValue([shiftA, shiftB]);
+      });
+
+      it('prefers the shift with an open pair (IN without a later OUT)', async () => {
+        mockPrisma.clockEvent.findMany.mockResolvedValue([
+          { shiftId: 'shift-a', type: 'IN', deviceTime: at('2026-10-28T08:00:00.000Z') },
+          { shiftId: 'shift-a', type: 'OUT', deviceTime: at('2026-10-28T11:00:00.000Z') },
+          { shiftId: 'shift-b', type: 'IN', deviceTime: at('2026-10-28T11:10:00.000Z') },
+        ]);
+
+        expect((await match())?.shiftId).toBe('shift-b');
+      });
+
+      it('falls back to the first shift without clock events when every pair is closed', async () => {
+        mockPrisma.clockEvent.findMany.mockResolvedValue([
+          { shiftId: 'shift-a', type: 'IN', deviceTime: at('2026-10-28T08:00:00.000Z') },
+          { shiftId: 'shift-a', type: 'OUT', deviceTime: at('2026-10-28T11:00:00.000Z') },
+        ]);
+
+        expect((await match())?.shiftId).toBe('shift-b');
+      });
+
+      it('falls back to the first by startsAt when all have closed pairs', async () => {
+        mockPrisma.clockEvent.findMany.mockResolvedValue([
+          { shiftId: 'shift-a', type: 'IN', deviceTime: at('2026-10-28T08:00:00.000Z') },
+          { shiftId: 'shift-a', type: 'OUT', deviceTime: at('2026-10-28T11:00:00.000Z') },
+          { shiftId: 'shift-b', type: 'IN', deviceTime: at('2026-10-28T11:05:00.000Z') },
+          { shiftId: 'shift-b', type: 'OUT', deviceTime: at('2026-10-28T11:20:00.000Z') },
+        ]);
+
+        expect((await match())?.shiftId).toBe('shift-a');
+      });
+
+      it('picks the first by startsAt when no shift has events', async () => {
+        mockPrisma.clockEvent.findMany.mockResolvedValue([]);
+
+        expect((await match())?.shiftId).toBe('shift-a');
+      });
+
+      it('does not read clock events when a single shift matches', async () => {
+        mockPrisma.shiftSnapshot.findMany.mockResolvedValue([shiftA]);
+
+        expect((await match())?.shiftId).toBe('shift-a');
+        expect(mockPrisma.clockEvent.findMany).not.toHaveBeenCalled();
+      });
     });
   });
 });

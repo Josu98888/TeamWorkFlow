@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import {
   DeleteObjectsCommand,
   GetObjectCommand,
@@ -25,7 +25,9 @@ export class StorageService {
   private readonly client: S3Client;
   private readonly bucket: string;
 
-  constructor(config?: Partial<StorageConfig>) {
+  // `config` exists for tests (`new StorageService({...})`); Nest has no provider
+  // for it, so @Optional() makes the injector pass undefined and use `envs`.
+  constructor(@Optional() config?: Partial<StorageConfig>) {
     const endpoint = config?.endpoint ?? envs.s3Endpoint;
     const region = config?.region ?? envs.s3Region;
     const accessKey = config?.accessKey ?? envs.s3AccessKey;

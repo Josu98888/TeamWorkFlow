@@ -97,6 +97,25 @@ describe('BillingEventsService', () => {
       expect.stringContaining('"plan":"pro"'),
       expect.objectContaining({ msgID: expect.any(String) }),
     );
+    // Consumers drop events whose envelope lacks the subject tenant.
+    const envelope = JSON.parse(mockJs.publish.mock.calls[0][1] as string);
+    expect(envelope).toMatchObject({
+      tenantId,
+      eventId: expect.any(String),
+      occurredAt: expect.any(String),
+    });
+  });
+
+  it('keeps the subject tenant in the envelope even if the payload carries another', async () => {
+    await service.onModuleInit();
+
+    const tenantId = '0199b7e0-0000-7000-8000-000000000001';
+    await service.publish(tenantId, BILLING_EVENTS.subscriptionCreated, {
+      tenantId: '0199b7e0-0000-7000-8000-000000000999',
+    });
+
+    const envelope = JSON.parse(mockJs.publish.mock.calls[0][1] as string);
+    expect(envelope.tenantId).toBe(tenantId);
   });
 
   it('publishes notification events to t.<tenant>.notifications.send', async () => {
