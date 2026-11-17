@@ -30,6 +30,7 @@ jobs:
       core: ${{ steps.filter.outputs.core }}
       telemetry: ${{ steps.filter.outputs.telemetry }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      docker: ${{ steps.filter.outputs.docker }}
     steps:
       # workflow_dispatch has no diff: the jobs below run unconditionally then.
       - uses: actions/checkout@v4
@@ -49,6 +50,30 @@ jobs:
               - '.github/workflows/ci.yml'
             frontend:
               - 'frontend/**'
+              - '.github/workflows/ci.yml'
+            docker:
+              - 'backend/core/Dockerfile.prod'
+              - 'backend/core/.dockerignore'
+              - 'backend/core/package.json'
+              - 'backend/core/pnpm-lock.yaml'
+              - 'backend/core/pnpm-workspace.yaml'
+              - 'backend/core/prisma.*.config.ts'
+              - 'backend/core/src/*/prisma/**'
+              - 'backend/telemetry/Dockerfile'
+              - 'backend/telemetry/.dockerignore'
+              - 'backend/telemetry/package.json'
+              - 'backend/telemetry/pnpm-lock.yaml'
+              - 'backend/telemetry/pnpm-workspace.yaml'
+              - 'backend/telemetry/prisma.*.config.ts'
+              - 'backend/telemetry/src/prisma/**'
+              - 'frontend/Dockerfile.prod'
+              - 'frontend/.dockerignore'
+              - 'frontend/next.config.*'
+              - 'frontend/package.json'
+              - 'frontend/pnpm-lock.yaml'
+              - 'frontend/pnpm-workspace.yaml'
+              - 'backend/docker-compose.test.yml'
+              - 'backend/postgres/**'
               - '.github/workflows/ci.yml'
 
   core:
@@ -201,3 +226,120 @@ jobs:
       - run: pnpm lint
       - run: npx tsc --noEmit
       - run: pnpm build
+
+  docker:
+    name: Docker images (build, migrate)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.docker == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      # Compose project `teamworkflow-test` names its default network this way.
+      COMPOSE_NETWORK: teamworkflow-test_default
+      # Throwaway credentials of the tmpfs test database (backend/postgres/init
+      # creates one `<module>_svc` role per schema with password `test`).
+      PG_HOST: postgres-test:5432
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      # Nothing is pushed. The GitHub cache keeps the layers between runs.
+      # core and telemetry runners are only built: they need NATS, Postgres and
+      # the full env to boot, which the e2e jobs already cover.
+      - name: Build core (runner)
+        uses: docker/build-push-action@v6
+        with:
+          context: backend/core
+          file: backend/core/Dockerfile.prod
+          target: runner
+          push: false
+          cache-from: type=gha,scope=core-runner
+          cache-to: type=gha,mode=max,scope=core-runner
+      - name: Build core (migrate)
+        uses: docker/build-push-action@v6
+        with:
+          context: backend/core
+          file: backend/core/Dockerfile.prod
+          target: migrate
+          push: false
+          load: true
+          tags: teamworkflow-core-migrate:ci
+          cache-from: type=gha,scope=core-migrate
+          cache-to: type=gha,mode=max,scope=core-migrate
+      - name: Build telemetry (runner)
+        uses: docker/build-push-action@v6
+        with:
+          context: backend/telemetry
+          file: backend/telemetry/Dockerfile
+          target: runner
+          push: false
+          cache-from: type=gha,scope=telemetry-runner
+          cache-to: type=gha,mode=max,scope=telemetry-runner
+      - name: Build telemetry (migrate)
+        uses: docker/build-push-action@v6
+        with:
+          context: backend/telemetry
+          file: backend/telemetry/Dockerfile
+          target: migrate
+          push: false
+          load: true
+          tags: teamworkflow-telemetry-migrate:ci
+          cache-from: type=gha,scope=telemetry-migrate
+          cache-to: type=gha,mode=max,scope=telemetry-migrate
+      - name: Build frontend (runner)
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          file: frontend/Dockerfile.prod
+          target: runner
+          push: false
+          load: true
+          tags: teamworkflow-frontend:ci
+          cache-from: type=gha,scope=frontend-runner
+          cache-to: type=gha,mode=max,scope=frontend-runner
+
+      # Run the migrate images against a fresh database that has the per-module
+      # schemas and roles (same init script as the e2e stack).
+      - name: Start Postgres
+        run: docker compose -f backend/docker-compose.test.yml up -d --wait postgres-test
+      - name: Run core migrations
+        run: |
+          docker run --rm --network "$COMPOSE_NETWORK" \
+            -e "AUTH_DATABASE_URL=postgresql://auth_svc:test@${PG_HOST}/teamworkflow?schema=auth" \
+            -e "ORGANIZATION_DATABASE_URL=postgresql://organization_svc:test@${PG_HOST}/teamworkflow?schema=organization" \
+            -e "BILLING_DATABASE_URL=postgresql://billing_svc:test@${PG_HOST}/teamworkflow?schema=billing" \
+            -e "TASKS_DATABASE_URL=postgresql://tasks_svc:test@${PG_HOST}/teamworkflow?schema=tasks" \
+            -e "NOTIFICATIONS_DATABASE_URL=postgresql://notifications_svc:test@${PG_HOST}/teamworkflow?schema=notifications" \
+            teamworkflow-core-migrate:ci
+      - name: Run telemetry migrations
+        run: |
+          docker run --rm --network "$COMPOSE_NETWORK" \
+            -e "ATTENDANCE_DATABASE_URL=postgresql://attendance_svc:test@${PG_HOST}/teamworkflow?schema=attendance" \
+            teamworkflow-telemetry-migrate:ci
+
+      - name: Smoke test the frontend image
+        run: |
+          docker run -d --name frontend-smoke -p 3000:3000 teamworkflow-frontend:ci
+          for i in $(seq 1 30); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ || true)"
+            echo "attempt $i: HTTP $code"
+            # `/` may redirect (for example to the login page): 2xx and 3xx are fine.
+            if [ "$code" -ge 200 ] 2>/dev/null && [ "$code" -lt 400 ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "frontend did not answer 2xx/3xx" >&2
+          exit 1
+      - name: Container logs
+        if: failure()
+        run: |
+          docker logs frontend-smoke || true
+          docker compose -f backend/docker-compose.test.yml logs --no-color --tail=200 postgres-test || true
+      - name: Stop containers
+        if: always()
+        run: |
+          docker rm -f frontend-smoke || true
+          docker compose -f backend/docker-compose.test.yml down -v
