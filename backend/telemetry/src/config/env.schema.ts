@@ -1,8 +1,10 @@
 import * as joi from 'joi';
+import { NATS_CREDS_PATTERN, normalizeNatsCreds } from './nats-options';
 
 export interface Envs {
   port: number;
   natsServers: string[];
+  natsCreds?: string;
   attendanceDatabaseUrl: string;
   webOrigin: string;
   natsTimeoutMs: number;
@@ -15,6 +17,7 @@ export interface Envs {
 interface EnvVars {
   PORT: number;
   NATS_SERVER: string[];
+  NATS_CREDS?: string;
   ATTENDANCE_DATABASE_URL: string;
   WEB_ORIGIN: string;
   NATS_TIMEOUT_MS: number;
@@ -27,6 +30,7 @@ interface EnvVars {
 const envsSchema = joi
   .object<EnvVars>({
     PORT: joi.number().port().default(3003),
+    NATS_CREDS: joi.string().pattern(NATS_CREDS_PATTERN),
     NATS_SERVER: joi
       .array()
       .items(joi.string().uri())
@@ -49,6 +53,7 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
   const { error, value } = envsSchema.validate(
     {
       ...raw,
+      NATS_CREDS: normalizeNatsCreds(raw.NATS_CREDS),
       PORT: raw.PORT ? Number(raw.PORT) : 3003,
       NATS_SERVER: raw.NATS_SERVER
         ? raw.NATS_SERVER.split(',').map((server) => server.trim())
@@ -82,6 +87,7 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
   return {
     port: envVars.PORT,
     natsServers: envVars.NATS_SERVER,
+    natsCreds: envVars.NATS_CREDS,
     attendanceDatabaseUrl: envVars.ATTENDANCE_DATABASE_URL,
     webOrigin: envVars.WEB_ORIGIN,
     natsTimeoutMs: envVars.NATS_TIMEOUT_MS,
