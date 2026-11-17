@@ -69,5 +69,6 @@ Forecast: ~1,000-1,200 authored changed lines, above the ~400-line budget. Strat
 - T1 done (commits above).
 - T2 done (commits above).
 - T3 done (commits above).
-- T4 done (commits above).
+- T4 done (commits above). Risk tier `high` (`gentle-ai review assess`, RDD off), so an independent read-only verifier ran: PASS, no exploitable issue; core `pnpm test -- src/auth src/http` 997/997, telemetry `pnpm test -- src/nats src/tower src/http` 73/73. Its one low finding (a session timer set on a socket that left while joining rooms) is fixed in `4992910` with a spec. Accepted by design: a socket token can be replayed within its 60 s life.
+- CI run 44158950640 (T1-T3) green, all jobs.
 - Next step: T5 (frontend: socket `auth` callback calls `POST /api/v1/auth/socket-token` with the CSRF header, no `withCredentials` needed; reconnect gets a fresh token).
