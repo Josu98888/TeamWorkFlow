@@ -7,8 +7,12 @@ import { isWireRole, toWirePlan, toWireRole, toWireTenantStatus } from './wire';
 import { envs } from '../config';
 import {
   EmailTakenException,
+  FeatureNotInPlanException,
+  ForbiddenException,
   InvalidCredentialsException,
   InvalidTokenException,
+  TenantCancelledException,
+  TenantSuspendedException,
 } from '../common/exceptions/app.exceptions';
 import { AUTH_EVENTS } from './events/auth.events';
 import { JetStreamService } from './events/jetstream.service';
@@ -21,7 +25,7 @@ import {
   VerifyTokenDto,
 } from './dto/verify-token.dto';
 import { RegisterDto } from './dto/register.dto';
-import { TokenPair, TokenService } from './token.service';
+import { SocketToken, TokenPair, TokenService } from './token.service';
 import type { ListRecipientsDto } from './users/dto/user-list-recipients.dto';
 import { UserListRecipientsService } from './users/user-list-recipients.service';
 import type { VerifiedActor } from './verified-actor';
@@ -272,6 +276,33 @@ export class AuthService {
       plan: tenant?.plan ? toWirePlan(tenant.plan) : null,
       features: (tenant?.features as Record<string, boolean> | null) ?? null,
     };
+  }
+
+  // Short-lived ticket for the Torre de Control WebSocket (the browser cannot
+  // send the httpOnly cookie to the telemetry service, which is another
+  // origin).
+  // The actor comes from the guard's verify; every rule is re-checked here so
+  // the facade is safe even if a route forgets a decorator.
+  async issueSocketToken(actor: VerifiedActor): Promise<SocketToken> {
+    if (
+      (actor.role !== 'owner' &&
+        actor.role !== 'admin' &&
+        actor.role !== 'supervisor') ||
+      !actor.tenantId
+    ) {
+      throw new ForbiddenException();
+    }
+    if (actor.tenantStatus === 'suspended')
+      throw new TenantSuspendedException();
+    if (actor.tenantStatus === 'cancelled')
+      throw new TenantCancelledException();
+    if (!actor.features?.tower) throw new FeatureNotInPlanException();
+
+    return this.tokens.issueSocketToken({
+      userId: actor.userId,
+      tenantId: actor.tenantId,
+      role: actor.role,
+    });
   }
 
   // Any signature, algorithm, expiry, shape or purpose problem is the same
