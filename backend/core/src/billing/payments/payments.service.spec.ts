@@ -19,6 +19,9 @@ jest.mock('../../config', () => ({
 }));
 jest.mock('../prisma/generated/client', () => ({ PrismaClient: class {} }));
 
+// Mercado Pago external references are invoice UUIDs; anything else is ignored.
+const WEBHOOK_INVOICE_ID = '0192f3a4-1b2c-7d3e-8f40-5a6b7c8d9e0f';
+
 describe('PaymentsService', () => {
   let service: PaymentsService;
   let mockPrisma: any;
@@ -147,7 +150,7 @@ describe('PaymentsService', () => {
         status: 'approved',
         amount: '121000.00',
         currency: 'ARS',
-        externalReference: 'inv-1',
+        externalReference: WEBHOOK_INVOICE_ID,
         paidAt: new Date('2026-10-15T12:00:00.000Z'),
       });
 
@@ -155,7 +158,7 @@ describe('PaymentsService', () => {
       mockPrisma.webhookNotification.create.mockResolvedValue({});
       mockPrisma.payment.findUnique.mockResolvedValueOnce(null); // not yet recorded
       mockPrisma.invoice.findUnique.mockResolvedValueOnce({
-        id: 'inv-1',
+        id: WEBHOOK_INVOICE_ID,
         tenantId: 'tenant-1',
         total: new Decimal('121000.00'),
         status: 'ISSUED',
@@ -184,19 +187,36 @@ describe('PaymentsService', () => {
       );
       expect(mockPrisma.invoice.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'inv-1' },
+          where: { id: WEBHOOK_INVOICE_ID },
           data: expect.objectContaining({ status: 'PAID' }),
         }),
       );
       expect(mockEvents.publish).toHaveBeenCalledWith(
         'tenant-1',
         BILLING_EVENTS.paymentReceived,
-        expect.objectContaining({ invoiceId: 'inv-1' }),
+        expect.objectContaining({ invoiceId: WEBHOOK_INVOICE_ID }),
       );
       expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
         where: { id: 'sub-1' },
         data: { status: 'ACTIVE' },
       });
+    });
+
+    it('ignores a payment whose external reference is not a UUID without querying invoices', async () => {
+      // The fake provider answers 'inv-test' for unknown payment ids.
+      mockPrisma.webhookNotification.findUnique.mockResolvedValueOnce(null);
+      mockPrisma.webhookNotification.create.mockResolvedValue({});
+      mockPrisma.payment.findUnique.mockResolvedValueOnce(null);
+
+      const res = await service.handleWebhook(
+        { 'x-test-signature': 'valid' },
+        JSON.stringify({ id: 'notif-bad-ref', data: { id: 'pay-unknown' } }),
+      );
+
+      expect(res.ok).toBe(true);
+      expect(mockPrisma.invoice.findUnique).not.toHaveBeenCalled();
+      expect(mockPrisma.payment.create).not.toHaveBeenCalled();
+      expect(mockPrisma.invoice.update).not.toHaveBeenCalled();
     });
 
     it('records payment as NEEDS_REVIEW if amount does not match invoice total', async () => {
@@ -205,7 +225,7 @@ describe('PaymentsService', () => {
         status: 'approved',
         amount: '50000.00', // partial
         currency: 'ARS',
-        externalReference: 'inv-1',
+        externalReference: WEBHOOK_INVOICE_ID,
         paidAt: new Date('2026-10-15T12:00:00.000Z'),
       });
 
@@ -213,7 +233,7 @@ describe('PaymentsService', () => {
       mockPrisma.webhookNotification.create.mockResolvedValue({});
       mockPrisma.payment.findUnique.mockResolvedValueOnce(null);
       mockPrisma.invoice.findUnique.mockResolvedValueOnce({
-        id: 'inv-1',
+        id: WEBHOOK_INVOICE_ID,
         tenantId: 'tenant-1',
         total: new Decimal('121000.00'),
         status: 'ISSUED',
@@ -280,19 +300,19 @@ describe('PaymentsService', () => {
   describe('reconciliation', () => {
     it('reconciles unpaid invoices by searching provider', async () => {
       mockPrisma.invoice.findMany.mockResolvedValueOnce([
-        { id: 'inv-unpaid-1' },
+        { id: WEBHOOK_INVOICE_ID },
       ]);
       fakeProvider.registerMockPayment({
         id: 'pay-found',
         status: 'approved',
         amount: '121000.00',
         currency: 'ARS',
-        externalReference: 'inv-unpaid-1',
+        externalReference: WEBHOOK_INVOICE_ID,
         paidAt: new Date(),
       });
       mockPrisma.payment.findUnique.mockResolvedValueOnce(null);
       mockPrisma.invoice.findUnique.mockResolvedValueOnce({
-        id: 'inv-unpaid-1',
+        id: WEBHOOK_INVOICE_ID,
         tenantId: 'tenant-1',
         total: new Decimal('121000.00'),
       });

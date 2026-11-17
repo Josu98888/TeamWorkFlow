@@ -35,13 +35,18 @@ There is no `.github/workflows`, no production Dockerfile for `core` or the fron
   - jobs run in parallel with pnpm cache, and path filters skip untouched apps.
 
   Route: delegated (writer trigger: workflow plus docs, 3 files). Evidence: `@action-validator/cli` passes on `ci.yml`; every command maps to a package script; unit specs pass with the job env (core `src/common|config|auth.service.login` 112 tests, telemetry `src/shifts` 12 tests, `DOTENV_CONFIG_PATH` pointed at a missing file so no local `.env` leaks in). Full lint/test/build are left to the PR run. Commit: see Progress.
-- [ ] **T2** Fix the failing e2e specs and add an e2e job with service containers (postgres, nats, seaweedfs). The known failures:
-  - the Mercado Pago webhook answers 500 on a non-UUID id;
-  - the S3 upload fails in `tasks.e2e`;
-  - the `harness` hook times out;
-  - `Bearer undefined` in the billing spec;
+- [x] **T2** Fix the failing e2e specs and add the e2e jobs. Spec fixes (done on `fix/ci/e2e-suites`):
+  - the Mercado Pago webhook answers 200 and ignores non-UUID references;
+  - the S3 upload, the `harness` hook timeout and `Bearer undefined` in the billing spec;
   - the stale tower feature mock in telemetry;
-  - the telemetry container's Node version.
+  - the telemetry and core containers run on Node 24.
+
+  CI jobs in `.github/workflows/ci.yml`:
+  - `core-e2e` runs `backend/docker-compose.test.yml` (postgres-test, nats-test with `-js`, seaweedfs-test), waits for the bucket init container, generates the five Prisma clients and runs `pnpm test:e2e`; `globalSetup` runs `migrate deploy`. No env or secrets: `test-env.ts` pins the throwaway values;
+  - `telemetry` runs `pnpm test:e2e` after the unit tests (mocked NATS and database);
+  - the core filter also watches `backend/docker-compose.test.yml` and `backend/postgres/**`.
+
+  Status: not yet run on GitHub Actions; marked done once a PR run is green.
 - [ ] **T3** Production Dockerfiles for `core` and the frontend; review the telemetry one (Node version).
 - [ ] **T4** Production compose and nginx for the EC2 host (TLS, env files, a migrations step before start).
 - [ ] **T5** CD workflow: build and push images to GHCR on `main`, then deploy to EC2 (needs user authorization and secrets).
@@ -62,4 +67,5 @@ TDD: off (no project or session setting; workflow and config work). Checks per t
 
 - Branch `feat/ci/github-actions` from `origin/develop` (54d4f4d).
 - T1 done: `.github/workflows/ci.yml` (changes, core, telemetry, frontend) and a CI section in `AGENTS.md`. Node 24, pnpm 11.5.2, dummy env in the core and telemetry jobs. Commit: `ci(core)` on `feat/ci/github-actions` (see `git log`).
-- Next step: push after user confirmation, check the first run is green, then T2.
+- T2: e2e jobs added on `fix/ci/e2e-suites` (pending a green PR run).
+- Next step: push after user confirmation, check the run is green (including the e2e jobs), then T3.

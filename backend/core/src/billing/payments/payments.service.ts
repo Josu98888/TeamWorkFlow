@@ -17,6 +17,9 @@ import type {
   ProviderPaymentDetails,
 } from './payment-provider.interface';
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export interface ServiceActor {
   userId: string;
   tenantId: string | null;
@@ -219,9 +222,13 @@ export class PaymentsService {
       return;
     }
 
-    const invoice = await this.prisma.invoice.findUnique({
-      where: { id: details.externalReference },
-    });
+    // The reference comes from an external system: a non-UUID value can never
+    // match an invoice and would make Postgres reject the query (HTTP 500).
+    const invoice = UUID_PATTERN.test(details.externalReference ?? '')
+      ? await this.prisma.invoice.findUnique({
+          where: { id: details.externalReference },
+        })
+      : null;
 
     if (!invoice) {
       this.logger.warn(

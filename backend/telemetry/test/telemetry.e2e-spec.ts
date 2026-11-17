@@ -202,6 +202,9 @@ describe('Telemetry E2E Integration', () => {
         features: { tower: false },
       };
       mockNatsClient.verifyToken.mockResolvedValue(actor);
+      // The guard falls back to the local tenant features when the token lacks
+      // the feature: make that lookup answer "not included".
+      mockTenantStateService.hasFeature.mockResolvedValueOnce(false);
 
       const response = await request(app.getHttpServer())
         .get('/api/v1/telemetry/tower/snapshot')

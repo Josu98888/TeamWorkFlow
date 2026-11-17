@@ -22,7 +22,9 @@ function getSchemaPool(schema: SchemaName): Pool {
 
   const rawUrl = process.env[SCHEMA_ENV_KEYS[schema]];
   if (!rawUrl) {
-    throw new Error(`${SCHEMA_ENV_KEYS[schema]} is not configured for e2e tests`);
+    throw new Error(
+      `${SCHEMA_ENV_KEYS[schema]} is not configured for e2e tests`,
+    );
   }
 
   // `?schema=` is a Prisma parameter; each role search_path already targets its schema.
@@ -54,15 +56,21 @@ export function notificationsDb() {
   return getSchemaPool('notifications');
 }
 
+// Reference data seeded by migrations: tests read it, so it survives cleanup.
+const PRESERVED_TABLES: Partial<Record<SchemaName, string[]>> = {
+  billing: ['plans'],
+};
+
 async function truncateSchema(schema: SchemaName) {
   if (!process.env[SCHEMA_ENV_KEYS[schema]]) {
     return;
   }
   const clientPool = getSchemaPool(schema);
+  const preserved = ['_prisma_migrations', ...(PRESERVED_TABLES[schema] ?? [])];
   const { rows } = await clientPool.query<{ tablename: string }>(
     `SELECT tablename FROM pg_tables
-     WHERE schemaname = $1 AND tablename <> '_prisma_migrations'`,
-    [schema],
+     WHERE schemaname = $1 AND tablename <> ALL($2::text[])`,
+    [schema, preserved],
   );
   if (rows.length > 0) {
     const tables = rows
@@ -72,7 +80,8 @@ async function truncateSchema(schema: SchemaName) {
   }
 }
 
-// Empties every table of each module schema (keeps `_prisma_migrations`).
+// Empties every table of each module schema (keeps `_prisma_migrations` and
+// the reference tables in PRESERVED_TABLES).
 export async function cleanDatabase() {
   await truncateSchema('auth');
   for (const schema of [
