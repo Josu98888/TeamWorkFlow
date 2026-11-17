@@ -264,7 +264,7 @@ Shared by `core` (each module adds its own, listed in its `AGENTS.md`; final nam
 |----------|-------------|
 | `PORT` | HTTP port |
 | `NATS_SERVER` | Comma-separated NATS URLs |
-| `COOKIE_SECURE` | `true` in production; if absent, derive from `NODE_ENV` (`true` unless `development`) |
+| `COOKIE_SECURE` | Boolean, default `true` in every environment (not derived from `NODE_ENV`). Set `false` only for an HTTP-only test deployment; core logs a warning at startup when it is `false` with `NODE_ENV=production` |
 | `RATE_LIMIT_PUBLIC_TTL_MS` / `RATE_LIMIT_PUBLIC_LIMIT` | Public routes per IP. Initial values: `60000` / `30` |
 | `RATE_LIMIT_AUTH_TTL_MS` / `RATE_LIMIT_AUTH_LIMIT` | Authenticated routes per user. Initial values: `60000` / `300` |
 
