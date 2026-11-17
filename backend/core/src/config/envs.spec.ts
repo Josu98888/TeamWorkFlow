@@ -46,6 +46,7 @@ describe('envs', () => {
       graceDays: 7,
       dataRetentionDays: 90,
       appUrl: 'http://localhost:3002',
+      cookieSecure: true,
       jwtSecret: validEnv.JWT_SECRET,
       accessTokenTtl: '15m',
       refreshTokenTtl: '7d',
@@ -95,6 +96,19 @@ describe('envs', () => {
         S3_SECRET_KEY: '',
       }),
     ).toThrow('S3_SECRET_KEY');
+  });
+
+  it('defaults COOKIE_SECURE to true and accepts an explicit opt-out', () => {
+    expect(validateEnvs(validEnv).cookieSecure).toBe(true);
+    expect(
+      validateEnvs({ ...validEnv, COOKIE_SECURE: 'false' }).cookieSecure,
+    ).toBe(false);
+    expect(
+      validateEnvs({ ...validEnv, COOKIE_SECURE: 'true' }).cookieSecure,
+    ).toBe(true);
+    expect(() => validateEnvs({ ...validEnv, COOKIE_SECURE: 'maybe' })).toThrow(
+      'COOKIE_SECURE',
+    );
   });
 
   it('accepts custom token TTLs', () => {

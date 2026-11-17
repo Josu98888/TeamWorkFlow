@@ -31,6 +31,7 @@ export interface Envs {
   graceDays: number;
   dataRetentionDays: number;
   appUrl: string;
+  cookieSecure: boolean;
   jwtSecret: string;
   accessTokenTtl: string;
   refreshTokenTtl: string;
@@ -64,6 +65,7 @@ interface EnvVars {
   GRACE_DAYS: number;
   DATA_RETENTION_DAYS: number;
   APP_URL: string;
+  COOKIE_SECURE: boolean;
   JWT_SECRET: string;
   ACCESS_TOKEN_TTL: string;
   REFRESH_TOKEN_TTL: string;
@@ -115,10 +117,7 @@ const envsSchema = joi
       then: joi.required(),
       otherwise: joi.optional().allow(''),
     }),
-    PAYMENT_PROVIDER: joi
-      .string()
-      .valid('mercadopago', 'fake')
-      .default('fake'),
+    PAYMENT_PROVIDER: joi.string().valid('mercadopago', 'fake').default('fake'),
     MP_ACCESS_TOKEN: joi.string().when('PAYMENT_PROVIDER', {
       is: 'mercadopago',
       then: joi.required(),
@@ -136,6 +135,9 @@ const envsSchema = joi
     GRACE_DAYS: joi.number().integer().positive().default(7),
     DATA_RETENTION_DAYS: joi.number().integer().positive().default(90),
     APP_URL: joi.string().uri().default('http://localhost:3002'),
+    // Secure auth cookies by default. Set to false only for an HTTP-only test
+    // deployment: browsers drop Secure cookies on plain http (except localhost).
+    COOKIE_SECURE: joi.boolean().default(true),
     JWT_SECRET: joi.string().min(32).required(),
     ACCESS_TOKEN_TTL: joi.string().pattern(DURATION_PATTERN).default('15m'),
     REFRESH_TOKEN_TTL: joi.string().pattern(DURATION_PATTERN).default('7d'),
@@ -198,6 +200,7 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
     graceDays: envVars.GRACE_DAYS,
     dataRetentionDays: envVars.DATA_RETENTION_DAYS,
     appUrl: envVars.APP_URL,
+    cookieSecure: envVars.COOKIE_SECURE,
     jwtSecret: envVars.JWT_SECRET,
     accessTokenTtl: envVars.ACCESS_TOKEN_TTL,
     refreshTokenTtl: envVars.REFRESH_TOKEN_TTL,
