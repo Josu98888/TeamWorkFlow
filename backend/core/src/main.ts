@@ -8,6 +8,12 @@ import { envs } from './config';
 async function bootstrap() {
   const logger = new Logger('Core');
 
+  if (!envs.cookieSecure && process.env.NODE_ENV === 'production') {
+    logger.warn(
+      'COOKIE_SECURE=false in production: auth cookies are sent without the Secure flag. Only acceptable for an HTTP-only test deployment, never with real users.',
+    );
+  }
+
   const app = await NestFactory.create(AppModule);
   configureApp(app);
 
