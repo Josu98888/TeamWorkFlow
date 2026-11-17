@@ -1,4 +1,5 @@
 -- One-off setup of the module schemas and roles on Supabase (free Postgres).
+-- No psql? Use the SQL Editor variant 01-schemas-and-roles.editor.sql (same statements, keep both in sync).
 -- Local and compose databases use backend/postgres/init/01-schemas-and-roles.sh instead.
 --
 -- Run it ONCE as the `postgres` user, from the DIRECT or SESSION connection (not the
