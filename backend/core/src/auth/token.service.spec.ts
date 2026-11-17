@@ -168,5 +168,69 @@ describe('TokenService', () => {
       expect(txCreate).toHaveBeenCalledTimes(1);
       expect(create).not.toHaveBeenCalled();
     });
+
+    it('issues access tokens without a typ claim', async () => {
+      const pair = await service.issueTokenPair({
+        id: USER_ID,
+        tenantId: TENANT_ID,
+        role: 'OWNER',
+      });
+
+      expect(
+        jwt.decode<Record<string, unknown>>(pair.accessToken),
+      ).not.toHaveProperty('typ');
+    });
+  });
+
+  describe('issueSocketToken', () => {
+    const actor = {
+      userId: USER_ID,
+      tenantId: TENANT_ID,
+      role: 'supervisor' as const,
+    };
+
+    it('signs an HS256 token with exactly the socket claims', async () => {
+      const result = await service.issueSocketToken(actor);
+
+      const claims = jwt.decode<Record<string, unknown>>(result.token);
+      expect(Object.keys(claims).sort()).toEqual(
+        ['sub', 'tenantId', 'role', 'typ', 'jti', 'iat', 'exp'].sort(),
+      );
+      expect(claims.sub).toBe(USER_ID);
+      expect(claims.tenantId).toBe(TENANT_ID);
+      expect(claims.role).toBe('supervisor');
+      expect(claims.typ).toBe('socket');
+      const header = JSON.parse(
+        Buffer.from(result.token.split('.')[0], 'base64url').toString(),
+      ) as { alg: string };
+      expect(header.alg).toBe('HS256');
+    });
+
+    it('lives 60 seconds and reports it', async () => {
+      const result = await service.issueSocketToken(actor);
+
+      const claims = jwt.decode<{ iat: number; exp: number }>(result.token);
+      expect(claims.exp - claims.iat).toBe(60);
+      expect(result.expiresIn).toBe(60);
+      expect(Object.keys(result).sort()).toEqual(['expiresIn', 'token']);
+    });
+
+    it('is signed with the configured secret', async () => {
+      const result = await service.issueSocketToken(actor);
+
+      await expect(
+        jwt.verifyAsync(result.token, { secret: envs.jwtSecret }),
+      ).resolves.toMatchObject({ sub: USER_ID, typ: 'socket' });
+    });
+
+    it('uses a different jti on every call and stores no refresh token', async () => {
+      const a = await service.issueSocketToken(actor);
+      const b = await service.issueSocketToken(actor);
+
+      expect(jwt.decode<{ jti: string }>(a.token).jti).not.toBe(
+        jwt.decode<{ jti: string }>(b.token).jti,
+      );
+      expect(create).not.toHaveBeenCalled();
+    });
   });
 });
