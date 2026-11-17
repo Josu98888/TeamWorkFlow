@@ -14,6 +14,8 @@ describe('telemetry envs', () => {
       port: 3003,
       natsServers: ['nats://localhost:4222'],
       attendanceDatabaseUrl: validEnv.ATTENDANCE_DATABASE_URL,
+      dbPoolMax: 10,
+      dbSsl: false,
       webOrigin: 'http://localhost:3000',
       natsTimeoutMs: 5000,
       rateLimitAuthTtlMs: 60000,
@@ -79,5 +81,54 @@ describe('telemetry envs', () => {
     expect(() =>
       validateEnvs({ ...validEnv, NATS_CREDS: 'not-creds' }),
     ).toThrow('NATS_CREDS');
+  });
+
+  it('defaults the database pool and ssl settings to the current behavior', () => {
+    const envs = validateEnvs(validEnv);
+
+    expect(envs.dbPoolMax).toBe(10);
+    expect(envs.dbSsl).toBe(false);
+    expect(envs.dbSslCa).toBeUndefined();
+  });
+
+  it('accepts DB_POOL_MAX and DB_SSL and rejects an invalid pool size', () => {
+    const envs = validateEnvs({
+      ...validEnv,
+      DB_POOL_MAX: '3',
+      DB_SSL: 'true',
+    });
+
+    expect(envs.dbPoolMax).toBe(3);
+    expect(envs.dbSsl).toBe(true);
+    expect(() => validateEnvs({ ...validEnv, DB_POOL_MAX: '0' })).toThrow(
+      'DB_POOL_MAX',
+    );
+  });
+
+  it('accepts DB_SSL_CA with DB_SSL=true, converting literal \n sequences', () => {
+    const ca = '-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----';
+    const envs = validateEnvs({
+      ...validEnv,
+      DB_SSL: 'true',
+      DB_SSL_CA: ca.replace(/\n/g, '\\n'),
+    });
+
+    expect(envs.dbSslCa).toBe(ca);
+  });
+
+  it('rejects DB_SSL_CA without DB_SSL, or with other content', () => {
+    expect(() =>
+      validateEnvs({
+        ...validEnv,
+        DB_SSL_CA:
+          '-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----',
+      }),
+    ).toThrow('DB_SSL_CA');
+    expect(() =>
+      validateEnvs({ ...validEnv, DB_SSL: 'true', DB_SSL_CA: 'not-a-pem' }),
+    ).toThrow('DB_SSL_CA');
+    expect(
+      validateEnvs({ ...validEnv, DB_SSL_CA: '' }).dbSslCa,
+    ).toBeUndefined();
   });
 });
