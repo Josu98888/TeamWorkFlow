@@ -169,7 +169,7 @@ Node 24 and pnpm 11.5.2. The e2e and docker jobs are pending a green PR run (see
 
 ### Deploy
 
-`deploy/` holds the production stack for one EC2 host (Compose, nginx, env examples) and its runbook: `deploy/README.md`. PostgreSQL is RDS, images come from GHCR, and `deploy/.env` and `deploy/env/*.env` are git-ignored.
+`deploy/` holds the production stack for one EC2 host (Compose, nginx, env examples) and its runbook: `deploy/README.md`. PostgreSQL is RDS, images come from GHCR, and `deploy/.env` and `deploy/env/*.env` are git-ignored. A zero-cost demo on Vercel, Render, Koyeb, Synadia Cloud and Supabase has its own guide: `deploy/free-tier/README.md`.
 
 ---
 
