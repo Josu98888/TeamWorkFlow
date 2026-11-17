@@ -54,7 +54,14 @@ There is no `.github/workflows`, no production Dockerfile for `core` or the fron
   - `.dockerignore` of the three apps now also excludes `.env.*`, `coverage/` and `test-results/`.
 
   Route: delegated (writer trigger: 3+ Dockerfiles). Evidence: frontend `pnpm lint` and `pnpm build` (standalone output present); the images are verified by the CI `docker` job (builds the five targets, runs both migrate images against `postgres-test`, smoke-tests the frontend), pending its first green run.
-- [ ] **T4** Production compose and nginx for the EC2 host (TLS, env files, a migrations step before start).
+- [x] **T4** Production compose and nginx for the EC2 host (TLS, env files, a migrations step before start).
+  - `deploy/docker-compose.prod.yml`: `nats` (JetStream, volume, not published), one-shot `core-migrate` and `telemetry-migrate`, `core`, `telemetry` (start only after their migrate exits 0 and NATS is healthy), `frontend`, `nginx` (the only published service), `certbot` (profile `tls`) and `postgres` (profile `local-db`). Images `ghcr.io/${GHCR_OWNER}/teamworkflow-<app>[-migrate]:${IMAGE_TAG:-latest}`; env via `deploy/env/*.env`; json-file log rotation, memory limits (about 1.3 GB for the apps) and TCP healthchecks.
+  - `deploy/nginx/`: path routing (`/api/v1/telemetry/` and `/ws` to telemetry, `/api/v1/` to core, `/` to the frontend), WebSocket upgrade, gzip, ACME webroot. HTTP on port 80 now; `docker-compose.tls.yml` plus `nginx/tls/https.conf` and the `certbot` service enable TLS once a domain exists (fixed `--cert-name teamworkflow`, no file edits).
+  - `deploy/README.md`: runbook (RDS role init, env files, run, migrations, TLS, local try-out). `.gitignore` covers `deploy/.env` and `deploy/env/*.env`.
+  - CI: `docker` job validates `docker compose config -q` (base and TLS) and `nginx -t` (HTTP and HTTPS with a throwaway certificate); `deploy/**` joined its path filter.
+  - Findings: core marks cookies `Secure` when `NODE_ENV=production` (`COOKIE_SECURE` is not implemented), so the HTTP phase needs `NODE_ENV=development` in `core.env`; `WEB_ORIGIN` must match the browser origin; S3 works with no endpoint and no static keys (IAM role).
+
+  Route: delegated (writer trigger: 2+ non-trivial files). Evidence: `@action-validator/cli` passes on `ci.yml`; compose YAML parses; the compose and nginx checks run in the CI `docker` job (docker was not run locally), pending its first green run.
 - [ ] **T5** CD workflow: build and push images to GHCR on `main`, then deploy to EC2 (needs user authorization and secrets).
 - [ ] **T6** AWS setup guide:
   - EC2, RDS, S3, an IAM role for S3 access;
@@ -76,4 +83,5 @@ TDD: off (no project or session setting; workflow and config work). Checks per t
 - T2: e2e jobs added on `fix/ci/e2e-suites`; PR #26 CI run 44103138853 green.
 - T3 done on `feat/ci/production-dockerfiles` (see Tasks for the design).
 - T3 CI: `docker` job added to `ci.yml` (validator passes); awaiting its first green run on the PR.
-- Next step: T4 (production compose and nginx; run the `migrate` targets before starting `core` and `telemetry`).
+- T4 done on `feat/ci/production-dockerfiles`: `deploy/` (compose, nginx, env examples, README) and CI validation in the `docker` job.
+- Next step: T5 (CD: push the five images, including both `-migrate` targets, to GHCR on `main` with `--build-arg BACKEND_URL=http://nginx`, then deploy to EC2; needs user authorization and secrets).

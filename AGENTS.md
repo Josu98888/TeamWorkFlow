@@ -163,7 +163,13 @@ One more job verifies the production images (path filter `docker`: Dockerfiles, 
 
 - `docker`: builds `core` (runner and migrate), `telemetry` (runner and migrate) and the frontend with Buildx (`push: false`, GitHub cache), starts only `postgres-test` from `backend/docker-compose.test.yml`, runs both migrate images on the compose network with each module's `<module>_svc` test role, and smoke-tests the frontend image (`curl /` answers 2xx or 3xx). The `core` and `telemetry` runners are only built (they need NATS, PostgreSQL and the full env to boot).
 
+The `docker` job also validates the production stack under `deploy/` (`docker compose config -q` for the base and TLS files, `nginx -t` for the HTTP and HTTPS configs); `deploy/**` is in its path filter.
+
 Node 24 and pnpm 11.5.2. The e2e and docker jobs are pending a green PR run (see `odd/tasks/ci-cd.md`).
+
+### Deploy
+
+`deploy/` holds the production stack for one EC2 host (Compose, nginx, env examples) and its runbook: `deploy/README.md`. PostgreSQL is RDS, images come from GHCR, and `deploy/.env` and `deploy/env/*.env` are git-ignored.
 
 ---
 
