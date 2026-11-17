@@ -1,4 +1,8 @@
 dist/
 node_modules/
 .env
+.env.*
+coverage/
+test-results/
 .vscode/
+.git/

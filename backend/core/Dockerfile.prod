@@ -1,0 +1,60 @@
+# Production image for core. The dev image (`dockerfile`, hot reload) is used by backend/docker-compose.yml and stays untouched.
+#
+#   docker build -f Dockerfile.prod -t teamworkflow-core .                  # runtime image (default target)
+#   docker build -f Dockerfile.prod --target migrate -t teamworkflow-core-migrate .   # one-shot migrations
+#
+# Stages: deps (all deps) -> builder (Prisma clients + nest build) -> migrate (prisma CLI + migrations)
+#         and prod-deps (prod deps only) -> runner (slim, non-root).
+
+FROM node:24-alpine AS base
+
+WORKDIR /usr/src/app
+
+RUN npm install -g pnpm@11.5.2
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# Stage 1: every dependency, to build
+FROM base AS deps
+
+# The pnpm store lives in a BuildKit cache, so a retried build reuses what was already downloaded
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm install --frozen-lockfile --store-dir /pnpm/store
+
+# Stage 2: production dependencies only
+FROM base AS prod-deps
+
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm install --prod --frozen-lockfile --store-dir /pnpm/store
+
+# Stage 3: generate the five Prisma clients (src/<module>/prisma/generated, gitignored) and compile
+FROM deps AS builder
+
+COPY . .
+
+RUN pnpm run prisma:auth:generate && pnpm run prisma:organization:generate && pnpm run prisma:billing:generate && pnpm run prisma:tasks:generate && pnpm run prisma:notifications:generate
+RUN pnpm run build
+
+# Stage 4: migrations. Has the prisma CLI (dev dependency), the prisma.*.config.ts files and every
+# src/<module>/prisma/migrations folder. Needs the five <MODULE>_DATABASE_URL variables at run time.
+FROM builder AS migrate
+
+ENV NODE_ENV=production
+
+USER node
+
+CMD ["sh", "-c", "pnpm run prisma:auth:migrate:deploy && pnpm run prisma:organization:migrate:deploy && pnpm run prisma:billing:migrate:deploy && pnpm run prisma:tasks:migrate:deploy && pnpm run prisma:notifications:migrate:deploy"]
+
+# Stage 5: runtime (default target: the last stage)
+FROM base AS runner
+
+ENV NODE_ENV=production
+
+COPY --from=prod-deps /usr/src/app/node_modules ./node_modules
+COPY --from=builder /usr/src/app/dist ./dist
+
+USER node
+
+EXPOSE 3000
+
+CMD ["node", "dist/main"]
