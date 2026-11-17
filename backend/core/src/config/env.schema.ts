@@ -1,4 +1,8 @@
 import * as joi from 'joi';
+import {
+  DB_SSL_CA_PATTERN,
+  normalizePem,
+} from '../common/prisma/pg-pool-config';
 import { NATS_CREDS_PATTERN, normalizeNatsCreds } from './nats-options';
 
 // Durations understood by jsonwebtoken / ms, e.g. `15m`, `7d`.
@@ -13,6 +17,9 @@ export interface Envs {
   billingDatabaseUrl: string;
   tasksDatabaseUrl: string;
   notificationsDatabaseUrl: string;
+  dbPoolMax: number;
+  dbSsl: boolean;
+  dbSslCa?: string;
   s3Endpoint?: string;
   s3Region: string;
   s3Bucket: string;
@@ -48,6 +55,9 @@ interface EnvVars {
   BILLING_DATABASE_URL: string;
   TASKS_DATABASE_URL: string;
   NOTIFICATIONS_DATABASE_URL: string;
+  DB_POOL_MAX: number;
+  DB_SSL: boolean;
+  DB_SSL_CA?: string;
   S3_ENDPOINT?: string;
   S3_REGION: string;
   S3_BUCKET: string;
@@ -99,6 +109,17 @@ const envsSchema = joi
       .string()
       .uri({ scheme: ['postgresql', 'postgres'] })
       .required(),
+    // Pool size of EACH Prisma client (core opens 5). The default is the pg
+    // default; lower it on hosts with a small connection budget.
+    DB_POOL_MAX: joi.number().integer().min(1).default(10),
+    // Encrypt database connections. `DB_SSL_CA` (PEM) makes them verified; it
+    // needs `DB_SSL=true`.
+    DB_SSL: joi.boolean().default(false),
+    DB_SSL_CA: joi.string().pattern(DB_SSL_CA_PATTERN).when('DB_SSL', {
+      is: true,
+      then: joi.optional(),
+      otherwise: joi.forbidden(),
+    }),
     // Unset on AWS (the SDK targets Amazon S3); set for an S3-compatible
     // emulator such as SeaweedFS. An empty value counts as unset.
     S3_ENDPOINT: joi.string().uri().optional().allow(''),
@@ -153,6 +174,7 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
     {
       ...raw,
       NATS_CREDS: normalizeNatsCreds(raw.NATS_CREDS),
+      DB_SSL_CA: normalizePem(raw.DB_SSL_CA),
       NATS_SERVER: raw.NATS_SERVER?.split(',').map((server) => server.trim()),
     },
     { abortEarly: false },
@@ -186,6 +208,9 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
     billingDatabaseUrl: envVars.BILLING_DATABASE_URL,
     tasksDatabaseUrl: envVars.TASKS_DATABASE_URL,
     notificationsDatabaseUrl: envVars.NOTIFICATIONS_DATABASE_URL,
+    dbPoolMax: envVars.DB_POOL_MAX,
+    dbSsl: envVars.DB_SSL,
+    dbSslCa: envVars.DB_SSL_CA,
     s3Endpoint: envVars.S3_ENDPOINT || undefined,
     s3Region: envVars.S3_REGION,
     s3Bucket: envVars.S3_BUCKET,
