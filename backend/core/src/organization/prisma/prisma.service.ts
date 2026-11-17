@@ -5,6 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { buildPgPoolConfig } from '../../common/prisma/pg-pool-config';
 import { envs } from '../../config';
 import { PrismaClient } from './generated/client';
 
@@ -25,7 +26,11 @@ export class OrganizationPrismaService
   constructor() {
     super({
       adapter: new PrismaPg(
-        { connectionString: envs.organizationDatabaseUrl },
+        buildPgPoolConfig(envs.organizationDatabaseUrl, {
+          max: envs.dbPoolMax,
+          ssl: envs.dbSsl,
+          sslCa: envs.dbSslCa,
+        }),
         { schema: schemaFromUrl(envs.organizationDatabaseUrl) },
       ),
     });
