@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { envs } from '../config';
+import { buildNatsOptions } from '../config/nats-options';
 import { NATS_SERVICE } from './nats.constants';
 import { NatsClientService } from './nats-client.service';
 import { JetStreamService } from './jetstream.service';
@@ -12,7 +13,7 @@ import { JetStreamService } from './jetstream.service';
       {
         name: NATS_SERVICE,
         transport: Transport.NATS,
-        options: { servers: envs.natsServers },
+        options: buildNatsOptions(envs.natsServers, envs.natsCreds),
       },
     ]),
   ],
