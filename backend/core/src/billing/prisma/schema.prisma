@@ -197,7 +197,10 @@ model WebhookNotification {
 
 model ProcessedEvent {
   eventId     String   @id @map("event_id")
+  tenantId    String   @map("tenant_id") @db.Uuid
   processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(3)
 
+  // Lets the tenant data purge delete a tenant's rows.
+  @@index([tenantId])
   @@map("processed_events")
 }

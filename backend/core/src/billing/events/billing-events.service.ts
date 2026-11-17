@@ -75,6 +75,17 @@ export function handlerRetryDelayMs(deliveryCount: number) {
   );
 }
 
+function errorLabel(error: unknown) {
+  if (!(error instanceof Error)) return 'UnknownError';
+  // Never the message: a Prisma validation error embeds the payload and
+  // starts with a blank line. Prisma errors carry a stable, payload-free
+  // `code` (for example P2002).
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' && /^[A-Z0-9_]{1,32}$/i.test(code)
+    ? `${error.name} ${code}`
+    : error.name;
+}
+
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Unknown error';
 }
@@ -330,14 +341,14 @@ export class BillingEventsService implements OnModuleInit, OnModuleDestroy {
       const deliveries = message.info.deliveryCount;
       if (deliveries >= MAX_DELIVERIES) {
         this.logger.error(
-          `Handler for ${message.subject} failed ${deliveries} times, terminating message: ${errorMessage(error)}`,
+          `Handler for ${message.subject} failed ${deliveries} times, terminating message (${errorLabel(error)})`,
         );
         message.term();
         return;
       }
       const delay = handlerRetryDelayMs(deliveries);
       this.logger.warn(
-        `Handler for ${message.subject} failed (delivery ${deliveries}/${MAX_DELIVERIES}), retrying in ${delay}ms: ${errorMessage(error)}`,
+        `Handler for ${message.subject} failed (delivery ${deliveries}/${MAX_DELIVERIES}), retrying in ${delay}ms (${errorLabel(error)})`,
       );
       message.nak(delay);
     }
