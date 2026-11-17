@@ -33,7 +33,7 @@ describe('TaskTemplatesService', () => {
   beforeEach(() => {
     mockPrisma = {
       formVersion: {
-        findFirst: jest.Mock = jest.fn(),
+        findFirst: jest.fn(),
       },
       taskTemplate: {
         create: jest.fn(),
