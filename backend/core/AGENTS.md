@@ -67,7 +67,7 @@ Synchronous cross-process calls use NATS request-reply with patterns `<module>.<
 
 | Pattern | Module | Used by `telemetry` for |
 |---------|--------|-------------------------|
-| `auth.token.verify` | `auth` | Verify the token of every HTTP request and WebSocket connection; returns the actor (`userId`, `tenantId`, `role`, `siteIds`, `tenantStatus`, `plan`, `features`) |
+| `auth.token.verify` | `auth` | Verify the token of every HTTP request and WebSocket connection; payload `{ accessToken, purpose? }` (`purpose` is `access` by default, `socket` for the Tower WebSocket handshake); returns the actor (`userId`, `tenantId`, `role`, `siteIds`, `tenantStatus`, `plan`, `features`) |
 | `organization.employee.get` | `organization` | Map the actor `userId` to the employee |
 | `organization.site.get` | `organization` | Geofence and QR of a site |
 | `organization.shift.get` | `organization` | Shift data on a local-copy miss |
@@ -101,7 +101,7 @@ Rules inherited from the former gateway design. They apply to every route of eve
 - Web: `core` sets the access and refresh tokens in `httpOnly`, `Secure`, `SameSite` cookies on login, refresh and invitation acceptance (and on register, which also returns a token pair), and clears them on logout. Tokens are not returned in the JSON body for web clients.
 - Mobile: `Authorization: Bearer <accessToken>` header; the token pair is returned in the JSON body; the app keeps the refresh token in secure storage and sends it in the body of `/auth/refresh`.
 - How the two are told apart (initial rule, to be implemented): a request that carries the access cookie is a web request; a request with an `Authorization` header and no cookie is a mobile request. If both are present, the `Authorization` header wins and CSRF is not required. For public auth routes the client states its type with a header (for example `X-Client: web` or `X-Client: mobile`); default to the web behavior when the header is missing so tokens never leak into a body by accident.
-- `telemetry` reads the same access cookie or bearer token; the cookie is set by `core` on the shared origin.
+- `telemetry` reads the same access cookie or bearer token for its HTTP routes; the cookie is set by `core` on the shared origin. The Tower WebSocket is the exception: when `telemetry` is on another origin the browser cannot send the httpOnly cookie, so the web asks `POST /api/v1/auth/socket-token` (guarded; roles owner/admin/supervisor; feature `tower`; refused for `platform_admin` and for suspended or cancelled tenants) and sends the returned 60 second token (`typ: 'socket'`) in the Socket.IO `auth` payload. Socket tokens and access tokens are not interchangeable: `auth.token.verify` rejects a token with a `typ` claim for the `access` purpose (so a socket token never passes the `AuthGuard` of `core` or `telemetry`) and requires `typ: 'socket'` for the `socket` purpose. Never log a socket token.
 - Never log tokens, cookies or `Authorization` headers.
 
 ### CSRF
@@ -169,6 +169,7 @@ Target map built from the operations documented in each module's `AGENTS.md`. Pa
 | `POST /auth/login` | `auth.login` | public | - |
 | `POST /auth/refresh` | `auth.token.refresh` | public | - |
 | `POST /auth/logout` | `auth.logout` | any | - |
+| `POST /auth/socket-token` | `auth.socket-token.issue` | owner, admin, supervisor (cookie + CSRF, or bearer) | `tower` |
 | `POST /auth/invitations` | `auth.invitation.create` | owner, admin | - |
 | `GET /auth/invitations` | `auth.invitation.list` | owner, admin | - |
 | `POST /auth/invitations/:invitationId/regenerate` | `auth.invitation.regenerate` | owner, admin | - |
