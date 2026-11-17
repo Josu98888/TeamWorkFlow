@@ -1,5 +1,9 @@
 import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
+import {
+  buildPgPoolConfig,
+  pgPoolOptionsFromEnv,
+} from '../../common/prisma/pg-pool-config';
 import { PrismaClient } from '../prisma/generated/client';
 import { createTerminalPrompt } from './terminal-prompt';
 import { SeedError, seedPlatformAdmin } from './seed-platform-admin';
@@ -16,7 +20,10 @@ async function main(): Promise<void> {
   const prompt = createTerminalPrompt();
   const schema = new URL(databaseUrl).searchParams.get('schema') ?? 'auth';
   const prisma = new PrismaClient({
-    adapter: new PrismaPg({ connectionString: databaseUrl }, { schema }),
+    adapter: new PrismaPg(
+      buildPgPoolConfig(databaseUrl, pgPoolOptionsFromEnv(process.env)),
+      { schema },
+    ),
   });
 
   try {
