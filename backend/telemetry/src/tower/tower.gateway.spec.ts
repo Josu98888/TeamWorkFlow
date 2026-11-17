@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { TowerGateway } from './tower.gateway';
+import { MAX_SOCKET_SESSION_MS, TowerGateway } from './tower.gateway';
 import { JetStreamService, type EventHandler } from '../nats/jetstream.service';
 import { NatsClientService } from '../nats/nats-client.service';
 import type { Socket } from 'socket.io';
@@ -14,9 +14,11 @@ describe('TowerGateway', () => {
   };
 
   const mockJetStream = {
-    registerBroadcastHandler: jest.fn((_filter: string, handler: EventHandler) => {
-      registeredBroadcastHandler = handler;
-    }),
+    registerBroadcastHandler: jest.fn(
+      (_filter: string, handler: EventHandler) => {
+        registeredBroadcastHandler = handler;
+      },
+    ),
   };
 
   interface MockSocket {
@@ -43,6 +45,19 @@ describe('TowerGateway', () => {
 
     return { socket, join, disconnect };
   };
+
+  const towerActor = (
+    overrides: Partial<VerifiedActor> = {},
+  ): VerifiedActor => ({
+    userId: 'user-sup',
+    tenantId: 'tenant-1',
+    role: 'supervisor',
+    siteIds: ['site-1'],
+    tenantStatus: 'active',
+    plan: 'pro',
+    features: { tower: true },
+    ...overrides,
+  });
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -167,28 +182,173 @@ describe('TowerGateway', () => {
 
     it('joins admin to the tenant-wide room', async () => {
       const mock = createMockSocket({
-        handshake: {
-          headers: {
-            cookie: 'access_token=admin-token; other_cookie=123',
-          },
-        },
+        handshake: { auth: { token: 'admin-socket-token' } },
       });
-      const actor: VerifiedActor = {
-        userId: 'user-admin',
-        tenantId: 'tenant-1',
-        role: 'admin',
-        siteIds: [],
-        tenantStatus: 'active',
-        plan: 'pro',
-        features: { tower: true },
-      };
-      mockNatsClient.verifyToken.mockResolvedValue(actor);
+      mockNatsClient.verifyToken.mockResolvedValue(
+        towerActor({ userId: 'user-admin', role: 'admin', siteIds: [] }),
+      );
 
       await gateway.handleConnection(mock.socket);
 
-      expect(mockNatsClient.verifyToken).toHaveBeenCalledWith('admin-token');
       expect(mock.join).toHaveBeenCalledWith('tenant-1:all');
       expect(mock.disconnect).not.toHaveBeenCalled();
+    });
+
+    it('verifies handshake.auth.token with the socket purpose', async () => {
+      const mock = createMockSocket({
+        handshake: { auth: { token: '  socket-token  ' } },
+      });
+      mockNatsClient.verifyToken.mockResolvedValue(towerActor());
+
+      await gateway.handleConnection(mock.socket);
+
+      expect(mockNatsClient.verifyToken).toHaveBeenCalledTimes(1);
+      expect(mockNatsClient.verifyToken).toHaveBeenCalledWith('socket-token', {
+        purpose: 'socket',
+      });
+    });
+
+    it('ignores the Authorization header and the access_token cookie', async () => {
+      const mock = createMockSocket({
+        handshake: {
+          headers: {
+            authorization: 'Bearer an-access-token',
+            cookie: 'access_token=an-access-token; other_cookie=123',
+          },
+          auth: {},
+        },
+      });
+
+      await gateway.handleConnection(mock.socket);
+
+      expect(mockNatsClient.verifyToken).not.toHaveBeenCalled();
+      expect(mock.disconnect).toHaveBeenCalledWith(true);
+      expect(mock.join).not.toHaveBeenCalled();
+    });
+
+    it('takes the token only from handshake.auth even when other carriers are present', async () => {
+      const mock = createMockSocket({
+        handshake: {
+          headers: {
+            authorization: 'Bearer header-token',
+            cookie: 'access_token=cookie-token',
+          },
+          auth: { token: 'auth-token' },
+        },
+      });
+      mockNatsClient.verifyToken.mockResolvedValue(towerActor());
+
+      await gateway.handleConnection(mock.socket);
+
+      expect(mockNatsClient.verifyToken).toHaveBeenCalledWith('auth-token', {
+        purpose: 'socket',
+      });
+    });
+
+    it.each([
+      ['an empty token', ''],
+      ['a blank token', '   '],
+      ['a non-string token', 42],
+      ['an object token', { value: 'x' }],
+    ])('disconnects on %s without verifying', async (_label, token) => {
+      const mock = createMockSocket({ handshake: { auth: { token } } });
+
+      await gateway.handleConnection(mock.socket);
+
+      expect(mockNatsClient.verifyToken).not.toHaveBeenCalled();
+      expect(mock.disconnect).toHaveBeenCalledWith(true);
+    });
+
+    it('disconnects without joining rooms when core rejects the token', async () => {
+      const mock = createMockSocket({
+        handshake: { auth: { token: 'an-access-token' } },
+      });
+      mockNatsClient.verifyToken.mockRejectedValue(
+        Object.assign(new Error('invalid_token'), { status: 401 }),
+      );
+
+      await gateway.handleConnection(mock.socket);
+
+      expect(mock.disconnect).toHaveBeenCalledWith(true);
+      expect(mock.join).not.toHaveBeenCalled();
+      expect(mock.socket.data.actor).toBeUndefined();
+    });
+
+    it('does not join rooms when the client left during verification', async () => {
+      const mock = createMockSocket({
+        handshake: { auth: { token: 'socket-token' } },
+        disconnected: true,
+      });
+      mockNatsClient.verifyToken.mockResolvedValue(towerActor());
+
+      await gateway.handleConnection(mock.socket);
+
+      expect(mock.join).not.toHaveBeenCalled();
+      expect(mock.socket.data.actor).toBeUndefined();
+    });
+
+    describe('session limit', () => {
+      beforeEach(() => jest.useFakeTimers());
+      afterEach(() => jest.useRealTimers());
+
+      it('disconnects exactly when the fixed session limit is reached', async () => {
+        const mock = createMockSocket({
+          handshake: { auth: { token: 'socket-token' } },
+        });
+        mockNatsClient.verifyToken.mockResolvedValue(towerActor());
+
+        await gateway.handleConnection(mock.socket);
+        jest.advanceTimersByTime(MAX_SOCKET_SESSION_MS - 1);
+        expect(mock.disconnect).not.toHaveBeenCalled();
+
+        jest.advanceTimersByTime(1);
+        expect(mock.disconnect).toHaveBeenCalledWith(true);
+      });
+
+      it('outlives the 60 second socket token', async () => {
+        const mock = createMockSocket({
+          handshake: { auth: { token: 'socket-token' } },
+        });
+        mockNatsClient.verifyToken.mockResolvedValue(
+          towerActor({ exp: Math.floor(Date.now() / 1000) + 60 }),
+        );
+
+        await gateway.handleConnection(mock.socket);
+        jest.advanceTimersByTime(5 * 60_000);
+
+        expect(mock.disconnect).not.toHaveBeenCalled();
+      });
+
+      it('does not reject an actor whose exp already passed (exp is not used)', async () => {
+        const mock = createMockSocket({
+          handshake: { auth: { token: 'socket-token' } },
+        });
+        mockNatsClient.verifyToken.mockResolvedValue(
+          towerActor({ exp: Math.floor(Date.now() / 1000) - 10 }),
+        );
+
+        await gateway.handleConnection(mock.socket);
+
+        expect(mock.disconnect).not.toHaveBeenCalled();
+        expect(mock.join).toHaveBeenCalled();
+      });
+
+      it('clears the session timer when the client disconnects first', async () => {
+        const mock = createMockSocket({
+          handshake: { auth: { token: 'socket-token' } },
+        });
+        mockNatsClient.verifyToken.mockResolvedValue(towerActor());
+        await gateway.handleConnection(mock.socket);
+
+        gateway.handleDisconnect(mock.socket);
+        jest.advanceTimersByTime(MAX_SOCKET_SESSION_MS * 2);
+
+        expect(mock.disconnect).not.toHaveBeenCalled();
+      });
+
+      it('caps the session at 15 minutes', () => {
+        expect(MAX_SOCKET_SESSION_MS).toBe(15 * 60_000);
+      });
     });
   });
 
