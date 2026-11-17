@@ -147,6 +147,15 @@ pnpm build       # nest build
 
 Frontend: `pnpm lint` (eslint) and `pnpm build`.
 
+### CI
+
+`.github/workflows/ci.yml` runs on pull requests to `develop`/`main`, on pushes to them and on manual dispatch. Three parallel jobs, each skipped when its app did not change (`dorny/paths-filter`; a change to the workflow runs all):
+
+- `core` and `telemetry`: Prisma generate, `pnpm lint`, `pnpm test` (unit, no Postgres or NATS; dummy non-secret env in the job), `pnpm build`.
+- `frontend`: `pnpm lint`, `npx tsc --noEmit`, `pnpm build` (mock mode).
+
+Node 24 and pnpm 11.5.2. E2E suites are not in CI yet (see `odd/tasks/ci-cd.md`).
+
 ---
 
 ## Commit & Pull Request Guidelines
