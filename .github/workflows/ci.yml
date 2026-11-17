@@ -283,6 +283,8 @@ jobs:
           file: backend/core/Dockerfile.prod
           target: runner
           push: false
+          load: true
+          tags: teamworkflow-core:ci
           cache-from: type=gha,scope=core-runner
           cache-to: type=gha,mode=max,scope=core-runner
       - name: Build core (migrate)
@@ -303,6 +305,8 @@ jobs:
           file: backend/telemetry/Dockerfile
           target: runner
           push: false
+          load: true
+          tags: teamworkflow-telemetry:ci
           cache-from: type=gha,scope=telemetry-runner
           cache-to: type=gha,mode=max,scope=telemetry-runner
       - name: Build telemetry (migrate)
@@ -346,6 +350,17 @@ jobs:
           docker run --rm --network "$COMPOSE_NETWORK" \
             -e "ATTENDANCE_DATABASE_URL=postgresql://attendance_svc:test@${PG_HOST}/teamworkflow?schema=attendance" \
             teamworkflow-telemetry-migrate:ci
+
+      # The runner images migrate at start when MIGRATE_ON_START=true: prove the CLI and the
+      # configs/migrations it needs are inside (bare `docker run` would start the app instead).
+      - name: Check the prisma CLI in the runner images
+        run: |
+          docker run --rm --entrypoint sh teamworkflow-core:ci -c             'cd /opt/migrate && ./node_modules/.bin/prisma --version && ls prisma.*.config.ts src/*/prisma/migrations >/dev/null'
+          docker run --rm --entrypoint sh teamworkflow-telemetry:ci -c             'cd /opt/migrate && ./node_modules/.bin/prisma --version && ls prisma.*.config.ts src/prisma/migrations >/dev/null'
+          # A failing migration must stop the container before the app starts (no database here).
+          if docker run --rm -e MIGRATE_ON_START=true -e AUTH_DATABASE_URL=postgresql://x:x@127.0.0.1:1/x teamworkflow-core:ci; then
+            echo "expected the entrypoint to fail without a database"; exit 1
+          fi
 
       - name: Smoke test the frontend image
         run: |
