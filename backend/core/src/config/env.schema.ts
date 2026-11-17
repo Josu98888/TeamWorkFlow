@@ -1,4 +1,5 @@
 import * as joi from 'joi';
+import { NATS_CREDS_PATTERN, normalizeNatsCreds } from './nats-options';
 
 // Durations understood by jsonwebtoken / ms, e.g. `15m`, `7d`.
 const DURATION_PATTERN = /^\d+[smhd]$/;
@@ -6,6 +7,7 @@ const DURATION_PATTERN = /^\d+[smhd]$/;
 export interface Envs {
   port: number;
   natsServers: string[];
+  natsCreds?: string;
   authDatabaseUrl: string;
   organizationDatabaseUrl: string;
   billingDatabaseUrl: string;
@@ -40,6 +42,7 @@ export interface Envs {
 interface EnvVars {
   PORT: number;
   NATS_SERVER: string[];
+  NATS_CREDS?: string;
   AUTH_DATABASE_URL: string;
   ORGANIZATION_DATABASE_URL: string;
   BILLING_DATABASE_URL: string;
@@ -74,6 +77,7 @@ interface EnvVars {
 const envsSchema = joi
   .object<EnvVars>({
     PORT: joi.number().port().required(),
+    NATS_CREDS: joi.string().pattern(NATS_CREDS_PATTERN),
     NATS_SERVER: joi.array().items(joi.string().uri()).min(1).required(),
     AUTH_DATABASE_URL: joi
       .string()
@@ -148,6 +152,7 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
   const { error, value } = envsSchema.validate(
     {
       ...raw,
+      NATS_CREDS: normalizeNatsCreds(raw.NATS_CREDS),
       NATS_SERVER: raw.NATS_SERVER?.split(',').map((server) => server.trim()),
     },
     { abortEarly: false },
@@ -175,6 +180,7 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
   return {
     port: envVars.PORT,
     natsServers: envVars.NATS_SERVER,
+    natsCreds: envVars.NATS_CREDS,
     authDatabaseUrl: envVars.AUTH_DATABASE_URL,
     organizationDatabaseUrl: envVars.ORGANIZATION_DATABASE_URL,
     billingDatabaseUrl: envVars.BILLING_DATABASE_URL,
