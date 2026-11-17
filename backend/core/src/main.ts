@@ -4,6 +4,7 @@ import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { AppModule } from './app.module';
 import { configureApp } from './app.config';
 import { envs } from './config';
+import { buildNatsOptions } from './config/nats-options';
 
 async function bootstrap() {
   const logger = new Logger('Core');
@@ -22,7 +23,10 @@ async function bootstrap() {
   // HTTP filter must not answer NATS requests (responders bind their own).
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.NATS,
-    options: { servers: envs.natsServers, queue: 'core' },
+    options: {
+      ...buildNatsOptions(envs.natsServers, envs.natsCreds),
+      queue: 'core',
+    },
   });
   await app.startAllMicroservices();
 

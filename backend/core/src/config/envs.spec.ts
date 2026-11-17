@@ -284,4 +284,18 @@ describe('envs', () => {
       validateEnvs({ ...validEnv, NATS_SERVER: 'not a uri' }),
     ).toThrow('NATS_SERVER');
   });
+
+  it('accepts NATS_CREDS, converting literal \n sequences, and rejects other content', () => {
+    const creds =
+      '-----BEGIN NATS USER JWT-----\nabc\n------END NATS USER JWT------';
+    expect(validateEnvs({ ...validEnv, NATS_CREDS: creds }).natsCreds).toBe(
+      creds.replace(/\n/g, '\n'),
+    );
+    expect(
+      validateEnvs({ ...validEnv, NATS_CREDS: '' }).natsCreds,
+    ).toBeUndefined();
+    expect(() =>
+      validateEnvs({ ...validEnv, NATS_CREDS: 'not-creds' }),
+    ).toThrow('NATS_CREDS');
+  });
 });
