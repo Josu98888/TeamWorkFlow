@@ -12,6 +12,7 @@ import { ClockInsModule } from './clock-ins/clock-ins.module';
 import { TowerModule } from './tower/tower.module';
 import { ConsumersModule } from './consumers/consumers.module';
 import { AuthGuard } from './http/guards/auth.guard';
+import { HealthController } from './http/health/health.controller';
 
 @Module({
   imports: [
@@ -27,7 +28,7 @@ import { AuthGuard } from './http/guards/auth.guard';
     ClockInsModule,
     ConsumersModule,
   ],
-  controllers: [],
+  controllers: [HealthController],
   providers: [
     {
       provide: APP_GUARD,
