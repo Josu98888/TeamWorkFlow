@@ -38,7 +38,7 @@ Out of scope (do NOT implement here):
 This service has no gateway in front of it, so it applies the same HTTP rules as the HTTP layer of `core` (see `backend/core/AGENTS.md`, section HTTP layer) to its own routes. The code is NOT shared with `core` (separate service); keep behavior equivalent and record any intentional difference here.
 
 - **Actor (non-negotiable):** `{ userId, tenantId, role, siteIds, tenantStatus, plan, features }` is built ONLY from the `auth.token.verify` NATS request answered by `core`. Never read tenant, role, sites, plan or features from the body, query, path or headers. `platform_admin` is refused on every telemetry route (403 `forbidden`).
-- **Auth guard:** a global guard runs on every route and on every WebSocket connection, extracts the access token (cookie for web, `Authorization: Bearer` for mobile; same rules as `core`), calls `auth.token.verify` and attaches the actor. Missing token or `invalid_token` answers 401. Never cache the verify result across requests. Telemetry has no public routes.
+- **Auth guard:** a global guard runs on every route and on every WebSocket connection, extracts the access token (cookie for web, `Authorization: Bearer` for mobile; same rules as `core`), calls `auth.token.verify` and attaches the actor. Missing token or `invalid_token` answers 401. Never cache the verify result across requests. Telemetry has no public routes except `GET /health` (deliberate exception for platform health checks and uptime pingers: shallow `{ status: 'ok' }`, no database or NATS call; marked `@Public()`, `src/http/health/health.controller.ts`; the guard honours `@Public()` like `core`'s).
 - **Verify unavailable:** if the NATS request times out or has no responder, answer 504 `upstream_timeout` or 503 `upstream_unavailable`; never let a request through unverified.
 - **Cookies, CSRF, CORS:** the access cookie is set by `core`; telemetry only reads it. Cookie-authenticated `POST`, `PUT`, `PATCH` and `DELETE` require the double-submit CSRF header (`X-CSRF-Token`) compared in constant time; bearer requests skip CSRF. CORS and the Socket.IO origin policy allow only `WEB_ORIGIN` with credentials, never `*`.
 - **Role checks:** route decorators declare coarse roles (route map below); fine-grained rules (employee only for themselves, supervisor limited to `siteIds`) are enforced in the domain.
@@ -54,6 +54,7 @@ The operation names are the stable contract; the paths are proposed and move fro
 
 | Method + path | Operation | Auth | Feature |
 |---|---|---|---|
+| `GET /health` | (none, shallow liveness) | public | - |
 | `POST /clock-events` | `attendance.clock-event.create` | employee | - |
 | `POST /clock-events/manual` | `attendance.clock-event.create-manual` | supervisor, admin | - |
 | `PATCH /clock-events/:clockEventId` | `attendance.clock-event.correct` | supervisor, admin | - |

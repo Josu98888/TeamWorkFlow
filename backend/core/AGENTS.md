@@ -93,7 +93,7 @@ Rules inherited from the former gateway design. They apply to every route of eve
 ### Auth guard
 
 - A global guard runs on every route that is not marked `@Public()`. It extracts the access token (see Tokens and cookies), runs `auth.token.verify` and attaches the actor to the request.
-- Public routes (no guard): register, login, refresh, accept invitation, password-reset confirm and the Mercado Pago webhook. Today `billing.plan.list` is documented as owner/admin only, so it is NOT public.
+- Public routes (no guard): register, login, refresh, accept invitation, password-reset confirm, the Mercado Pago webhook and `GET /health` (shallow liveness probe `{ status: 'ok' }`, `src/http/health/health.controller.ts`; no database or NATS call). Today `billing.plan.list` is documented as owner/admin only, so it is NOT public.
 - Missing token or `invalid_token` answers 401. Never cache the verify result across requests: deactivation and suspension must take effect immediately.
 
 ### Tokens and cookies
@@ -154,6 +154,12 @@ Rules inherited from the former gateway design. They apply to every route of eve
 ## Route map
 
 Target map built from the operations documented in each module's `AGENTS.md`. Paths are the proposed REST shape under `/api/v1`; the operation name and the auth column are the contract. "any" means any authenticated tenant role (the module decides the rest). "billing" marks routes that stay open to `owner`/`admin` while the tenant is suspended or cancelled (see Tenant status). The attendance routes (clock events, workdays, alerts, tower snapshot) are NOT in `core`: they live in `backend/telemetry/AGENTS.md`.
+
+### health
+
+| Method + path | Operation | Auth | Feature |
+|---|---|---|---|
+| `GET /health` | (none, shallow liveness) | public | - |
 
 ### auth
 
