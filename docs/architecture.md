@@ -39,7 +39,9 @@ Ambos servicios se publican bajo el mismo origen mediante un proxy inverso que e
 
 ### Autenticación en `telemetry`
 
-`telemetry` verifica el token de cada petición HTTP y de cada conexión WebSocket con la petición NATS `auth.token.verify`, que responde el módulo `auth` del `core`. El resultado incluye el tenant, el rol y los `siteIds` permitidos para unir el socket a las salas de cada sede.
+`telemetry` verifica el token de cada petición HTTP y de cada conexión WebSocket con la petición NATS `auth.token.verify` (payload `{ accessToken, purpose }`, con `purpose` `access` por defecto), que responde el módulo `auth` del `core`. El resultado incluye el tenant, el rol y los `siteIds` permitidos para unir el socket a las salas de cada sede.
+
+Cuando `telemetry` está en un origen distinto al de la web (despliegue gratuito: Vercel y Koyeb), el navegador no puede enviarle la cookie `httpOnly`. La web pide a `core` un token de socket (`POST /api/v1/auth/socket-token`, 60 s, claim `typ: 'socket'`, solo `owner`/`admin`/`supervisor` con la feature `tower`) y lo envía en el payload `auth` de Socket.IO. `telemetry` lo verifica con `purpose: 'socket'`; la verificación `access` rechaza cualquier token con `typ`, de modo que un token de socket nunca sirve en rutas HTTP ni un token de acceso abre el socket. La sesión del socket dura como máximo 15 minutos y el cliente se reconecta con un token nuevo.
 
 ### Eventos que cruzan la frontera
 
