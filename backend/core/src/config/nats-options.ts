@@ -13,7 +13,7 @@ export interface NatsConnectOptions {
 // hold multi-line values may send literal `\n` sequences: turn them into
 // newlines. Blank values count as unset.
 export function normalizeNatsCreds(raw?: string): string | undefined {
-  const creds = raw?.replace(/\n/g, '\n').trim();
+  const creds = raw?.replace(/\\n/g, '\n').trim();
   return creds ? creds : undefined;
 }
 

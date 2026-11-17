@@ -27,8 +27,10 @@ describe('nats-options', () => {
     expect(typeof options.authenticator).toBe('function');
   });
 
-  it('converts literal \n sequences to newlines', () => {
-    expect(normalizeNatsCreds(CREDS.replace(/\n/g, '\n'))).toBe(CREDS);
+  it('converts literal \\n sequences to newlines', () => {
+    const escaped = CREDS.replace(/\n/g, '\\n');
+    expect(escaped).not.toContain('\n');
+    expect(normalizeNatsCreds(escaped)).toBe(CREDS);
     expect(normalizeNatsCreds(CREDS)).toContain(NATS_CREDS_MARKER);
   });
 
