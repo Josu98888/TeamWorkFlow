@@ -154,7 +154,12 @@ Frontend: `pnpm lint` (eslint) and `pnpm build`.
 - `core` and `telemetry`: Prisma generate, `pnpm lint`, `pnpm test` (unit, no Postgres or NATS; dummy non-secret env in the job), `pnpm build`.
 - `frontend`: `pnpm lint`, `npx tsc --noEmit`, `pnpm build` (mock mode).
 
-Node 24 and pnpm 11.5.2. E2E suites are not in CI yet (see `odd/tasks/ci-cd.md`).
+Two more jobs run the e2e suites (same path filters):
+
+- `core-e2e`: starts `backend/docker-compose.test.yml` (PostgreSQL with the per-module schemas and roles, NATS with JetStream, SeaweedFS S3; compose because service containers cannot pass `-js` or mount the init script), creates the bucket, generates the Prisma clients and runs `pnpm test:e2e` (its `globalSetup` applies the migrations). No env is set in the job: `test/support/test-env.ts` pins the throwaway values and ports 5433, 4223 and 9002.
+- `telemetry`: also runs `pnpm test:e2e` after the unit tests (its e2e mocks NATS and the database, so it needs no services).
+
+Node 24 and pnpm 11.5.2. The e2e jobs are pending a green PR run (see `odd/tasks/ci-cd.md`).
 
 ---
 
