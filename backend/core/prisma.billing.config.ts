@@ -8,5 +8,12 @@ import { defineConfig } from 'prisma/config';
 export default defineConfig({
   schema: 'src/billing/prisma/schema.prisma',
   migrations: { path: 'src/billing/prisma/migrations' },
-  datasource: { url: process.env.BILLING_DATABASE_URL ?? '' },
+  datasource: {
+    // Migrations may need a session or direct connection (for example
+    // Supabase) while the app uses a pooled one.
+    url:
+      process.env.MIGRATE_BILLING_DATABASE_URL ??
+      process.env.BILLING_DATABASE_URL ??
+      '',
+  },
 });
