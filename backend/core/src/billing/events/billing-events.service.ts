@@ -154,6 +154,7 @@ export class BillingEventsService implements OnModuleInit, OnModuleDestroy {
     const serialized = JSON.stringify({
       ...payload,
       eventId,
+      tenantId,
       occurredAt: now.toISOString(),
     });
     await this.outboxRelay.enqueue(
@@ -180,9 +181,13 @@ export class BillingEventsService implements OnModuleInit, OnModuleDestroy {
       const eventId = customEventId ?? randomUUID();
       const now = new Date();
       const subject = billingEventSubject(tenantId, event);
+      // Envelope fields last so a payload can never override them. Consumers
+      // (auth, telemetry, tasks, notifications) reject an event without a
+      // `tenantId` matching the subject tenant as malformed.
       const serialized = JSON.stringify({
         ...payload,
         eventId,
+        tenantId,
         occurredAt: now.toISOString(),
       });
       try {
