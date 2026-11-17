@@ -115,7 +115,8 @@ export class ShiftSnapshotService {
 
   /**
    * Matches an 'IN' clock event to a shift of the employee for the given site and deviceTime:
-   * From 60 minutes BEFORE the shift start until the shift end.
+   * From 60 minutes BEFORE the shift start until the shift end. When several shifts match,
+   * see `pickAmongCandidates`.
    */
   async findMatchingShiftForClockIn(
     tenantId: string,
@@ -136,15 +137,59 @@ export class ShiftSnapshotService {
       orderBy: { startsAt: 'asc' },
     });
 
-    for (const shift of shifts) {
-      const windowStart = new Date(shift.startsAt.getTime() - CLOCK_IN_EARLY_MINUTES * 60 * 1000).getTime();
-      const windowEnd = shift.endsAt.getTime();
+    const candidates = shifts.filter((shift) => {
+      const windowStart =
+        shift.startsAt.getTime() - CLOCK_IN_EARLY_MINUTES * 60 * 1000;
+      return time >= windowStart && time <= shift.endsAt.getTime();
+    });
 
-      if (time >= windowStart && time <= windowEnd) {
-        return shift;
-      }
+    if (candidates.length <= 1) {
+      return candidates[0] ?? null;
     }
 
-    return null;
+    return this.pickAmongCandidates(tenantId, employeeId, candidates);
+  }
+
+  /**
+   * Several shifts match the same clock-in (back-to-back shifts within the early window).
+   * Preference: 1) a shift with an open pair (an IN with no later OUT), so the employee
+   * closes what they started; 2) a shift without clock events yet; 3) the first by startsAt.
+   * `candidates` is already ordered by startsAt.
+   */
+  private async pickAmongCandidates(
+    tenantId: string,
+    employeeId: string,
+    candidates: ShiftSnapshot[],
+  ): Promise<ShiftSnapshot> {
+    const events = await this.prisma.clockEvent.findMany({
+      where: {
+        tenantId,
+        employeeId,
+        shiftId: { in: candidates.map((shift) => shift.shiftId) },
+        type: { in: ['IN', 'OUT'] },
+      },
+      select: { shiftId: true, type: true, deviceTime: true },
+    });
+
+    const hasOpenPair = (shiftId: string) => {
+      const own = events.filter((event) => event.shiftId === shiftId);
+      return own.some(
+        (event) =>
+          event.type === 'IN' &&
+          !own.some(
+            (out) =>
+              out.type === 'OUT' &&
+              out.deviceTime.getTime() >= event.deviceTime.getTime(),
+          ),
+      );
+    };
+
+    return (
+      candidates.find((shift) => hasOpenPair(shift.shiftId)) ??
+      candidates.find(
+        (shift) => !events.some((event) => event.shiftId === shift.shiftId),
+      ) ??
+      candidates[0]
+    );
   }
 }
