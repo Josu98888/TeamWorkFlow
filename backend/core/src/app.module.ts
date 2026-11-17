@@ -8,6 +8,7 @@ import { OrganizationModule } from './organization/organization.module';
 import { TasksModule } from './tasks/tasks.module';
 import { AuthGuard } from './http/guards/auth.guard';
 import { FeatureGuard } from './http/guards/feature.guard';
+import { HealthController } from './http/health/health.controller';
 
 @Module({
   // ScheduleModule.forRoot() is registered once here for every module's jobs.
@@ -19,6 +20,7 @@ import { FeatureGuard } from './http/guards/feature.guard';
     TasksModule,
     NotificationsModule,
   ],
+  controllers: [HealthController],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: FeatureGuard },
