@@ -46,8 +46,14 @@ There is no `.github/workflows`, no production Dockerfile for `core` or the fron
   - `telemetry` runs `pnpm test:e2e` after the unit tests (mocked NATS and database);
   - the core filter also watches `backend/docker-compose.test.yml` and `backend/postgres/**`.
 
-  Status: not yet run on GitHub Actions; marked done once a PR run is green.
-- [ ] **T3** Production Dockerfiles for `core` and the frontend; review the telemetry one (Node version).
+  Status: the PR #26 CI run 44103138853 was green (all jobs, including `core-e2e`).
+- [x] **T3** Production Dockerfiles for `core` and the frontend; review the telemetry one (Node version).
+  - `backend/core/Dockerfile.prod`: stages `deps`, `prod-deps`, `builder` (five Prisma clients + `nest build`), `migrate` (builder plus the prisma CLI, configs and migrations; runs the five `migrate deploy` scripts) and `runner` (default target: prod deps only, `NODE_ENV=production`, user `node`, `node dist/main`, port 3000). The dev `dockerfile` used by `backend/docker-compose.yml` is untouched.
+  - `frontend/Dockerfile.prod` plus `output: "standalone"` in `next.config.ts`: build args `NEXT_PUBLIC_USE_MOCKS` (default `false`), `NEXT_PUBLIC_WS_URL` (default empty, same origin) and `BACKEND_URL`; runner is user `node`, `node server.js`, port 3000. The dev `dockerfile` is untouched.
+  - `backend/telemetry/Dockerfile`: Node 24 and prod-only runner were already right; added a `migrate` target (the runner has no prisma CLI) and `USER node`.
+  - `.dockerignore` of the three apps now also excludes `.env.*`, `coverage/` and `test-results/`.
+
+  Route: delegated (writer trigger: 3+ Dockerfiles). Evidence: frontend `pnpm lint` and `pnpm build` (standalone output present); `docker build` is left to the user (commands in the hand-off).
 - [ ] **T4** Production compose and nginx for the EC2 host (TLS, env files, a migrations step before start).
 - [ ] **T5** CD workflow: build and push images to GHCR on `main`, then deploy to EC2 (needs user authorization and secrets).
 - [ ] **T6** AWS setup guide:
@@ -67,5 +73,6 @@ TDD: off (no project or session setting; workflow and config work). Checks per t
 
 - Branch `feat/ci/github-actions` from `origin/develop` (54d4f4d).
 - T1 done: `.github/workflows/ci.yml` (changes, core, telemetry, frontend) and a CI section in `AGENTS.md`. Node 24, pnpm 11.5.2, dummy env in the core and telemetry jobs. Commit: `ci(core)` on `feat/ci/github-actions` (see `git log`).
-- T2: e2e jobs added on `fix/ci/e2e-suites` (pending a green PR run).
-- Next step: push after user confirmation, check the run is green (including the e2e jobs), then T3.
+- T2: e2e jobs added on `fix/ci/e2e-suites`; PR #26 CI run 44103138853 green.
+- T3 done on `feat/ci/production-dockerfiles` (see Tasks for the design).
+- Next step: T4 (production compose and nginx; run the `migrate` targets before starting `core` and `telemetry`).
