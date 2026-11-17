@@ -15,7 +15,11 @@ import { JetStreamService } from './events/jetstream.service';
 import { PrismaService } from './prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
-import { VerifyTokenDto } from './dto/verify-token.dto';
+import {
+  SOCKET_TOKEN_TYP,
+  TokenPurpose,
+  VerifyTokenDto,
+} from './dto/verify-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { TokenPair, TokenService } from './token.service';
 import type { ListRecipientsDto } from './users/dto/user-list-recipients.dto';
@@ -232,7 +236,8 @@ export class AuthService {
   // come from the token; identity, role, tenant and plan come from the
   // database, so deactivation, role changes and suspension apply immediately.
   async verify(dto: VerifyTokenDto): Promise<VerifiedActor> {
-    const claims = await this.readAccessToken(dto.accessToken);
+    const purpose = dto.purpose ?? 'access';
+    const claims = await this.readToken(dto.accessToken, purpose);
 
     const user = await this.prisma.user.findUnique({
       where: { id: claims.sub },
@@ -269,13 +274,17 @@ export class AuthService {
     };
   }
 
-  // Any signature, algorithm, expiry or shape problem is the same error.
-  private async readAccessToken(
-    accessToken: string,
+  // Any signature, algorithm, expiry, shape or purpose problem is the same
+  // error. The purpose keeps the two token kinds apart: an `access` token never
+  // carries a `typ` claim and a `socket` token must carry `typ: 'socket'`, so
+  // neither can be replayed where the other is expected.
+  private async readToken(
+    token: string,
+    purpose: TokenPurpose,
   ): Promise<{ sub: string; tenantId: string | null }> {
     let claims: unknown;
     try {
-      claims = await this.jwt.verifyAsync(accessToken, {
+      claims = await this.jwt.verifyAsync(token, {
         secret: envs.jwtSecret,
         algorithms: ['HS256'],
       });
@@ -283,13 +292,24 @@ export class AuthService {
       throw new InvalidTokenException();
     }
 
-    const { sub, tenantId, role } = (claims ?? {}) as Record<string, unknown>;
+    const { sub, tenantId, role, typ } = (claims ?? {}) as Record<
+      string,
+      unknown
+    >;
     if (
       typeof sub !== 'string' ||
       sub === '' ||
       !isWireRole(role) ||
       (tenantId !== null && typeof tenantId !== 'string')
     ) {
+      throw new InvalidTokenException();
+    }
+    if (purpose === 'socket') {
+      // Socket tokens are tenant-scoped: platform_admin never gets one.
+      if (typ !== SOCKET_TOKEN_TYP || role === 'platform_admin' || !tenantId) {
+        throw new InvalidTokenException();
+      }
+    } else if (typ !== undefined) {
       throw new InvalidTokenException();
     }
     return { sub, tenantId };
