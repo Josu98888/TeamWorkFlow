@@ -170,6 +170,10 @@ export class TowerGateway
         await client.join(tenantRoom);
       }
 
+      // The client may have left while joining: handleDisconnect already ran,
+      // so a timer set now would never be cleared.
+      if (client.disconnected) return;
+
       // Fixed session limit; the socket token's own `exp` is not used (it is
       // 60 s and was only needed for the handshake).
       const timer = setTimeout(() => {

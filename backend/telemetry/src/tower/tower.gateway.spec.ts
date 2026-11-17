@@ -287,6 +287,21 @@ describe('TowerGateway', () => {
       expect(mock.socket.data.actor).toBeUndefined();
     });
 
+    it('sets no session timer when the client left while joining rooms', async () => {
+      const mock = createMockSocket({
+        handshake: { auth: { token: 'socket-token' } },
+      });
+      mock.join.mockImplementation(async () => {
+        (mock.socket as { disconnected: boolean }).disconnected = true;
+      });
+      mockNatsClient.verifyToken.mockResolvedValue(towerActor());
+
+      await gateway.handleConnection(mock.socket);
+
+      expect(mock.join).toHaveBeenCalled();
+      expect(mock.socket.data.expiryTimer).toBeUndefined();
+    });
+
     describe('session limit', () => {
       beforeEach(() => jest.useFakeTimers());
       afterEach(() => jest.useRealTimers());
