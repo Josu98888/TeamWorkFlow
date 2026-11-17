@@ -1,0 +1,149 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+  PNPM_VERSION: '11.5.2'
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      core: ${{ steps.filter.outputs.core }}
+      telemetry: ${{ steps.filter.outputs.telemetry }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      # workflow_dispatch has no diff: the jobs below run unconditionally then.
+      - uses: actions/checkout@v4
+        if: github.event_name != 'workflow_dispatch'
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          filters: |
+            core:
+              - 'backend/core/**'
+              - '.github/workflows/ci.yml'
+            telemetry:
+              - 'backend/telemetry/**'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/ci.yml'
+
+  core:
+    name: Core (lint, test, build)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.core == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend/core
+    # Harmless non-secret values: the joi schema validates them when specs
+    # import src/config/envs.ts. Nothing connects to Postgres or NATS.
+    env:
+      PORT: '3000'
+      NATS_SERVER: nats://localhost:4222
+      AUTH_DATABASE_URL: postgresql://ci:ci@localhost:5432/teamworkflow?schema=auth
+      ORGANIZATION_DATABASE_URL: postgresql://ci:ci@localhost:5432/teamworkflow?schema=organization
+      BILLING_DATABASE_URL: postgresql://ci:ci@localhost:5432/teamworkflow?schema=billing
+      TASKS_DATABASE_URL: postgresql://ci:ci@localhost:5432/teamworkflow?schema=tasks
+      NOTIFICATIONS_DATABASE_URL: postgresql://ci:ci@localhost:5432/teamworkflow?schema=notifications
+      JWT_SECRET: ci-only-jwt-secret-not-a-real-secret-0123456789
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: backend/core/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma clients
+        run: |
+          pnpm prisma:auth:generate
+          pnpm prisma:organization:generate
+          pnpm prisma:billing:generate
+          pnpm prisma:tasks:generate
+          pnpm prisma:notifications:generate
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+
+  telemetry:
+    name: Telemetry (lint, test, build)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.telemetry == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend/telemetry
+    env:
+      PORT: '3003'
+      NATS_SERVER: nats://localhost:4222
+      ATTENDANCE_DATABASE_URL: postgresql://ci:ci@localhost:5432/teamworkflow?schema=attendance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: backend/telemetry/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm prisma:attendance:generate
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+
+  frontend:
+    name: Frontend (lint, tsc, build)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: frontend
+    # The build needs no secrets: every variable has a default (mock mode on).
+    env:
+      NEXT_PUBLIC_USE_MOCKS: 'true'
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: npx tsc --noEmit
+      - run: pnpm build
