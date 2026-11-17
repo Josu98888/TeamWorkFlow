@@ -430,7 +430,12 @@ describe('Tasks E2E Suite', () => {
         headers: { 'Content-Type': 'image/jpeg' },
         body: photoBytes,
       });
-      expect(s3UploadRes.ok).toBe(true);
+      // Print the S3 answer on failure so a CI log shows the cause.
+      if (!s3UploadRes.ok) {
+        throw new Error(
+          `S3 upload failed: ${s3UploadRes.status} ${await s3UploadRes.text()} (host ${new URL(uploadUrl).host})`,
+        );
+      }
 
       // 9. Employee gets signed read URL for media
       const mediaUrl = await core

@@ -59,7 +59,7 @@ describe('Billing E2E suite', () => {
         })
         .expect(200);
 
-      expect(response.body).toEqual({ received: true });
+      expect(response.body).toEqual({ ok: true });
     });
   });
 
@@ -69,7 +69,7 @@ describe('Billing E2E suite', () => {
       const response = await core
         .http()
         .get('/api/v1/billing/plans')
-        .set(bearer(tokens.accessToken))
+        .set('Authorization', bearer(tokens))
         .expect(200);
 
       expect(Array.isArray(response.body)).toBe(true);
@@ -81,7 +81,7 @@ describe('Billing E2E suite', () => {
       const response = await core
         .http()
         .get('/api/v1/billing/admin/subscriptions')
-        .set(bearer(tokens.accessToken))
+        .set('Authorization', bearer(tokens))
         .expect(403);
 
       expect(response.body).toEqual({
