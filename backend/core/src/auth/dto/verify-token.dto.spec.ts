@@ -31,12 +31,33 @@ describe('VerifyTokenDto with the global validation pipe', () => {
     ).resolves.toBeInstanceOf(VerifyTokenDto);
   });
 
+  it.each(['access', 'socket'])('accepts the %s purpose', async (purpose) => {
+    await expect(
+      createValidationPipe().transform(
+        { accessToken: 'a.b.c', purpose },
+        metadata,
+      ),
+    ).resolves.toMatchObject({ purpose });
+  });
+
+  it('leaves the purpose undefined when it is omitted', async () => {
+    const dto = await createValidationPipe().transform(
+      { accessToken: 'a.b.c' },
+      metadata,
+    );
+
+    expect((dto as VerifyTokenDto).purpose).toBeUndefined();
+  });
+
   it.each([
     ['missing token', {}],
     ['empty token', { accessToken: '' }],
     ['non-string token', { accessToken: 42 }],
     ['overlong token', { accessToken: 'x'.repeat(4097) }],
     ['extra field', { accessToken: 'a.b.c', role: 'owner' }],
+    ['unknown purpose', { accessToken: 'a.b.c', purpose: 'admin' }],
+    ['non-string purpose', { accessToken: 'a.b.c', purpose: 1 }],
+    ['empty purpose', { accessToken: 'a.b.c', purpose: '' }],
   ])('rejects %s', async (_label, payload) => {
     await expectValidationError(payload);
   });
