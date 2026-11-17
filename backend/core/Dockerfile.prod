@@ -4,7 +4,8 @@
 #   docker build -f Dockerfile.prod --target migrate -t teamworkflow-core-migrate .   # one-shot migrations
 #
 # Stages: deps (all deps) -> builder (Prisma clients + nest build) -> migrate (prisma CLI + migrations)
-#         and prod-deps (prod deps only) -> runner (slim, non-root).
+#         and prod-deps (prod deps only) + migrator-cli (prisma CLI only) -> runner (slim, non-root).
+# Hosts without a pre-deploy step: set MIGRATE_ON_START=true and the runner applies migrations before starting.
 
 FROM node:24-alpine AS base
 
@@ -45,7 +46,21 @@ USER node
 
 CMD ["sh", "-c", "pnpm run prisma:auth:migrate:deploy && pnpm run prisma:organization:migrate:deploy && pnpm run prisma:billing:migrate:deploy && pnpm run prisma:tasks:migrate:deploy && pnpm run prisma:notifications:migrate:deploy"]
 
-# Stage 5: runtime (default target: the last stage)
+# Stage 5: Migration CLI for the runtime image: the prisma CLI (7.10.0, same as package.json) and dotenv (imported by the
+# prisma.*.config.ts files) in an isolated /opt/migrate, so the runner keeps its prod-only node_modules.
+# Used by docker-entrypoint.sh when MIGRATE_ON_START=true (hosts without a pre-deploy step, e.g. Render free).
+FROM node:24-alpine AS migrator-cli
+
+RUN mkdir -p /opt/migrate && chown node:node /opt/migrate
+
+USER node
+ENV HOME=/home/node
+WORKDIR /opt/migrate
+
+RUN npm install --no-audit --no-fund prisma@7.10.0 dotenv@18.0.9 && npm cache clean --force
+
+# Stage 6: runtime (default target: the last stage). Starts like `node dist/main`; with MIGRATE_ON_START=true the
+# entrypoint first applies the five module migrations (see docker-entrypoint.sh).
 FROM base AS runner
 
 ENV NODE_ENV=production
@@ -53,8 +68,27 @@ ENV NODE_ENV=production
 COPY --from=prod-deps /usr/src/app/node_modules ./node_modules
 COPY --from=builder /usr/src/app/dist ./dist
 
+# Migrations at start (opt-in). Schemas and migrations come straight from the build context.
+COPY --from=migrator-cli --chown=node:node /opt/migrate /opt/migrate
+COPY --chown=node:node prisma.*.config.ts /opt/migrate/
+COPY --chown=node:node src/auth/prisma/schema.prisma /opt/migrate/src/auth/prisma/schema.prisma
+COPY --chown=node:node src/auth/prisma/migrations /opt/migrate/src/auth/prisma/migrations
+COPY --chown=node:node src/organization/prisma/schema.prisma /opt/migrate/src/organization/prisma/schema.prisma
+COPY --chown=node:node src/organization/prisma/migrations /opt/migrate/src/organization/prisma/migrations
+COPY --chown=node:node src/billing/prisma/schema.prisma /opt/migrate/src/billing/prisma/schema.prisma
+COPY --chown=node:node src/billing/prisma/migrations /opt/migrate/src/billing/prisma/migrations
+COPY --chown=node:node src/tasks/prisma/schema.prisma /opt/migrate/src/tasks/prisma/schema.prisma
+COPY --chown=node:node src/tasks/prisma/migrations /opt/migrate/src/tasks/prisma/migrations
+COPY --chown=node:node src/notifications/prisma/schema.prisma /opt/migrate/src/notifications/prisma/schema.prisma
+COPY --chown=node:node src/notifications/prisma/migrations /opt/migrate/src/notifications/prisma/migrations
+
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
+
 USER node
+ENV HOME=/home/node
 
 EXPOSE 3000
 
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "dist/main"]
