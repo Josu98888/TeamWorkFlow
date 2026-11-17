@@ -41,6 +41,8 @@ jobs:
           filters: |
             core:
               - 'backend/core/**'
+              - 'backend/docker-compose.test.yml'
+              - 'backend/postgres/**'
               - '.github/workflows/ci.yml'
             telemetry:
               - 'backend/telemetry/**'
@@ -91,6 +93,57 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+  core-e2e:
+    name: Core (e2e)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.core == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend/core
+    # No env here on purpose: test/support/test-env.ts pins every URL, port and
+    # throwaway credential of the isolated stack (Postgres 5433, NATS 4223,
+    # SeaweedFS S3 9002) and refuses to run against anything else.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: backend/core/pnpm-lock.yaml
+      # The same stack developers use locally (throwaway values, tmpfs). It
+      # mounts backend/postgres/init, which creates the schemas and roles, and
+      # NATS needs -js, which service containers cannot pass; hence compose.
+      - name: Start the e2e stack
+        run: docker compose -f ../docker-compose.test.yml up -d --wait postgres-test nats-test seaweedfs-test
+      - name: Create the S3 bucket
+        run: |
+          docker compose -f ../docker-compose.test.yml up -d seaweedfs-test-init
+          init_id="$(docker compose -f ../docker-compose.test.yml ps -aq seaweedfs-test-init)"
+          code="$(docker wait "$init_id")"
+          docker logs "$init_id"
+          test "$code" = "0"
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma clients
+        run: |
+          pnpm prisma:auth:generate
+          pnpm prisma:organization:generate
+          pnpm prisma:billing:generate
+          pnpm prisma:tasks:generate
+          pnpm prisma:notifications:generate
+      # globalSetup runs `prisma migrate deploy` for the five modules.
+      - run: pnpm test:e2e
+      - name: Stack logs
+        if: failure()
+        run: docker compose -f ../docker-compose.test.yml logs --no-color --tail=200
+      - name: Stop the e2e stack
+        if: always()
+        run: docker compose -f ../docker-compose.test.yml down -v
+
   telemetry:
     name: Telemetry (lint, test, build)
     needs: changes
@@ -118,6 +171,7 @@ jobs:
       - run: pnpm prisma:attendance:generate
       - run: pnpm lint
       - run: pnpm test
+      - run: pnpm test:e2e
       - run: pnpm build
 
   frontend:
