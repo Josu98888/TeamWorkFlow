@@ -80,7 +80,8 @@ docker compose -f docker-compose.prod.yml ps
 
 ## HTTP versus HTTPS (read before the first login)
 
-- core sets the auth cookies `Secure` when `NODE_ENV === 'production'` (`backend/core/src/auth/auth.controller.ts`; `COOKIE_SECURE` from the core docs is not implemented). Browsers drop `Secure` cookies on plain `http://` (except localhost), so over an IP address login never sticks. `core.env.example` therefore ships `NODE_ENV=development` for the HTTP phase. Switch it to `production` as soon as TLS is on.
+- The HTTP phase is for infrastructure testing only, never for real users: credentials and cookies travel in clear text.
+- core sets the auth cookies `Secure` by default (`COOKIE_SECURE`, default `true`, independent of `NODE_ENV`). Browsers drop `Secure` cookies on plain `http://` (except localhost), so over an IP address login never sticks. `core.env.example` therefore ships `COOKIE_SECURE=false` for the HTTP phase, with `NODE_ENV=production` always; core logs a startup warning while that combination is active. Remove it (or set `true`) as soon as TLS is on.
 - Cookies are `SameSite=Lax`, `HttpOnly`; the CSRF cookie is readable by the page. All of this works on a single origin, which nginx provides.
 - core has no CORS (same origin). telemetry allows only `WEB_ORIGIN` (CORS and Socket.IO): set it to `http://<host>` now and `https://<domain>` after TLS, or the WebSocket handshake is refused.
 - `APP_URL` (core) must be the public origin too; Mercado Pago webhooks need a public HTTPS URL.
@@ -97,7 +98,7 @@ docker compose -f docker-compose.prod.yml ps
    ```
    `--cert-name teamworkflow` keeps the certificate path fixed (`/etc/letsencrypt/live/teamworkflow/`), so `nginx/tls/https.conf` needs no edit. While testing, add `--staging`; delete the staging lineage before the real issue.
 3. In `.env` set `COMPOSE_FILE=docker-compose.prod.yml:docker-compose.tls.yml` and `COMPOSE_PROFILES=tls`.
-4. In `env/core.env` set `NODE_ENV=production` and `APP_URL=https://<domain>`; in `env/telemetry.env` set `WEB_ORIGIN=https://<domain>`.
+4. In `env/core.env` remove `COOKIE_SECURE=false` (or set `COOKIE_SECURE=true`) and set `APP_URL=https://<domain>`; in `env/telemetry.env` set `WEB_ORIGIN=https://<domain>`.
 5. `docker compose up -d`. nginx now redirects HTTP to HTTPS and serves 443; the `certbot` service renews twice a day when due, and nginx reloads every 6 hours to pick the new certificate up.
 6. Rebuild the frontend image only if you pinned `NEXT_PUBLIC_WS_URL` to a host; the default (empty, same origin) needs nothing.
 

@@ -59,7 +59,7 @@ There is no `.github/workflows`, no production Dockerfile for `core` or the fron
   - `deploy/nginx/`: path routing (`/api/v1/telemetry/` and `/ws` to telemetry, `/api/v1/` to core, `/` to the frontend), WebSocket upgrade, gzip, ACME webroot. HTTP on port 80 now; `docker-compose.tls.yml` plus `nginx/tls/https.conf` and the `certbot` service enable TLS once a domain exists (fixed `--cert-name teamworkflow`, no file edits).
   - `deploy/README.md`: runbook (RDS role init, env files, run, migrations, TLS, local try-out). `.gitignore` covers `deploy/.env` and `deploy/env/*.env`.
   - CI: `docker` job validates `docker compose config -q` (base and TLS) and `nginx -t` (HTTP and HTTPS with a throwaway certificate); `deploy/**` joined its path filter.
-  - Findings: core marks cookies `Secure` when `NODE_ENV=production` (`COOKIE_SECURE` is not implemented), so the HTTP phase needs `NODE_ENV=development` in `core.env`; `WEB_ORIGIN` must match the browser origin; S3 works with no endpoint and no static keys (IAM role).
+  - Findings: core now has `COOKIE_SECURE` (secure by default, independent of `NODE_ENV`); decision: `NODE_ENV=production` always, and the HTTP test phase opts out explicitly with `COOKIE_SECURE=false` (startup warning), removed when TLS is enabled; `WEB_ORIGIN` must match the browser origin; S3 works with no endpoint and no static keys (IAM role).
 
   Route: delegated (writer trigger: 2+ non-trivial files). Evidence: `@action-validator/cli` passes on `ci.yml`; compose YAML parses; the compose and nginx checks run in the CI `docker` job (docker was not run locally), pending its first green run.
 - [ ] **T5** CD workflow: build and push images to GHCR on `main`, then deploy to EC2 (needs user authorization and secrets).
