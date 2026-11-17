@@ -1,0 +1,183 @@
+# Production stack for one EC2 host (t3.small, 2 GB): NATS, core, telemetry, frontend and nginx.
+# PostgreSQL is RDS (no service here; `--profile local-db` adds a throwaway one for a local try-out).
+# Run from this folder: `docker compose -f docker-compose.prod.yml up -d` (see README.md).
+#
+# Startup order: nats (healthy) -> core-migrate / telemetry-migrate (exit 0) -> core / telemetry -> nginx.
+# A failed migration keeps core / telemetry from starting.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# Reachability check without extra tools: opens a TCP connection to the app port.
+x-node-tcp-check: &node-tcp-check
+  interval: 15s
+  timeout: 5s
+  retries: 5
+  start_period: 30s
+
+services:
+  nats:
+    image: nats:2-alpine
+    # JetStream on (-js), store on a volume, monitoring port 8222 (internal only, used by the healthcheck).
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    restart: unless-stopped
+    mem_limit: 128m
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8222/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    logging: *default-logging
+
+  core-migrate:
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER in deploy/.env}/teamworkflow-core-migrate:${IMAGE_TAG:-latest}
+    env_file: ./env/core.env
+    restart: "no"
+    mem_limit: 512m
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false # only exists with `--profile local-db`; RDS is external
+    logging: *default-logging
+
+  telemetry-migrate:
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER in deploy/.env}/teamworkflow-telemetry-migrate:${IMAGE_TAG:-latest}
+    env_file: ./env/telemetry.env
+    restart: "no"
+    mem_limit: 512m
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+    logging: *default-logging
+
+  core:
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER in deploy/.env}/teamworkflow-core:${IMAGE_TAG:-latest}
+    env_file: ./env/core.env
+    environment:
+      NODE_OPTIONS: --max-old-space-size=384
+    restart: unless-stopped
+    mem_limit: 512m
+    depends_on:
+      nats:
+        condition: service_healthy
+      core-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(3000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      <<: *node-tcp-check
+    logging: *default-logging
+
+  telemetry:
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER in deploy/.env}/teamworkflow-telemetry:${IMAGE_TAG:-latest}
+    env_file: ./env/telemetry.env
+    environment:
+      NODE_OPTIONS: --max-old-space-size=288
+    restart: unless-stopped
+    mem_limit: 384m
+    depends_on:
+      nats:
+        condition: service_healthy
+      telemetry-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(3003,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      <<: *node-tcp-check
+    logging: *default-logging
+
+  # No runtime env: NEXT_PUBLIC_* and BACKEND_URL are baked into the image at build time.
+  frontend:
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER in deploy/.env}/teamworkflow-frontend:${IMAGE_TAG:-latest}
+    environment:
+      NODE_OPTIONS: --max-old-space-size=192
+    restart: unless-stopped
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(3000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      <<: *node-tcp-check
+    logging: *default-logging
+
+  # The only published service. Port 443 is published by docker-compose.tls.yml once a certificate exists.
+  nginx:
+    image: nginx:1.27-alpine
+    # The loop reloads nginx every 6 h so a renewed certificate is picked up (harmless without TLS).
+    command:
+      - sh
+      - -c
+      - 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & exec nginx -g "daemon off;"'
+    restart: unless-stopped
+    mem_limit: 64m
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d/http.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
+      - certbot-webroot:/var/www/certbot:ro
+      - letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - core
+      - telemetry
+      - frontend
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/nginx-health || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    logging: *default-logging
+
+  # Certificate issuing and renewal (HTTP-01, webroot served by nginx). Not started by default.
+  certbot:
+    profiles: ["tls"]
+    image: certbot/certbot:v3.0.1
+    # Renews twice a day when due; the first certificate is issued by hand (README, "Enable TLS").
+    entrypoint:
+      - sh
+      - -c
+      - 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done'
+    restart: unless-stopped
+    mem_limit: 128m
+    volumes:
+      - certbot-webroot:/var/www/certbot
+      - letsencrypt:/etc/letsencrypt
+    logging: *default-logging
+
+  # Throwaway PostgreSQL for a local try-out only (`--profile local-db`). Production uses RDS.
+  # The init script creates one schema and one role per module (the same one RDS needs, see README).
+  postgres:
+    profiles: ["local-db"]
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: teamworkflow
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-postgres}
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:-local-auth}
+      ORGANIZATION_DB_PASSWORD: ${ORGANIZATION_DB_PASSWORD:-local-organization}
+      ATTENDANCE_DB_PASSWORD: ${ATTENDANCE_DB_PASSWORD:-local-attendance}
+      TASKS_DB_PASSWORD: ${TASKS_DB_PASSWORD:-local-tasks}
+      NOTIFICATIONS_DB_PASSWORD: ${NOTIFICATIONS_DB_PASSWORD:-local-notifications}
+      BILLING_DB_PASSWORD: ${BILLING_DB_PASSWORD:-local-billing}
+    restart: unless-stopped
+    mem_limit: 512m
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../backend/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d teamworkflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging: *default-logging
+
+volumes:
+  nats-data:
+  postgres-data:
+  certbot-webroot:
+  letsencrypt:
