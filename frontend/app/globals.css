@@ -33,6 +33,39 @@
     --status-danger: #B42332;
     --status-info: #315F86;
     --status-process: #65476D;
+
+    /* Pagina y sidebar de vidrio (claro) */
+    --page-bg:
+      radial-gradient(380px circle at -2% 4%, var(--brand-lavender), transparent 70%),
+      radial-gradient(300px circle at 6% 52%, var(--brand-mint), transparent 70%),
+      radial-gradient(340px circle at -2% 100%, var(--brand-medium), transparent 70%),
+      #E9E2EC;
+    --sidebar-glass: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--brand-medium) 62%, transparent) 0%,
+      color-mix(in srgb, var(--brand-primary) 66%, transparent) 45%,
+      color-mix(in srgb, var(--brand-dark) 74%, transparent) 100%
+    );
+    --sidebar-gloss: linear-gradient(180deg, color-mix(in srgb, white 16%, transparent), transparent 30%);
+    --sidebar-blur: blur(22px) saturate(150%);
+    --sidebar-border: color-mix(in srgb, white 28%, transparent);
+    --sidebar-text: color-mix(in srgb, white 86%, transparent);
+    --sidebar-muted: color-mix(in srgb, white 55%, transparent);
+    --sidebar-strong: #FFFFFF;
+    --sidebar-hover: color-mix(in srgb, white 12%, transparent);
+    --sidebar-chip: color-mix(in srgb, white 14%, transparent);
+    --sidebar-chip-border: color-mix(in srgb, white 8%, transparent);
+    --sidebar-divider: color-mix(in srgb, white 12%, transparent);
+    --sidebar-danger: #FFB4B4;
+    --sidebar-danger-bg: color-mix(in srgb, var(--status-danger) 22%, transparent);
+    --sidebar-active-text: var(--brand-primary);
+    --sidebar-accent: var(--brand-teal);
+    --sidebar-overlay-shadow: 20px 0 50px color-mix(in srgb, black 30%, transparent);
+    --sidebar-drawer-shadow: 0 20px 60px color-mix(in srgb, black 35%, transparent);
+    --sidebar-rail-active-shadow: 0 6px 18px color-mix(in srgb, black 25%, transparent);
+    --scrim: color-mix(in srgb, black 40%, transparent);
+    --card-shadow: 0 10px 40px color-mix(in srgb, var(--brand-dark) 14%, transparent);
+    --card-border: transparent;
   }
 
   [data-theme='dark'] {
@@ -67,6 +100,21 @@
     --status-danger: #B42332;
     --status-info: #315F86;
     --status-process: #65476D;
+
+    /* Pagina y sidebar solido (oscuro) */
+    --page-bg: #0C0B0E;
+    --sidebar-glass: linear-gradient(180deg, var(--bg-alt) 0%, var(--bg-sidebar) 40%, #1B1720 100%);
+    --sidebar-gloss: linear-gradient(180deg, color-mix(in srgb, var(--brand-lavender) 8%, transparent), transparent 30%);
+    --sidebar-blur: none;
+    --sidebar-border: color-mix(in srgb, white 7%, transparent);
+    --sidebar-text: color-mix(in srgb, white 82%, transparent);
+    --sidebar-muted: color-mix(in srgb, white 45%, transparent);
+    --sidebar-hover: color-mix(in srgb, white 6%, transparent);
+    --sidebar-chip: color-mix(in srgb, white 7%, transparent);
+    --sidebar-active-text: #FFFFFF;
+    --sidebar-accent: var(--brand-mint);
+    --card-shadow: none;
+    --card-border: color-mix(in srgb, white 4%, transparent);
   }
 
   body {

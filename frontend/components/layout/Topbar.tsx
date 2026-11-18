@@ -51,7 +51,7 @@ export function Topbar() {
       <header
         className="h-16 px-6 flex items-center justify-between border-b"
         style={{
-          backgroundColor: 'var(--bg-card)',
+          backgroundColor: 'var(--bg-main)',
           borderColor: 'var(--border-main)',
         }}
       >
@@ -73,7 +73,7 @@ export function Topbar() {
     <header
       className="h-16 px-6 flex items-center justify-between border-b"
       style={{
-        backgroundColor: 'var(--bg-card)',
+        backgroundColor: 'var(--bg-main)',
         borderColor: 'var(--border-main)',
       }}
     >
