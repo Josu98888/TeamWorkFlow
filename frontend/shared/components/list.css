@@ -1,0 +1,138 @@
+/* List-page surfaces: toolbar, stacked rows, data table, states, modal. Colors come only from the tokens in globals.css. */
+
+/* Filter/search bar above a list. */
+.list-toolbar {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--tile-border);
+  background: color-mix(in srgb, var(--bg-card) 78%, transparent);
+  box-shadow: var(--tile-shadow);
+}
+
+/* Stacked rows inside a card (same style as the dashboard lists). */
+.list-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  margin: 0;
+  list-style: none;
+}
+
+.list-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border-main);
+  background: color-mix(in srgb, var(--bg-main) 60%, transparent);
+}
+
+.list-row[data-unread='true'] {
+  background: color-mix(in srgb, var(--chip-bg) 55%, transparent);
+}
+
+/* Icon chip used as the leading element of a row. */
+.list-chip {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--chip-bg) 70%, transparent);
+  color: var(--chip-fg);
+}
+
+[data-theme='dark'] .list-chip {
+  background: color-mix(in srgb, white 6%, transparent);
+  color: var(--chip-bg);
+}
+
+/* Table that scrolls inside its card instead of the page. */
+.table-scroll {
+  overflow-x: auto;
+  padding: 0 12px 12px;
+}
+
+.data-table {
+  width: 100%;
+  min-width: 44rem;
+  border-collapse: separate;
+  border-spacing: 0 8px;
+  text-align: left;
+  font-size: 14px;
+}
+
+.data-table th {
+  padding: 8px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.data-table td {
+  padding: 12px 14px;
+  border-block: 1px solid var(--border-main);
+  background: color-mix(in srgb, var(--bg-main) 60%, transparent);
+}
+
+.data-table td:first-child {
+  border-inline-start: 1px solid var(--border-main);
+  border-start-start-radius: 14px;
+  border-end-start-radius: 14px;
+}
+
+.data-table td:last-child {
+  border-inline-end: 1px solid var(--border-main);
+  border-start-end-radius: 14px;
+  border-end-end-radius: 14px;
+}
+
+/* Empty and loading states. */
+.state-empty {
+  padding: 40px 24px;
+  text-align: center;
+  border-radius: 22px;
+  border: 1px dashed var(--border-main);
+  background: color-mix(in srgb, var(--bg-card) 55%, transparent);
+}
+
+.state-skeleton {
+  border-radius: 18px;
+  border: 1px solid var(--tile-border);
+  background: var(--tile-bg);
+  animation: state-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes state-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Modal. */
+.modal-backdrop {
+  background: var(--scrim);
+  backdrop-filter: blur(6px);
+}
+
+.modal-panel {
+  border-radius: 22px;
+  border: 1px solid var(--tile-border);
+  background: var(--bg-card);
+  box-shadow: var(--sidebar-drawer-shadow);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .state-skeleton {
+    animation: none;
+  }
+}
