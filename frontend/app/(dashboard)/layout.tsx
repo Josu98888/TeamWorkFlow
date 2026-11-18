@@ -11,6 +11,7 @@ import {
   stopProactiveRefresh,
 } from '../../shared/lib/http';
 
+import { SidebarProvider } from '../../shared/providers/SidebarProvider';
 import { RouteGuard } from '../../components/layout/RouteGuard';
 
 export default function DashboardLayout({
@@ -53,12 +54,14 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen" style={{ backgroundColor: 'var(--bg-main)' }}>
-      <Sidebar />
-      <div className="flex-1 flex flex-col">
-        <Topbar />
-        <main className="flex-1 p-6 overflow-y-auto"><RouteGuard>{children}</RouteGuard></main>
+    <SidebarProvider>
+      <div className="flex min-h-screen" style={{ backgroundColor: 'var(--bg-main)' }}>
+        <Sidebar />
+        <div className="flex-1 min-w-0 flex flex-col">
+          <Topbar />
+          <main className="flex-1 p-6 overflow-y-auto"><RouteGuard>{children}</RouteGuard></main>
+        </div>
       </div>
-    </div>
+    </SidebarProvider>
   );
 }

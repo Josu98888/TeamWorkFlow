@@ -1,16 +1,30 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { canAccessRoute } from '@/shared/auth/permissions';
 import { useLogout, useSession } from '@/shared/hooks/useSession';
+import { useSidebar } from '@/shared/providers/SidebarProvider';
+
+export const SIDEBAR_ID = 'app-sidebar';
 
 export function Sidebar() {
   const pathname = usePathname();
   const session = useSession();
 
   const logout = useLogout();
+  const { isDesktop, isOpen, closeMobile } = useSidebar();
+  const drawerOpen = !isDesktop && isOpen;
+
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeMobile();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [drawerOpen, closeMobile]);
 
   const navItems = [
     { label: 'Mi jornada', href: '/mi-jornada' },
@@ -28,8 +42,20 @@ export function Sidebar() {
   ].filter((item) => canAccessRoute(session?.role, item.href));
 
   return (
+    <>
+      {drawerOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          onClick={closeMobile}
+          aria-hidden="true"
+        />
+      )}
     <aside
-      className="w-64 flex flex-col justify-between p-5 min-h-screen text-white select-none border-r"
+      id={SIDEBAR_ID}
+      inert={!isOpen}
+      className={`fixed inset-y-0 left-0 z-40 w-64 overflow-y-auto flex flex-col justify-between p-5 text-white select-none border-r transition-transform lg:static lg:z-auto lg:min-h-screen lg:shrink-0 lg:translate-x-0 ${
+        isOpen ? 'translate-x-0' : '-translate-x-full lg:hidden'
+      }`}
       style={{
         backgroundColor: 'var(--bg-sidebar)',
         borderColor: 'rgba(255, 255, 255, 0.08)',
@@ -77,5 +103,6 @@ export function Sidebar() {
         </button>
       </div>
     </aside>
+    </>
   );
 }
