@@ -37,7 +37,20 @@ Prototipo aprobado por el usuario (2026-11-18), en `odd/designs/auth-login-slide
 - Accesibilidad: labels con `htmlFor`, el formulario oculto con `inert`/`aria-hidden`, foco al primer campo al cambiar de vista.
 
 ## Tasks
-- [ ] A1 Componente `AuthSlider` con fondo, tarjeta, panel y animación (escritorio y celular).
-- [ ] A2 Mover los formularios actuales de login y registro adentro, sin cambiar su lógica.
-- [ ] A3 `/login` y `/register` usan el componente con el estado inicial correcto; sincronizar la URL.
+- [x] A1 Componente `AuthSlider` con fondo, tarjeta, panel y animación (escritorio y celular).
+  - Evidence: `frontend/features/auth/components/AuthSlider.tsx`, `AuthShell.tsx`, `features/auth/auth.css`, `.auth-screen` tokens in `app/globals.css`; `pnpm lint` (2 known warnings), `npx tsc --noEmit`, `pnpm build` OK; commit d8a641f.
+- [x] A2 Mover los formularios actuales de login y registro adentro, sin cambiar su lógica.
+  - Evidence: `LoginForm.tsx`, `RegisterForm.tsx` with the same `startSession` calls and error messages; commit d8a641f.
+- [x] A3 `/login` y `/register` usan el componente con el estado inicial correcto; sincronizar la URL.
+  - Evidence: `app/login/page.tsx` and `app/register/page.tsx` render `AuthSlider` with `initialView`; URL synced with `history.replaceState`; commit d8a641f.
 - [ ] A4 Revisar en 1200, 820 y 390 px contra las capturas; `pnpm lint` y `pnpm build`.
+- [x] A5 Pantallas públicas de empleados: `/invitations/accept` (el empleado crea su contraseña desde la invitación) y `/password-reset` usan el mismo fondo y tarjeta de vidrio, una sola columna, sin panel deslizante. Lógica sin cambios. Decisión del usuario (2026-11-18): los empleados entran por el mismo `/login` (no hay login aparte en el backend), así que "el login de los empleados" es esta pantalla de invitación.
+  - Evidence: `features/access/components/PublicTokenForms.tsx` now uses `AuthShell` + `AuthCard` (logic untouched); lint, tsc, build OK; commit 0246e4c.
+
+## Delivery
+- Rama `design/frontend/auth-login-slide` (sale de `develop`). Ruta: delegada (writer trigger, 2+ archivos no triviales). TDD: off (el frontend no tiene runner de unit tests); checks: `pnpm lint`, `npx tsc --noEmit`, `pnpm build`.
+- Pronóstico: ~400-550 líneas; estrategia `ask-on-risk`.
+- Nota: `feat/frontend/quick-wins` cambió `app/register/page.tsx` (aviso de prueba); al integrar las dos ramas en `develop` habrá conflicto en ese archivo. Este diseño ya incluye la nota de 14 días, así que se resuelve quedándose con esta versión.
+
+## Progress
+- Diseño aprobado y spec escrito. A1, A2, A3 y A5 implementados (d8a641f, 0246e4c); lint, tsc y build en verde. Pendiente A4: revisión visual del usuario a 1200, 820 y 390 px (no verificada en navegador).
