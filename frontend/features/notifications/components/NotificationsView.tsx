@@ -92,7 +92,7 @@ export function NotificationsView() {
         />
       ) : (
         <>
-          <Card flush>
+          <Card flush glow="none">
             <ul className="divide-y divide-line">
               {list.data.items.map((item) => (
                 <NotificationItem

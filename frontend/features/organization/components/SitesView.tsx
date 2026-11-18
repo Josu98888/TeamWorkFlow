@@ -130,9 +130,9 @@ export function SitesView() {
               <li key={site.id}>
                 <Link
                   href={`/sedes/${site.id}`}
-                  className="group block h-full rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-medium"
+                  className="group block h-full rounded-[22px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-medium"
                 >
-                  <Card flush className="h-full overflow-hidden transition-colors group-hover:bg-alt">
+                  <Card flush interactive glow="none" className="h-full">
                     <SiteMap
                       compact
                       siteName={site.name}

@@ -121,7 +121,7 @@ export function ShiftsView() {
       ) : shifts.data.items.length === 0 ? (
         <EmptyState title="No hay turnos" description="Probá con otros filtros o creá un turno." />
       ) : (
-        <Card flush>
+        <Card flush glow="none">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[44rem] text-left text-sm">
               <thead>

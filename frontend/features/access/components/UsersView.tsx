@@ -69,7 +69,7 @@ export function UsersView() {
           </form>
         </Card>
 
-        <Card flush className="lg:col-span-2">
+        <Card flush glow="none" className="lg:col-span-2">
           <div className="px-5 pt-5">
             <SectionLabel>Invitaciones pendientes</SectionLabel>
           </div>
@@ -105,7 +105,7 @@ export function UsersView() {
         </Card>
       </div>
 
-      <Card flush className="mt-4">
+      <Card flush glow="none" className="mt-4">
         <div className="px-5 pt-5">
           <SectionLabel>Cuentas vinculadas a empleados</SectionLabel>
           <p className="-mt-2 mb-3 text-xs text-muted">

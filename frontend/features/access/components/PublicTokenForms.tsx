@@ -10,7 +10,7 @@ import { apiFetch } from '@/shared/lib/http';
 function Shell({ title, children }: { title: string; children: ReactNode }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-page p-4">
-      <Card className="w-full max-w-md">
+      <Card glow="none" className="w-full max-w-md">
         <h1 className="mb-1 text-xl font-bold text-title">{title}</h1>
         {children}
       </Card>

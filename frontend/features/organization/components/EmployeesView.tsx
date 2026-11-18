@@ -87,7 +87,7 @@ export function EmployeesView({ onInvite, inviteRoles }: { onInvite?: InviteEmpl
       ) : employees.data.items.length === 0 ? (
         <EmptyState title="No encontramos empleados" description="Probá con otros filtros o creá uno nuevo." />
       ) : (
-        <Card flush>
+        <Card flush glow="none">
           <ul className="divide-y divide-line">
             {employees.data.items.map((employee) => (
               <li key={employee.id} className="flex flex-wrap items-center gap-3 px-5 py-3">

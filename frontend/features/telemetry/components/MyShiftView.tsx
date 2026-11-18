@@ -85,7 +85,7 @@ export function MyShiftView() {
           <ClockCard shifts={openShifts} onDone={reloadAll} />
         )}
 
-        <Card flush>
+        <Card flush glow="none">
           <div className="px-5 pt-5">
             <SectionLabel>Mis fichadas</SectionLabel>
           </div>
@@ -119,7 +119,7 @@ export function MyShiftView() {
           )}
         </Card>
 
-        <Card flush>
+        <Card flush glow="none">
           <div className="px-5 pt-5">
             <SectionLabel>Mis jornadas</SectionLabel>
           </div>

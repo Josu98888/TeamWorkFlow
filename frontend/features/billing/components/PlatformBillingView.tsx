@@ -191,7 +191,7 @@ export function PlatformBillingView() {
         <IssueInvoiceForm onDone={invoices.reload} />
       </div>
 
-      <Card flush className="mb-4">
+      <Card flush glow="none" className="mb-4">
         <div className="px-5 pt-5">
           <SectionLabel>Suscripciones</SectionLabel>
         </div>
@@ -223,7 +223,7 @@ export function PlatformBillingView() {
         )}
       </Card>
 
-      <Card flush>
+      <Card flush glow="none">
         <div className="px-5 pt-5">
           <SectionLabel>Facturas</SectionLabel>
         </div>

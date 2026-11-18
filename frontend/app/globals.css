@@ -66,6 +66,15 @@
     --scrim: color-mix(in srgb, black 40%, transparent);
     --card-shadow: 0 10px 40px color-mix(in srgb, var(--brand-dark) 14%, transparent);
     --card-border: transparent;
+
+    /* Tarjetas con brillo (Card, KpiTile) */
+    --glow-1: rgba(186, 150, 204, 0.95);
+    --glow-2: rgba(200, 181, 206, 0.55);
+    --chip-bg: #EFE6F2;
+    --chip-fg: var(--brand-primary);
+    --tile-bg: var(--bg-card);
+    --tile-border: var(--border-main);
+    --tile-shadow: 0 1px 2px rgba(41, 39, 43, 0.04), 0 12px 32px -18px rgba(73, 51, 79, 0.35);
   }
 
   [data-theme='dark'] {
@@ -115,6 +124,14 @@
     --sidebar-accent: var(--brand-mint);
     --card-shadow: none;
     --card-border: color-mix(in srgb, white 4%, transparent);
+
+    --glow-1: rgba(222, 200, 232, 0.95);
+    --glow-2: rgba(140, 113, 148, 0.55);
+    --chip-bg: #D9C9DE;
+    --chip-fg: #35243B;
+    --tile-bg: #17161B;
+    --tile-border: color-mix(in srgb, white 7%, transparent);
+    --tile-shadow: 0 20px 50px -25px rgba(0, 0, 0, 0.8);
   }
 
   body {
@@ -168,4 +185,8 @@
   --color-danger: var(--status-danger);
   --color-info: var(--status-info);
   --color-process: var(--status-process);
+
+  /* Glow cards */
+  --color-chip: var(--chip-bg);
+  --color-chip-fg: var(--chip-fg);
 }
