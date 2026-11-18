@@ -26,7 +26,7 @@ The free-tier demo (`odd/tasks/free-tier-deploy.md`) sleeps when idle (crons and
 
 ## Tasks
 
-- [ ] **T1** Image publishing: GitHub Actions workflow that builds and pushes the five images (`core`, `core-migrate`, `telemetry`, `telemetry-migrate`, `frontend`) to GHCR on manual dispatch, with the frontend build args for the single-origin nginx setup. Route: delegated (preparation trigger: reading `ci.yml`, Dockerfiles and frontend build args prepares the write).
+- [x] **T1** Image publishing: GitHub Actions workflow that builds and pushes the five images (`core`, `core-migrate`, `telemetry`, `telemetry-migrate`, `frontend`) to GHCR on manual dispatch, with the frontend build args for the single-origin nginx setup. Route: delegated (preparation trigger: reading `ci.yml`, Dockerfiles and frontend build args prepares the write).
 - [ ] **T2** DonWeb guide `deploy/donweb/README.md`: VPS preparation (SSH key, firewall, Docker, swap, log limits), domain and DNS, Supabase setup (link to the free-tier sections), env files, first start, TLS, updates and rollback, maintenance (prune), smoke test, memory budget; linked from `deploy/README.md` and root `AGENTS.md`. Route: delegated (writer trigger: 2+ non-trivial files).
 
 ## Acceptance criteria
@@ -45,4 +45,8 @@ Forecast: ~300-450 authored changed lines (docs and one workflow). Strategy: `as
 ## Progress
 
 - Exploration: `deploy/docker-compose.prod.yml` already supports an external database (the `postgres` service is profile `local-db`); no workflow pushes images to GHCR (`ci.yml` builds with `push: false`; `odd/tasks/ci-cd.md` T5 pending).
-- Next step: T1.
+- T1 done (see Evidence). Next step: T2.
+
+## Evidence
+
+- **T1**: `.github/workflows/publish-images.yml` (manual dispatch, matrix of five images, `packages: write`, GHA cache per image). Tags: input `tag` (default short SHA) plus `latest` (compose default `IMAGE_TAG`). Frontend build args: `NEXT_PUBLIC_USE_MOCKS=false`, `NEXT_PUBLIC_WS_URL=` (empty, same origin), `BACKEND_URL=http://nginx`; no domain baked, so no workflow input. `npx @action-validator/cli` exits 0. Not verified: a real run (user dispatches it; packages may need to be made public).
