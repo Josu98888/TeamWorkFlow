@@ -42,8 +42,18 @@ El botón que oculta o muestra el sidebar ya existe en la rama `feat/frontend/qu
 - Sin dependencias nuevas sin confirmarlo con el equipo.
 
 ## Tasks
-- [ ] S1 Tokens de claro y oscuro (fondo de página, vidrio del sidebar) y contenedor `main` como tarjeta en `(dashboard)/layout.tsx`.
-- [ ] S2 Sidebar abierto: encabezado, buscador, secciones con íconos, contador y pie de usuario.
-- [ ] S3 Ítem activo fusionado con esquinas cóncavas.
-- [ ] S4 Modo solo íconos en computadora con el botón y la preferencia guardada; tablet expandido encima; cajón de celular.
+- [x] S1 Tokens de claro y oscuro (fondo de página, vidrio del sidebar) y contenedor `main` como tarjeta en `(dashboard)/layout.tsx`.
+  - Evidence: `globals.css` (tokens `--page-bg`, `--sidebar-*`, `--scrim`, `--card-*`), `components/layout/shell.css`, `(dashboard)/layout.tsx`; commit e578de5.
+- [x] S2 Sidebar abierto: encabezado, buscador, secciones con íconos, contador y pie de usuario.
+  - Evidence: `Sidebar.tsx`, `SidebarIcons.tsx`, `sidebar-nav.ts`, `sidebar.css`, `features/notifications/useUnreadCount.ts` (hook extracted from `NotificationBell`, reused for the counter); commit b46f4c9. No name or plan in the session claims: the footer card shows the role only.
+- [x] S3 Ítem activo fusionado con esquinas cóncavas.
+  - Evidence: `sidebar.css` (`[data-merged]` pill, 22px pseudo-element corners, 3px accent); commit b46f4c9.
+- [x] S4 Modo solo íconos en computadora con el botón y la preferencia guardada; tablet expandido encima; cajón de celular.
+  - Evidence: `SidebarProvider.tsx` (mode desktop/tablet/mobile, `sidebar-collapsed` preference, Escape and navigation close the overlay), `sidebar.css`; commit b46f4c9. Tablet rail tooltips are native `title`.
 - [ ] S5 Revisar en 1280, 820 y 390 px, en claro y oscuro, contra las capturas; `pnpm lint` y `pnpm build`.
+
+## Progress
+S1-S4 implemented (2026-11-18). Checks in `frontend/`: `pnpm lint` (0 errors, 2 known `window.location.href` warnings), `npx tsc --noEmit` (exit 0), `pnpm build` (exit 0). S5 pending: visual review by the user at 1280, 820 and 390 px, light and dark; nothing was checked in a browser.
+
+## Delivery
+Branch `feat/frontend/sidebar-glass`, created from `feat/frontend/quick-wins`. Route: delegated direct (one writer). TDD: off (no frontend unit test runner; checks are lint, typecheck and build).
