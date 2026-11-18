@@ -16,9 +16,9 @@ After the sidebar and card redesign, these pages still use the old tables, filte
 - No new dependencies.
 
 ## Tasks
-- [ ] L1 Shared pieces: toolbar (search + filters + primary action), table/list row style, status chip, empty/loading states, modal and button refresh. Route: delegated (writer trigger).
-- [ ] L2 Apply to Empleados and Usuarios. Route: delegated (same writer).
-- [ ] L3 Apply to Turnos, Notificaciones and Facturación plataforma. Route: delegated (same writer).
+- [x] L1 Shared pieces: toolbar (search + filters + primary action), table/list row style, status chip, empty/loading states, modal and button refresh. Route: delegated (writer trigger). Evidence: commit 04dc7c9; new `shared/components/List.tsx` (Toolbar, RowList, ListRow, DataTable) and `list.css`; States, Modal, Button, Fields restyled; status chip reuses Badge; lint 0 errors, tsc clean.
+- [x] L2 Apply to Empleados and Usuarios. Route: delegated (same writer). Evidence: commit 295d18f; EmployeesView, UsersView; lint, tsc clean.
+- [x] L3 Apply to Turnos, Notificaciones and Facturación plataforma. Route: delegated (same writer). Evidence: commit bf0fb40; ShiftsView (DataTable), NotificationsView + NotificationItem (variant row), PlatformBillingView, InvoiceTable (also used by tenant BillingView); lint, tsc, pnpm build pass. No browser check done.
 - [ ] L4 User visual check at 1280 and 390 px, light and dark; `pnpm lint` and `pnpm build`.
 
 ## Checks
@@ -28,4 +28,4 @@ TDD: off (no frontend unit runner). Per task: `pnpm lint`, `npx tsc --noEmit`; `
 Branch `feat/frontend/list-pages`, stacked on `feat/frontend/glow-cards` (needs its tokens and `Card`). Forecast ~400-600 lines; strategy `ask-on-risk`.
 
 ## Progress
-- Doc created. Next: L1-L3 with one writer.
+- L1-L3 done (no search/filter features added; existing server-side filters kept). Next: L4 user visual check at 1280 and 390 px, light and dark.
