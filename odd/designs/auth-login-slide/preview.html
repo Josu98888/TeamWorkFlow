@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TeamWorkFlow · Login / Registro (preview)</title>
+<style>
+  :root{
+    --bg-sidebar:#231E2A;
+    --brand-primary:#49334F;
+    --brand-dark:#35243B;
+    --brand-medium:#735879;
+    --brand-lavender:#C8B5CE;
+    --brand-petroleum:#24313A;
+    --brand-teal:#2E7D6B;
+    --brand-mint:#A9DCCF;
+    --status-danger:#B42332;
+    --ease:cubic-bezier(.65,0,.35,1);
+    --dur:.7s;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    min-height:100vh;display:flex;align-items:center;justify-content:center;
+    padding:24px 16px;color:#fff;overflow-x:hidden;
+    background:
+      radial-gradient(1200px 600px at 85% 110%, rgba(115,88,121,.55), transparent 60%),
+      radial-gradient(900px 500px at 0% 0%, rgba(36,49,58,.9), transparent 60%),
+      linear-gradient(135deg, var(--bg-sidebar) 0%, var(--brand-dark) 45%, var(--brand-primary) 100%);
+  }
+
+  /* ---------- Fondo geométrico ---------- */
+  .bg{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0}
+  .shape{position:absolute;border-radius:999px;opacity:.55}
+  .rod-1{width:520px;height:90px;top:6%;right:-120px;transform:rotate(-40deg);
+    background:linear-gradient(90deg,transparent,rgba(200,181,206,.35))}
+  .rod-2{width:380px;height:70px;bottom:10%;left:-90px;transform:rotate(-40deg);
+    background:linear-gradient(90deg,rgba(115,88,121,.6),transparent)}
+  .rod-3{width:600px;height:120px;bottom:-40px;right:10%;transform:rotate(-40deg);
+    background:linear-gradient(90deg,transparent,rgba(73,51,79,.9))}
+  .ring{border:18px solid rgba(200,181,206,.12);background:none;opacity:1}
+  .ring-1{width:260px;height:260px;top:18%;left:30%}
+  .ring-2{width:380px;height:380px;bottom:-120px;right:-80px;border-color:rgba(46,125,107,.18)}
+  .line{width:6px;height:180px;top:0;left:22%;background:linear-gradient(transparent,rgba(200,181,206,.35));opacity:1}
+  .line.b{left:calc(22% + 26px);height:140px}
+  .float{animation:float 9s ease-in-out infinite}
+  .float.d2{animation-duration:12s;animation-direction:reverse}
+  @keyframes float{50%{translate:0 -18px}}
+
+  /* ---------- Tarjeta ---------- */
+  .container{
+    position:relative;z-index:1;width:880px;max-width:100%;min-height:540px;
+    border-radius:28px;overflow:hidden;
+    background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.12);
+    backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    box-shadow:0 30px 80px rgba(10,6,14,.55);
+  }
+
+  .form-box{
+    position:absolute;top:0;height:100%;width:50%;
+    display:flex;align-items:center;justify-content:center;
+    transition:transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
+  }
+  form{width:100%;max-width:330px;padding:0 28px;display:flex;flex-direction:column;gap:12px}
+  .brand{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--brand-lavender);margin-bottom:4px}
+  .brand i{width:10px;height:22px;border-radius:3px;background:var(--brand-lavender);display:inline-block}
+  .brand i+i{height:14px;margin-top:8px;background:var(--brand-mint)}
+  h1{font-size:30px;font-weight:800;letter-spacing:-.02em}
+  h1 u{text-decoration:none;border-bottom:3px solid var(--brand-mint);padding-bottom:2px}
+  .sub{font-size:13px;color:rgba(255,255,255,.65);margin-bottom:6px}
+  label{font-size:12px;font-weight:600;color:rgba(255,255,255,.8);margin-bottom:-6px}
+  input{
+    width:100%;padding:11px 16px;border-radius:999px;font-size:14px;color:#fff;
+    background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);outline:none;
+    transition:border-color .2s, background .2s;
+  }
+  input::placeholder{color:rgba(255,255,255,.4)}
+  input:focus{border-color:var(--brand-mint);background:rgba(255,255,255,.12)}
+  .forgot{font-size:12px;color:var(--brand-lavender);text-decoration:none;align-self:flex-end}
+  .btn{
+    margin-top:6px;padding:12px 0;border:none;border-radius:999px;cursor:pointer;
+    font-weight:700;font-size:14px;letter-spacing:.03em;color:#fff;
+    background:linear-gradient(90deg,var(--brand-teal),#3c9a85);
+    box-shadow:0 8px 24px rgba(46,125,107,.35);transition:transform .15s, filter .15s;
+  }
+  .btn:hover{filter:brightness(1.08)} .btn:active{transform:scale(.97)}
+  .trial{font-size:12px;color:var(--brand-mint);text-align:center}
+
+  .sign-in{left:0;z-index:2}
+  .sign-up{left:0;z-index:1;opacity:0}
+  .container.active .sign-in{transform:translateX(100%);opacity:0}
+  .container.active .sign-up{transform:translateX(100%);opacity:1;z-index:5;animation:show var(--dur)}
+  @keyframes show{0%,49.99%{opacity:0;z-index:1}50%,100%{opacity:1;z-index:5}}
+
+  /* ---------- Panel que se desliza ---------- */
+  .toggle-container{
+    position:absolute;top:0;left:50%;width:50%;height:100%;overflow:hidden;z-index:100;
+    border-radius:150px 0 0 110px;
+    transition:transform var(--dur) var(--ease), border-radius var(--dur) var(--ease);
+  }
+  .container.active .toggle-container{transform:translateX(-100%);border-radius:0 150px 110px 0}
+  .toggle{
+    position:relative;left:-100%;width:200%;height:100%;
+    background:
+      radial-gradient(400px 260px at 75% 15%, rgba(200,181,206,.35), transparent 70%),
+      linear-gradient(135deg,var(--brand-medium) 0%,var(--brand-primary) 55%,var(--brand-dark) 100%);
+    transform:translateX(0);transition:transform var(--dur) var(--ease);
+  }
+  .container.active .toggle{transform:translateX(50%)}
+  .toggle-panel{
+    position:absolute;top:0;width:50%;height:100%;padding:0 40px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;
+    transition:transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
+  }
+  .toggle-panel h2{font-size:34px;font-weight:800;letter-spacing:-.02em}
+  .toggle-panel .bar{width:44px;height:3px;border-radius:3px;background:var(--brand-mint)}
+  .toggle-panel p{font-size:14px;line-height:1.5;color:rgba(255,255,255,.8);max-width:300px}
+  .ghost{
+    margin-top:6px;padding:11px 36px;border-radius:999px;cursor:pointer;font-weight:700;font-size:13px;
+    letter-spacing:.05em;text-transform:uppercase;color:#fff;background:transparent;
+    border:1.5px solid rgba(255,255,255,.85);transition:background .2s,color .2s;
+  }
+  .ghost:hover{background:#fff;color:var(--brand-primary)}
+  .toggle-left{transform:translateX(-200%)}
+  .container.active .toggle-left{transform:translateX(0)}
+  .toggle-right{right:0;transform:translateX(0)}
+  .container.active .toggle-right{transform:translateX(200%)}
+
+  /* ---------- Celular: el panel sube y baja ---------- */
+  @media (max-width:720px){
+    .container{min-height:0;height:760px;border-radius:24px}
+    .form-box{width:100%;height:480px;left:0}
+    .container.active .sign-in{transform:translateY(280px);opacity:0}
+    .container.active .sign-up{transform:translateY(280px)}
+    .toggle-container{left:0;top:480px;width:100%;height:280px;border-radius:90px 90px 0 0}
+    .container.active .toggle-container{transform:translateY(-480px);border-radius:0 0 90px 90px}
+    .toggle{left:0;width:100%;transform:none!important}
+    .toggle-panel{width:100%;padding:0 28px;gap:10px}
+    .toggle-left{transform:translateY(30px);opacity:0;pointer-events:none}
+    .container.active .toggle-left{transform:none;opacity:1;pointer-events:auto}
+    .toggle-right{transform:none}
+    .container.active .toggle-right{transform:translateY(-30px);opacity:0;pointer-events:none}
+    .toggle-panel h2{font-size:26px}
+    h1{font-size:26px}
+    form{gap:9px}
+    input{padding:10px 16px}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition-duration:.01s!important;animation:none!important}}
+</style>
+</head>
+<body>
+  <div class="bg" aria-hidden="true">
+    <span class="shape line"></span><span class="shape line b"></span>
+    <span class="shape rod-1 float"></span>
+    <span class="shape rod-2 float d2"></span>
+    <span class="shape rod-3"></span>
+    <span class="shape ring ring-1 float d2"></span>
+    <span class="shape ring ring-2"></span>
+  </div>
+
+  <div class="container" id="container">
+    <!-- Registro -->
+    <div class="form-box sign-up">
+      <form onsubmit="return false">
+        <div class="brand"><i></i><i></i>TeamWorkFlow</div>
+        <h1>Crear <u>cuenta</u></h1>
+        <p class="sub">Registrá tu empresa y empezá a coordinar tus sedes.</p>
+        <label for="tenantName">Empresa</label>
+        <input id="tenantName" placeholder="Ej. Seguridad Pilar S.A.">
+        <label for="name">Tu nombre</label>
+        <input id="name" placeholder="Ej. Angela Álvarez">
+        <label for="email-up">Email</label>
+        <input id="email-up" type="email" placeholder="nombre@empresa.com">
+        <label for="pass-up">Contraseña</label>
+        <input id="pass-up" type="password" placeholder="Mínimo 8 caracteres">
+        <button class="btn">Crear cuenta</button>
+        <p class="trial">14 días de prueba gratis</p>
+      </form>
+    </div>
+
+    <!-- Login -->
+    <div class="form-box sign-in">
+      <form onsubmit="return false">
+        <div class="brand"><i></i><i></i>TeamWorkFlow</div>
+        <h1>Iniciar <u>sesión</u></h1>
+        <p class="sub">Ingresá con tu correo y contraseña.</p>
+        <label for="email-in">Email</label>
+        <input id="email-in" type="email" placeholder="nombre@empresa.com">
+        <label for="pass-in">Contraseña</label>
+        <input id="pass-in" type="password" placeholder="••••••••">
+        <a class="forgot" href="#">¿Olvidaste tu contraseña?</a>
+        <button class="btn">Ingresar</button>
+      </form>
+    </div>
+
+    <!-- Panel deslizante -->
+    <div class="toggle-container">
+      <div class="toggle">
+        <div class="toggle-panel toggle-left">
+          <h2>¡Bienvenido de nuevo!</h2>
+          <span class="bar"></span>
+          <p>¿Ya tenés cuenta? Entrá para ver tus sedes, turnos y la Torre de Control.</p>
+          <button class="ghost" id="login">Iniciar sesión</button>
+        </div>
+        <div class="toggle-panel toggle-right">
+          <h2>¡Hola!</h2>
+          <span class="bar"></span>
+          <p>¿Tu empresa todavía no usa TeamWorkFlow? Creá tu cuenta en un minuto.</p>
+          <button class="ghost" id="register">Registrarme</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const c = document.getElementById('container');
+  document.getElementById('register').onclick = () => c.classList.add('active');
+  document.getElementById('login').onclick = () => c.classList.remove('active');
+</script>
+</body>
+</html>
