@@ -29,6 +29,8 @@ The free-tier demo (`odd/tasks/free-tier-deploy.md`) sleeps when idle (crons and
 - [x] **T1** Image publishing: GitHub Actions workflow that builds and pushes the five images (`core`, `core-migrate`, `telemetry`, `telemetry-migrate`, `frontend`) to GHCR on manual dispatch, with the frontend build args for the single-origin nginx setup. Route: delegated (preparation trigger: reading `ci.yml`, Dockerfiles and frontend build args prepares the write).
 - [x] **T2** DonWeb guide `deploy/donweb/README.md`: VPS preparation (SSH key, firewall, Docker, swap, log limits), domain and DNS, Supabase setup (link to the free-tier sections), env files, first start, TLS, updates and rollback, maintenance (prune), smoke test, memory budget; linked from `deploy/README.md` and root `AGENTS.md`. Route: delegated (writer trigger: 2+ non-trivial files).
 
+- [ ] **T3** Slim the backend runner images. Observed on the VPS (`docker images`, uncompressed): `core` 1.27 GB, `telemetry` 1.52 GB, `core-migrate` 1.57 GB, `telemetry-migrate` 1.39 GB, `frontend` 302 MB. Suspected cause (not verified): the `migrator-cli` stage (Prisma CLI and engines) copied into the runners for migrations at start (free-tier T3). Inspect with `docker history`; options: make the migrate-at-start runner a separate target used only by Render/Koyeb, prune dev files. Not blocking (disk and RAM fine).
+
 ## Acceptance criteria
 
 - The workflow passes `action-validator`; the guide's env tables match both `env.schema.ts` files and `deploy/env/*.env.example`.
