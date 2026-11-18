@@ -190,3 +190,56 @@
   --color-chip: var(--chip-bg);
   --color-chip-fg: var(--chip-fg);
 }
+
+/*
+ * Auth screens (login, register, invitation, password reset).
+ * They are always dark, whatever the app theme, so this scope pins the brand
+ * values it needs and defines the translucent tokens the glass card uses.
+ * Shared fields and buttons rendered inside pick up the dark semantic tokens
+ * redefined at the end of the block.
+ */
+.auth-screen {
+  --bg-sidebar: #231E2A;
+  --brand-primary: #49334F;
+  --brand-dark: #35243B;
+  --brand-medium: #735879;
+  --brand-lavender: #C8B5CE;
+  --brand-petroleum: #24313A;
+  --brand-teal: #2E7D6B;
+  --brand-mint: #A9DCCF;
+  --auth-teal-light: #3C9A85;
+
+  --auth-ink: #FFFFFF;
+  --auth-ink-soft: rgba(255, 255, 255, 0.8);
+  --auth-ink-muted: rgba(255, 255, 255, 0.65);
+  --auth-ink-faint: rgba(255, 255, 255, 0.4);
+  --auth-glass: rgba(255, 255, 255, 0.06);
+  --auth-glass-border: rgba(255, 255, 255, 0.12);
+  --auth-field: rgba(255, 255, 255, 0.08);
+  --auth-field-border: rgba(255, 255, 255, 0.14);
+  --auth-field-focus: rgba(255, 255, 255, 0.12);
+  --auth-outline: rgba(255, 255, 255, 0.85);
+  --auth-shadow: rgba(10, 6, 14, 0.55);
+  --auth-teal-shadow: rgba(46, 125, 107, 0.35);
+
+  /* Background shapes */
+  --auth-vignette-top: rgba(36, 49, 58, 0.9);
+  --auth-vignette-bottom: rgba(115, 88, 121, 0.55);
+  --auth-rod-lavender: rgba(200, 181, 206, 0.35);
+  --auth-rod-medium: rgba(115, 88, 121, 0.6);
+  --auth-rod-primary: rgba(73, 51, 79, 0.9);
+  --auth-ring-lavender: rgba(200, 181, 206, 0.12);
+  --auth-ring-teal: rgba(46, 125, 107, 0.18);
+  --auth-panel-glow: rgba(200, 181, 206, 0.35);
+
+  /* Dark semantic tokens for the shared components used inside the card */
+  --bg-main: var(--auth-field);
+  --bg-alt: var(--auth-field);
+  --bg-hover: var(--auth-field-focus);
+  --border-main: var(--auth-field-border);
+  --text-title: var(--auth-ink);
+  --text-body: var(--auth-ink);
+  --text-subtitle: var(--auth-ink-soft);
+  --text-muted: var(--auth-ink-muted);
+  --text-link: var(--brand-lavender);
+}
