@@ -104,12 +104,16 @@ rsync --archive --chown=<user>:<user> ~/.ssh /home/<user>
 Open a second terminal and check that `ssh -p <ssh-port> <user>@<ip>` and `sudo -v` work before locking the door:
 
 ```bash
-sudo tee /etc/ssh/sshd_config.d/99-hardening.conf >/dev/null <<'CONF'
+sudo tee /etc/ssh/sshd_config.d/00-hardening.conf >/dev/null <<'CONF'
 PermitRootLogin no
 PasswordAuthentication no
+KbdInteractiveAuthentication no
 CONF
 sudo sshd -t && sudo systemctl reload ssh
+sudo sshd -T | grep -Ei '^(port|permitrootlogin|passwordauthentication|kbdinteractiveauthentication) '
 ```
+
+The file is named `00-` on purpose: sshd keeps the first value it reads and loads the drop-ins in name order, so a provider file such as `50-cloud-init.conf` with `PasswordAuthentication yes` would otherwise win.
 
 ### 3.2 Firewall and automatic security updates
 
