@@ -27,7 +27,7 @@ The free-tier demo (`odd/tasks/free-tier-deploy.md`) sleeps when idle (crons and
 ## Tasks
 
 - [x] **T1** Image publishing: GitHub Actions workflow that builds and pushes the five images (`core`, `core-migrate`, `telemetry`, `telemetry-migrate`, `frontend`) to GHCR on manual dispatch, with the frontend build args for the single-origin nginx setup. Route: delegated (preparation trigger: reading `ci.yml`, Dockerfiles and frontend build args prepares the write).
-- [ ] **T2** DonWeb guide `deploy/donweb/README.md`: VPS preparation (SSH key, firewall, Docker, swap, log limits), domain and DNS, Supabase setup (link to the free-tier sections), env files, first start, TLS, updates and rollback, maintenance (prune), smoke test, memory budget; linked from `deploy/README.md` and root `AGENTS.md`. Route: delegated (writer trigger: 2+ non-trivial files).
+- [x] **T2** DonWeb guide `deploy/donweb/README.md`: VPS preparation (SSH key, firewall, Docker, swap, log limits), domain and DNS, Supabase setup (link to the free-tier sections), env files, first start, TLS, updates and rollback, maintenance (prune), smoke test, memory budget; linked from `deploy/README.md` and root `AGENTS.md`. Route: delegated (writer trigger: 2+ non-trivial files).
 
 ## Acceptance criteria
 
@@ -45,8 +45,9 @@ Forecast: ~300-450 authored changed lines (docs and one workflow). Strategy: `as
 ## Progress
 
 - Exploration: `deploy/docker-compose.prod.yml` already supports an external database (the `postgres` service is profile `local-db`); no workflow pushes images to GHCR (`ci.yml` builds with `push: false`; `odd/tasks/ci-cd.md` T5 pending).
-- T1 done (see Evidence). Next step: T2.
+- T1 and T2 done (see Evidence). Next step: the user runs the workflow and the deploy on the VPS.
 
 ## Evidence
 
 - **T1**: `.github/workflows/publish-images.yml` (manual dispatch, matrix of five images, `packages: write`, GHA cache per image). Tags: input `tag` (default short SHA) plus `latest` (compose default `IMAGE_TAG`). Frontend build args: `NEXT_PUBLIC_USE_MOCKS=false`, `NEXT_PUBLIC_WS_URL=` (empty, same origin), `BACKEND_URL=http://nginx`; no domain baked, so no workflow input. `npx @action-validator/cli` exits 0. Not verified: a real run (user dispatches it; packages may need to be made public).
+- **T2**: `deploy/donweb/README.md` (13 sections, memory budget, VPS prep, env tables, TLS and seed by link, updates, troubleshooting). Linked from `deploy/README.md`, `deploy/free-tier/README.md`, `AGENTS.md`; header comment of `deploy/docker-compose.prod.yml` updated. Check: every env var named in the guide exists in `deploy/env/*.env.example` or `compose.env.example` (rg, none missing); all relative links and anchors resolve. Not verified: DonWeb plan details and image, best Supabase region, pooler client limit, Storage CORS, running the workflow from a non-default branch, a real deploy.
