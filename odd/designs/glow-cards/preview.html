@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TeamWorkFlow · Cards con brillo violeta (preview)</title>
+<style>
+  :root{
+    --bg-main:#F5F3F0; --bg-card:#FFFFFF; --border-main:#DCD6DE;
+    --brand-primary:#49334F; --brand-dark:#35243B; --brand-medium:#735879; --brand-lavender:#C8B5CE; --brand-mint:#A9DCCF;
+    --text-title:#29272B; --text-muted:#625C66;
+    --status-success:#287A52; --status-warning:#855600; --status-danger:#B42332; --status-process:#65476D;
+    /* brillo */
+    --glow-1:rgba(186,150,204,.95);  /* lavanda intensa */
+    --glow-2:rgba(200,181,206,.55);  /* lavanda */
+    --chip-bg:#EFE6F2; --chip-fg:var(--brand-primary);
+    --card-shadow:0 1px 2px rgba(41,39,43,.04),0 12px 32px -18px rgba(73,51,79,.35);
+    --grid-line:rgba(73,51,79,.08); --line:#735879; --line-2:rgba(115,88,121,.45);
+  }
+  [data-theme="dark"]{
+    --bg-main:#121214; --bg-card:#17161B; --border-main:rgba(255,255,255,.07);
+    --brand-lavender:#BFAAC5; --brand-medium:#8C7194;
+    --text-title:#FFFFFF; --text-muted:#8D8790;
+    --glow-1:rgba(222,200,232,.95);
+    --glow-2:rgba(140,113,148,.55);
+    --chip-bg:#D9C9DE; --chip-fg:#35243B;
+    --card-shadow:0 20px 50px -25px rgba(0,0,0,.8);
+    --grid-line:rgba(255,255,255,.05); --line:#E4D6E9; --line-2:rgba(228,214,233,.5);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg-main);color:var(--text-title);padding:28px;min-height:100vh}
+  svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  header{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+  header h1{font-size:22px;font-weight:700;letter-spacing:-.01em;flex:1}
+  .themebtn{height:36px;padding:0 14px;border-radius:12px;border:1px solid var(--border-main);background:var(--bg-card);color:var(--text-title);font:inherit;font-size:13px;cursor:pointer}
+
+  .grid{display:grid;gap:16px;grid-template-columns:repeat(4,1fr)}
+  .wide{grid-column:span 3}
+  .side{grid-column:span 1;grid-row:span 2}
+  .half{grid-column:span 3}
+
+  /* ---------- Card base con brillo violeta abajo ---------- */
+  .card{
+    position:relative;isolation:isolate;overflow:hidden;border-radius:22px;padding:18px;
+    background:var(--bg-card);border:1px solid var(--border-main);box-shadow:var(--card-shadow);
+    transition:transform .25s ease, box-shadow .25s ease;
+  }
+  .card::before{ /* brillo: luz que sale de la esquina inferior derecha */
+    content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;border-radius:inherit;
+    background:radial-gradient(85% 105% at 100% 118%,var(--glow-1) 0%,var(--glow-2) 32%,transparent 68%);
+    transition:opacity .4s ease, transform .4s ease;transform-origin:100% 100%;
+  }
+  .card::after{ /* borde de luz sobre el brillo */
+    content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+    background:linear-gradient(180deg,transparent 55%,rgba(255,255,255,.18));
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;padding:1px;
+  }
+  a.card{text-decoration:none;color:inherit;display:block}
+  a.card:hover{transform:translateY(-3px)}
+  a.card:hover::before{transform:scale(1.15)}
+
+  /* variante: brillo a lo ancho (gráficos) */
+  .card.glow-bottom::before{background:radial-gradient(85% 70% at 65% 118%,var(--glow-1) 0%,var(--glow-2) 38%,transparent 75%)}
+
+  /* ---------- KPI ---------- */
+  .kpi{min-height:176px;display:flex;flex-direction:column}
+  .kpi .top{display:flex;align-items:center;gap:10px}
+  .chip{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--chip-bg);color:var(--chip-fg);flex:none}
+  .chip svg{width:18px;height:18px}
+  .kpi .label{font-size:13px;color:var(--text-muted);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dots{color:var(--text-muted);letter-spacing:2px;font-weight:700;line-height:1}
+  .kpi .value{margin-top:auto;padding-top:22px;font-size:36px;font-weight:700;letter-spacing:-.03em;line-height:1}
+  .kpi .value small{font-size:18px;color:var(--text-muted);font-weight:600}
+  .hint{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--text-muted)}
+  .pill{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 8px 0 4px;border-radius:999px;font-weight:700;font-size:11.5px}
+  .pill i{width:12px;height:12px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:9px;color:#fff}
+  .success{color:var(--status-success);background:color-mix(in srgb,var(--status-success) 12%,transparent)} .success i{background:var(--status-success)}
+  .warning{color:var(--status-warning);background:color-mix(in srgb,var(--status-warning) 12%,transparent)} .warning i{background:var(--status-warning)}
+  .danger{color:var(--status-danger);background:color-mix(in srgb,var(--status-danger) 12%,transparent)} .danger i{background:var(--status-danger)}
+  .process{color:var(--status-process);background:color-mix(in srgb,var(--status-process) 14%,transparent)} .process i{background:var(--status-process)}
+  [data-theme="dark"] .success{color:#7FD1A6} [data-theme="dark"] .warning{color:#E9B866}
+  [data-theme="dark"] .danger{color:#F08A95} [data-theme="dark"] .process{color:#D2B8DA}
+
+  /* ---------- Gráfico ---------- */
+  .chart-head{display:flex;align-items:flex-start;gap:12px}
+  .chart-head h2{font-size:15px;font-weight:700}
+  .chart-head p{font-size:12px;color:var(--text-muted);margin-top:2px}
+  .chart-head .sp{flex:1}
+  .filter{height:32px;padding:0 12px;border-radius:10px;border:1px solid var(--border-main);background:color-mix(in srgb,var(--bg-card) 70%,transparent);
+    color:var(--text-title);font:inherit;font-size:12.5px;display:flex;align-items:center;gap:6px}
+  .filter svg{width:14px;height:14px}
+  .chart{margin-top:12px;height:230px;position:relative}
+  .chart svg{width:100%;height:100%;overflow:visible}
+  .xlabels{display:flex;justify-content:space-between;font-size:11.5px;color:var(--text-muted);margin-top:6px;padding:0 2px}
+  [data-theme="dark"] .xlabels{color:rgba(255,255,255,.7)}
+  .legend{display:flex;gap:16px;font-size:12px;color:var(--text-muted);margin-top:6px}
+  .legend b{display:inline-block;width:16px;height:2px;margin-right:6px;vertical-align:middle;background:var(--line)}
+  .legend b.d{background:none;border-top:2px dashed var(--line-2)}
+
+  /* ---------- Lista ---------- */
+  .list h2{font-size:15px;font-weight:700}
+  .list .day{font-size:12px;color:var(--text-muted);margin:14px 0 8px}
+  .row{display:flex;align-items:center;gap:10px;padding:10px;border-radius:14px;background:color-mix(in srgb,var(--bg-main) 60%,transparent);margin-bottom:8px;border:1px solid var(--border-main)}
+  .row .chip{width:32px;height:32px;border-radius:10px;background:color-mix(in srgb,var(--chip-bg) 70%,transparent)}
+  [data-theme="dark"] .row .chip{background:rgba(255,255,255,.06);color:#D9C9DE}
+  .row div{flex:1;min-width:0;line-height:1.25}
+  .row strong{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row span{font-size:11.5px;color:var(--text-muted)}
+  .row time{font-size:11.5px;color:var(--text-muted)}
+
+  @media (max-width:1100px){ .grid{grid-template-columns:repeat(2,1fr)} .wide,.half{grid-column:span 2} .side{grid-column:span 2;grid-row:auto} }
+  @media (max-width:560px){
+    body{padding:16px} .grid{gap:12px}
+    .kpi{min-height:150px;padding:14px} .kpi .value{font-size:28px;padding-top:16px}
+    .kpi .label{white-space:normal;font-size:12px}
+    .kpi .dots{display:none}
+    .hint .txt{display:none}
+    .chart{height:180px}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Torre de Control</h1>
+  <button class="themebtn" id="theme">Cambiar tema</button>
+</header>
+
+<div class="grid">
+  <a class="card kpi" href="#">
+    <div class="top"><span class="chip"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="m16 12 2 2 4-4"/></svg></span>
+      <span class="label">Presentes ahora</span><span class="dots">···</span></div>
+    <div class="value">46<small>/48</small></div>
+    <div class="hint"><span class="pill warning"><i>!</i>2 faltan</span><span class="txt">Personal que fichó entrada</span></div>
+  </a>
+  <a class="card kpi" href="#">
+    <div class="top"><span class="chip"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M12 3v9l6 3"/></svg></span>
+      <span class="label">Cobertura</span><span class="dots">···</span></div>
+    <div class="value">96%</div>
+    <div class="hint"><span class="pill success"><i>↑</i>+4%</span><span class="txt">Respecto de ayer</span></div>
+  </a>
+  <a class="card kpi" href="#">
+    <div class="top"><span class="chip"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/></svg></span>
+      <span class="label">Alertas abiertas</span><span class="dots">···</span></div>
+    <div class="value">3</div>
+    <div class="hint"><span class="pill danger"><i>!</i>1 urgente</span><span class="txt">Esperan reconocimiento</span></div>
+  </a>
+  <a class="card kpi" href="#">
+    <div class="top"><span class="chip"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg></span>
+      <span class="label">Reconocidas</span><span class="dots">···</span></div>
+    <div class="value">7</div>
+    <div class="hint"><span class="pill process"><i>•</i>En curso</span><span class="txt">En seguimiento</span></div>
+  </a>
+
+  <div class="card glow-bottom wide">
+    <div class="chart-head">
+      <div><h2>Asistencia del mes</h2><p>Presentes por día, comparado con lo esperado</p></div>
+      <span class="sp"></span>
+      <button class="filter">Filtrar <svg viewBox="0 0 24 24"><path d="M4 5h16l-6 7v6l-4 2v-8z"/></svg></button>
+    </div>
+    <div class="chart">
+      <svg viewBox="0 0 600 220" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <pattern id="stripes" width="6" height="6" patternUnits="userSpaceOnUse"><path d="M3 0v6" stroke="var(--line)" stroke-opacity=".18" stroke-width="1"/></pattern>
+          <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="1"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+          <mask id="m"><rect width="600" height="220" fill="url(#fade)"/></mask>
+        </defs>
+        <g stroke="var(--grid-line)" stroke-width="1"><path d="M0 40h600M0 95h600M0 150h600"/></g>
+        <path d="M0 140 C40 150 70 155 100 140 S160 120 200 125 S260 135 300 110 S350 40 390 45 S450 70 490 85 S560 95 600 92 V220 H0Z" fill="url(#stripes)" mask="url(#m)" stroke="none"/>
+        <path d="M0 115 C50 95 90 98 130 108 S200 125 240 115 S300 75 340 55 S400 60 440 80 S520 100 600 88" stroke="var(--line-2)" stroke-width="2" stroke-dasharray="3 6" fill="none" vector-effect="non-scaling-stroke"/>
+        <path d="M0 140 C40 150 70 155 100 140 S160 120 200 125 S260 135 300 110 S350 40 390 45 S450 70 490 85 S560 95 600 92" stroke="var(--line)" stroke-width="3" fill="none" vector-effect="non-scaling-stroke"/>
+      </svg>
+    </div>
+    <div class="xlabels"><span>1</span><span>5</span><span>10</span><span>15</span><span>20</span><span>25</span><span>30</span></div>
+    <div class="legend"><span><b></b>Presentes</span><span><b class="d"></b>Esperados</span></div>
+  </div>
+
+  <div class="card list side">
+    <h2>Últimas fichadas</h2>
+    <p class="day">Hoy, 18 de noviembre</p>
+    <div class="row"><span class="chip"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></span><div><strong>Lucía Fernández</strong><span>Sede Pilar · Entrada</span></div><time>07:58</time></div>
+    <div class="row"><span class="chip"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></span><div><strong>Martín Gómez</strong><span>Sede Tigre · Entrada</span></div><time>07:55</time></div>
+    <div class="row"><span class="chip"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></span><div><strong>Sofía Ruiz</strong><span>Sede Centro · Salida</span></div><time>07:40</time></div>
+    <div class="row"><span class="chip"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></span><div><strong>Diego Paz</strong><span>Sede Norte · Entrada</span></div><time>07:31</time></div>
+    <div class="row"><span class="chip"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></span><div><strong>Carla Méndez</strong><span>Sede Pilar · Entrada</span></div><time>07:22</time></div>
+  </div>
+</div>
+
+<script>
+  const p = new URLSearchParams(location.search);
+  document.documentElement.dataset.theme = p.get('theme') || 'light';
+  document.getElementById('theme').onclick = () => {
+    const r = document.documentElement; r.dataset.theme = r.dataset.theme === 'dark' ? 'light' : 'dark';
+  };
+</script>
+</body>
+</html>
