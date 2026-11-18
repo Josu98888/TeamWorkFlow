@@ -5,6 +5,7 @@ import { organizationApi } from '@/features/organization';
 import { useResource } from '@/shared/hooks/useResource';
 import { Button, FilterChip } from '@/shared/components/Button';
 import { Card, SectionLabel } from '@/shared/components/Card';
+import { KpiIcon } from '@/shared/components/KpiIcon';
 import { KpiTile } from '@/shared/components/KpiTile';
 import { PageHeader } from '@/shared/components/PageHeader';
 import { EmptyState, ErrorState, LoadingState } from '@/shared/components/States';
@@ -118,28 +119,39 @@ export function TowerView() {
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <KpiTile
           label="Presentes ahora"
-          value={`${present}/${expected}`}
+          value={present}
+          secondary={`/${expected}`}
+          icon={<KpiIcon name="users" />}
+          delta={present < expected ? `${expected - present} sin fichar` : 'Completo'}
           hint="Personal que fichó entrada"
           tone={present < expected ? 'warning' : 'success'}
         />
         <KpiTile
           label="Cobertura"
           value={formatPercent(expected === 0 ? 1 : present / expected)}
+          icon={<KpiIcon name="coverage" />}
           hint="Presentes sobre esperados"
           tone={present < expected ? 'warning' : 'success'}
         />
         <KpiTile
           label="Alertas abiertas"
           value={countByStatus('OPEN')}
+          icon={<KpiIcon name="bell" />}
           hint="Esperan reconocimiento"
           tone={countByStatus('OPEN') > 0 ? 'danger' : 'success'}
         />
-        <KpiTile label="Reconocidas" value={countByStatus('ACKNOWLEDGED')} hint="En seguimiento" tone="process" />
+        <KpiTile
+          label="Reconocidas"
+          value={countByStatus('ACKNOWLEDGED')}
+          icon={<KpiIcon name="eye" />}
+          hint="En seguimiento"
+          tone="process"
+        />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-5">
         <section aria-label="Estado del personal por sede" className="lg:col-span-2">
-          <Card flush>
+          <Card flush glow="bottom">
             <div className="px-5 pt-5">
               <SectionLabel
                 action={
@@ -170,7 +182,7 @@ export function TowerView() {
         </section>
 
         <section aria-label="Alertas" className="lg:col-span-3">
-          <Card flush>
+          <Card flush glow="bottom">
             <div className="px-5 pt-5">
               <SectionLabel>
                 Alertas{siteFilter ? ` · ${siteNames.get(siteFilter) ?? 'Sede'}` : ''}
