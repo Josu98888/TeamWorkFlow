@@ -1,6 +1,6 @@
 # Free-tier demo deploy
 
-Zero-cost public demo: Vercel (frontend), Render (`core`), Koyeb (`telemetry`), Synadia Cloud (NATS), Supabase (PostgreSQL and task media). For a real VPS use [`../README.md`](../README.md), or [`../donweb/README.md`](../donweb/README.md) for one always-on VPS with the same Supabase setup. Plan and decisions: `odd/tasks/free-tier-deploy.md`.
+Zero-cost public demo: Vercel (frontend), Render (`core`), Koyeb (`telemetry`), Synadia Cloud (NATS), Supabase (PostgreSQL and task media). For a real VPS use [`../README.md`](../README.md), or [`../vps/README.md`](../vps/README.md) for one always-on VPS with the same Supabase setup. Plan and decisions: `odd/tasks/free-tier-deploy.md`.
 
 ```
 browser -> Vercel (frontend)

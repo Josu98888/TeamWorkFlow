@@ -1,6 +1,6 @@
-# DonWeb VPS deploy
+# Single VPS deploy
 
-One DonWeb Cloud Server runs the production stack of [`../README.md`](../README.md) (nginx, NATS, `core`, `telemetry`, `frontend`) with Docker Compose. PostgreSQL and task photos live on Supabase, images come from GHCR. Always on, one origin, no cold starts. Plan and decisions: `odd/tasks/donweb-deploy.md`. This guide only covers what is specific to this host; the generic runbook (run, TLS, logs) stays in [`../README.md`](../README.md).
+One KVM VPS with root access runs the production stack of [`../README.md`](../README.md) (nginx, NATS, `core`, `telemetry`, `frontend`) with Docker Compose. PostgreSQL and task photos live on Supabase, images come from GHCR. Always on, one origin, no cold starts. Plan and decisions: `odd/tasks/donweb-deploy.md`. This guide only covers what is specific to this host; the generic runbook (run, TLS, logs) stays in [`../README.md`](../README.md).
 
 ```
 internet :80/:443 -> nginx -+-> /api/v1/telemetry/*  -> telemetry:3003
@@ -14,7 +14,7 @@ core -> Supabase Storage (S3 API);  browser -> Supabase Storage (presigned PUT/G
 
 ## 1. Overview, memory budget and caveats
 
-Target: DonWeb Cloud Server with 2 vCPU, 2 GB RAM, 20 GB NVMe, 1 TB transfer. Ubuntu 24.04 LTS is assumed (confirm the image DonWeb offers; the commands below are for Debian-family systems).
+Reference host: HostGator VPS in São Paulo with 1 vCPU, 2 GB RAM, 50 GB NVMe, unmetered transfer, KVM and root SSH, Ubuntu with no control panel. Any KVM VPS with root and at least 2 GB RAM works (OpenVZ/LXC plans usually cannot run Docker). The commands below are for Ubuntu 24.04 LTS; a 22.04 image is upgraded first (section 3.0). Do not install a control panel (cPanel, Plesk, CloudPanel, Webmin): they take RAM and ports 80/443 from nginx.
 
 | Service | Memory limit (`mem_limit`) |
 |---------|----------------------------|
@@ -32,10 +32,12 @@ Why 2 GB: the limits above plus the OS and Docker leave little headroom, so 1 GB
 Caveats and open checks:
 
 - Images are never built on the VPS (`next build` and `nest build` do not fit in 2 GB). They are pulled from GHCR (section 6).
-- 20 GB of disk: old images pile up, prune them (section 12).
+- Disk: old images pile up, prune them (section 12).
+- 1 vCPU is enough for a demo load; starts, migrations and image pulls are slower than on 2 vCPU.
 - The Supabase pooler connection budget and Storage CORS are the same open checks as in the free-tier guide ([3.3](../free-tier/README.md#33-database-urls), [3.4](../free-tier/README.md#34-storage-task-photos)). Not verified.
-- The Supabase region closest to Argentina (for latency to the DonWeb datacenter) is not verified; check the regions offered when creating the project.
-- DonWeb plan details (CPU model, network port, provider-level firewall, backups, snapshots) are not verified; check your plan.
+- Create the Supabase project in the same region as the VPS (South America, São Paulo, for the reference host): each request runs several queries, so the VPS-to-database hop matters more than the user-to-VPS hop.
+- No provider backups are needed: the database and photos live on Supabase, images on GHCR, certificates are re-issued. Keep a copy of `deploy/.env` and `deploy/env/*.env` in a password manager (they are secrets; never commit them).
+- Provider plan details (CPU model, provider-level firewall, renewal price) are not verified; check your plan.
 - NATS runs locally with a volume: no Synadia, no `NATS_CREDS`. The outbox of `core` is in memory, so events not yet published are lost on a restart.
 - Payments stay `fake` and push notifications off unless you configure them (see `deploy/env/core.env.example`).
 
@@ -55,9 +57,22 @@ Caveats and open checks:
 
 You run every command yourself on the server. Replace `<user>`, `<ip>` and `<your-ip>`.
 
+### 3.0 Upgrade Ubuntu 22.04 to 24.04 (only on a 22.04 image)
+
+Standard support for 22.04 ends in April 2027. Upgrade while the server is empty, before anything else:
+
+```bash
+ssh root@<ip>
+apt-get update && apt-get full-upgrade -y
+reboot
+# reconnect
+do-release-upgrade        # accept the prompts; it reboots at the end
+lsb_release -d            # must print Ubuntu 24.04.x LTS
+```
+
 ### 3.1 SSH key login, no root or password login
 
-From your machine, as the user DonWeb gave you (usually `root`):
+From your machine, as the user your provider gave you (usually `root`):
 
 ```bash
 ssh-copy-id root@<ip>                          # or paste your public key into ~/.ssh/authorized_keys
@@ -150,7 +165,7 @@ dig +short <domain>
 
 Follow these sections of the free-tier guide as written; only the notes differ:
 
-- [3.1 Project](../free-tier/README.md#31-project): pick a region close to the DonWeb datacenter (the best one is not verified).
+- [3.1 Project](../free-tier/README.md#31-project): pick the region of the VPS (South America, São Paulo, for the reference host).
 - [3.2 Roles and schemas](../free-tier/README.md#32-roles-and-schemas-once): creates the `tw_*` schemas and roles.
 - [3.3 Database URLs](../free-tier/README.md#33-database-urls): session pooler URLs, `DB_SSL`, `DB_SSL_CA`, `DB_POOL_MAX`. Start with `DB_POOL_MAX=3` for core and `5` for telemetry.
 - [3.4 Storage](../free-tier/README.md#34-storage-task-photos): bucket, S3 keys, `S3_*`. The CORS caveat applies, with `https://<domain>` as the browser origin.

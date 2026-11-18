@@ -45,7 +45,9 @@ Forecast: ~300-450 authored changed lines (docs and one workflow). Strategy: `as
 ## Progress
 
 - Exploration: `deploy/docker-compose.prod.yml` already supports an external database (the `postgres` service is profile `local-db`); no workflow pushes images to GHCR (`ci.yml` builds with `push: false`; `odd/tasks/ci-cd.md` T5 pending).
-- T1 and T2 done (see Evidence). Next step: the user runs the workflow and the deploy on the VPS.
+- T1 and T2 done (see Evidence).
+- Provider change (user decision, 2026-11-18): HostGator VPS in São Paulo (1 vCPU, 2 GB DDR5, 50 GB NVMe, unmetered, KVM + root confirmed in HostGator docs, Ubuntu 22.04 with no panel, no provider backups) instead of DonWeb plan 2, for price (8,100 vs 15,100 ARS per month). The feature keeps its name; the guide moved to `deploy/vps/README.md` and became provider-neutral: section 3.0 upgrades 22.04 to 24.04 on the empty server, the Supabase project goes in the VPS region (São Paulo), control panels are ruled out, and the env files are the only state to keep (password manager).
+- Next step: the user picks how to publish the images (`workflow_dispatch` only runs once the workflow is on the default branch), then follows the guide on the VPS.
 
 ## Evidence
 

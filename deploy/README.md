@@ -1,6 +1,6 @@
 # Deploy (single EC2 host)
 
-One EC2 `t3.small` runs `nats`, `core`, `telemetry`, `frontend` and `nginx` with Docker Compose. PostgreSQL is RDS, task media is S3, images come from GHCR. Plan: `odd/tasks/ci-cd.md`. For a zero-cost demo on Vercel, Render, Koyeb, Synadia and Supabase see [`free-tier/README.md`](free-tier/README.md). For one VPS (DonWeb Cloud Server, 2 GB) with Supabase instead of RDS and S3 see [`donweb/README.md`](donweb/README.md).
+One EC2 `t3.small` runs `nats`, `core`, `telemetry`, `frontend` and `nginx` with Docker Compose. PostgreSQL is RDS, task media is S3, images come from GHCR. Plan: `odd/tasks/ci-cd.md`. For a zero-cost demo on Vercel, Render, Koyeb, Synadia and Supabase see [`free-tier/README.md`](free-tier/README.md). For one 2 GB VPS (for example HostGator in São Paulo) with Supabase instead of RDS and S3 see [`vps/README.md`](vps/README.md).
 
 ```
 internet :80 (:443 later) -> nginx -+-> /api/v1/telemetry/*  -> telemetry:3003
