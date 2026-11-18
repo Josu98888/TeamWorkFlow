@@ -54,3 +54,4 @@ Prototipo aprobado por el usuario (2026-11-18), en `odd/designs/auth-login-slide
 
 ## Progress
 - Diseño aprobado y spec escrito. A1, A2, A3 y A5 implementados (d8a641f, 0246e4c); lint, tsc y build en verde. Pendiente A4: revisión visual del usuario a 1200, 820 y 390 px (no verificada en navegador).
+- `/sin-acceso` también usa `AuthShell` + `AuthCard` y el botón `auth-submit` (pedido del usuario al clasificar páginas, 2026-11-18); lógica igual (`useLogout`). Checks: tsc 0, eslint del archivo 0.
