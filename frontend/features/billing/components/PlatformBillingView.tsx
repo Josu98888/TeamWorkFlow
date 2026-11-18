@@ -5,6 +5,7 @@ import { Badge } from '@/shared/components/Badge';
 import { Button } from '@/shared/components/Button';
 import { Card, SectionLabel } from '@/shared/components/Card';
 import { CheckField, FormFooter, SelectField, TextField } from '@/shared/components/Fields';
+import { ListRow, RowList } from '@/shared/components/List';
 import { Modal } from '@/shared/components/Modal';
 import { PageHeader } from '@/shared/components/PageHeader';
 import { EmptyState, ErrorState, LoadingState } from '@/shared/components/States';
@@ -202,24 +203,26 @@ export function PlatformBillingView() {
         ) : subscriptions.data.items.length === 0 ? (
           <div className="px-5 pb-5"><EmptyState title="No hay suscripciones" /></div>
         ) : (
-          <ul className="divide-y divide-line border-t border-line">
+          <RowList>
             {subscriptions.data.items.map((subscription) => (
-              <li key={subscription.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
-                <div className="min-w-0">
-                  <p className="truncate font-mono text-xs text-title">{subscription.tenantId}</p>
-                  <p className="text-xs text-muted">
-                    Plan {PLAN_LABELS[subscription.plan] ?? subscription.plan}
-                    {subscription.trialEndsAt ? ` · prueba hasta ${formatDate(subscription.trialEndsAt)}` : ''}
-                    {subscription.cancelAtPeriodEnd ? ' · cancela a fin de mes' : ''}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge tone={SUBSCRIPTION_TONES[subscription.status] ?? 'neutral'}>{SUBSCRIPTION_LABELS[subscription.status] ?? subscription.status}</Badge>
-                  {subscription.status === 'trial' && <Button onClick={() => setTrialFor(subscription.tenantId)}>Extender prueba</Button>}
-                </div>
-              </li>
+              <ListRow
+                key={subscription.id}
+                trailing={
+                  <>
+                    <Badge tone={SUBSCRIPTION_TONES[subscription.status] ?? 'neutral'}>{SUBSCRIPTION_LABELS[subscription.status] ?? subscription.status}</Badge>
+                    {subscription.status === 'trial' && <Button onClick={() => setTrialFor(subscription.tenantId)}>Extender prueba</Button>}
+                  </>
+                }
+              >
+                <p className="truncate font-mono text-xs text-title">{subscription.tenantId}</p>
+                <p className="text-xs text-muted">
+                  Plan {PLAN_LABELS[subscription.plan] ?? subscription.plan}
+                  {subscription.trialEndsAt ? ` · prueba hasta ${formatDate(subscription.trialEndsAt)}` : ''}
+                  {subscription.cancelAtPeriodEnd ? ' · cancela a fin de mes' : ''}
+                </p>
+              </ListRow>
             ))}
-          </ul>
+          </RowList>
         )}
       </Card>
 

@@ -5,6 +5,7 @@ import { Button, FilterChip } from '@/shared/components/Button';
 import { Card } from '@/shared/components/Card';
 import { PageHeader } from '@/shared/components/PageHeader';
 import { EmptyState, ErrorState } from '@/shared/components/States';
+import { RowList } from '@/shared/components/List';
 import { useResource } from '@/shared/hooks/useResource';
 import { notificationsApi } from '../api';
 import { announceNotificationsChanged } from '../events';
@@ -51,7 +52,7 @@ export function NotificationsView() {
   );
 
   const filters = (
-    <div className="mb-4 flex gap-2">
+    <div className="mb-4 flex flex-wrap gap-2">
       <FilterChip label="Todas" active={!unreadOnly} onSelect={() => selectFilter(false)} />
       <FilterChip label="Sin leer" active={unreadOnly} onSelect={() => selectFilter(true)} />
     </div>
@@ -82,7 +83,7 @@ export function NotificationsView() {
       {!list.data ? (
         <div role="status" aria-label="Cargando" className="space-y-3">
           {Array.from({ length: 4 }, (_, index) => (
-            <div key={index} className="h-16 animate-pulse rounded-xl border border-line bg-card" />
+            <div key={index} className="state-skeleton h-16" />
           ))}
         </div>
       ) : list.data.items.length === 0 ? (
@@ -93,16 +94,17 @@ export function NotificationsView() {
       ) : (
         <>
           <Card flush glow="none">
-            <ul className="divide-y divide-line">
+            <RowList>
               {list.data.items.map((item) => (
                 <NotificationItem
                   key={item.id}
+                  variant="row"
                   notification={item}
                   disabled={busy}
                   onMarkRead={(id) => void mutate(() => notificationsApi.markRead(id))}
                 />
               ))}
-            </ul>
+            </RowList>
           </Card>
           {totalPages > 1 && (
             <div className="mt-4 flex items-center justify-between text-xs text-muted">
