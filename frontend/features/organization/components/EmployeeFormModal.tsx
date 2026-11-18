@@ -1,19 +1,15 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { accessApi, ROLE_LABELS } from '@/features/access';
 import { Button } from '@/shared/components/Button';
 import { CheckField, FormFooter, SelectField, TextField, parseList } from '@/shared/components/Fields';
 import { Modal } from '@/shared/components/Modal';
-import { manageableRoles } from '@/shared/auth/permissions';
 import { useAction } from '@/shared/hooks/useAction';
-import { useSession } from '@/shared/hooks/useSession';
 import { organizationApi } from '../api';
-import type { Employee, Site } from '../types';
+import type { Employee, InviteEmployee, InviteRoleOption, InvitableRole, Site } from '../types';
 
-// Access levels offered on creation; '' means the employee gets no account yet.
-const ACCESS_ROLES = ['employee', 'supervisor'] as const;
-type AccessChoice = '' | (typeof ACCESS_ROLES)[number];
+// '' means the employee gets no account yet.
+type AccessChoice = '' | InvitableRole;
 
 const orNull = (text: string) => (text.trim() ? text.trim() : null);
 
@@ -23,11 +19,16 @@ export function EmployeeFormModal({
   sites,
   onClose,
   onSaved,
+  onInvite,
+  inviteRoles = [],
 }: {
   employee?: Employee;
   sites: Site[];
   onClose: () => void;
   onSaved: () => void;
+  /** Sends the access invitation after the profile is created. Without it the Acceso select is hidden. */
+  onInvite?: InviteEmployee;
+  inviteRoles?: readonly InviteRoleOption[];
 }) {
   const [firstName, setFirstName] = useState(employee?.firstName ?? '');
   const [lastName, setLastName] = useState(employee?.lastName ?? '');
@@ -43,9 +44,7 @@ export function EmployeeFormModal({
   // Set when the profile was created but the follow-up invitation failed.
   const [inviteFailed, setInviteFailed] = useState<string | null>(null);
   const { run, pending, error } = useAction();
-  const session = useSession();
-  const allowedRoles = manageableRoles(session?.role);
-  const accessOptions = ACCESS_ROLES.filter((role) => allowedRoles.includes(role));
+  const canInvite = !employee && !!onInvite && inviteRoles.length > 0;
   const hasEmail = email.trim() !== '';
 
   const toggleSite = (id: string, checked: boolean) =>
@@ -69,9 +68,9 @@ export function EmployeeFormModal({
         : organizationApi.createEmployee({ ...values, email: email.trim() }),
     );
     if (!result) return;
-    if (!employee && access && hasEmail) {
+    if (canInvite && access && hasEmail) {
       try {
-        await accessApi.createInvitation({ email: email.trim(), role: access });
+        await onInvite({ email: email.trim(), role: access });
       } catch {
         // The profile exists: keep it and tell the user how to send the invitation.
         setInviteFailed(`Se creó el perfil de ${firstName.trim()} ${lastName.trim()}, pero no se pudo enviar la invitación. Podés enviarla desde Usuarios.`);
@@ -110,14 +109,14 @@ export function EmployeeFormModal({
           disabled={!!employee}
           hint={employee ? 'No editable: el usuario se vincula por correo.' : undefined}
         />
-        {!employee && (
+        {canInvite && (
           <SelectField
             label="Acceso"
             hint={hasEmail ? 'Opcional: envía una invitación para que la persona cree su cuenta.' : 'Ingresá un correo para poder invitar.'}
             value={access}
             onChange={(value) => setAccess(value as AccessChoice)}
-            disabled={!hasEmail || accessOptions.length === 0}
-            options={[{ value: '', label: 'Sin cuenta' }, ...accessOptions.map((role) => ({ value: role, label: ROLE_LABELS[role] }))]}
+            disabled={!hasEmail}
+            options={[{ value: '', label: 'Sin cuenta' }, ...inviteRoles]}
           />
         )}
         <div className="grid grid-cols-2 gap-3">

@@ -12,7 +12,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/shared/components/States
 import { useResource } from '@/shared/hooks/useResource';
 import { fullName, initials } from '@/shared/lib/format';
 import { organizationApi } from '../api';
-import type { Employee, ListEmployeesQuery } from '../types';
+import type { Employee, InviteEmployee, InviteRoleOption, ListEmployeesQuery } from '../types';
 import { EmployeeFormModal } from './EmployeeFormModal';
 
 const ACTIVE_OPTIONS = [
@@ -21,7 +21,7 @@ const ACTIVE_OPTIONS = [
   { value: 'false', label: 'Inactivos' },
 ] as const;
 
-export function EmployeesView() {
+export function EmployeesView({ onInvite, inviteRoles }: { onInvite?: InviteEmployee; inviteRoles?: readonly InviteRoleOption[] } = {}) {
   const [search, setSearch] = useState('');
   const [siteId, setSiteId] = useState('');
   const [active, setActive] = useState('');
@@ -59,6 +59,8 @@ export function EmployeesView() {
         <EmployeeFormModal
           employee={form === 'new' ? undefined : form}
           sites={sites.data.items}
+          onInvite={onInvite}
+          inviteRoles={inviteRoles}
           onClose={() => setForm(null)}
           onSaved={() => {
             setForm(null);
