@@ -47,7 +47,8 @@ Forecast: ~300-450 authored changed lines (docs and one workflow). Strategy: `as
 - Exploration: `deploy/docker-compose.prod.yml` already supports an external database (the `postgres` service is profile `local-db`); no workflow pushes images to GHCR (`ci.yml` builds with `push: false`; `odd/tasks/ci-cd.md` T5 pending).
 - T1 and T2 done (see Evidence).
 - Provider change (user decision, 2026-11-18): HostGator VPS in São Paulo (1 vCPU, 2 GB DDR5, 50 GB NVMe, unmetered, KVM + root confirmed in HostGator docs, Ubuntu 22.04 with no panel, no provider backups) instead of DonWeb plan 2, for price (8,100 vs 15,100 ARS per month). The feature keeps its name; the guide moved to `deploy/vps/README.md` and became provider-neutral: section 3.0 upgrades 22.04 to 24.04 on the empty server, the Supabase project goes in the VPS region (São Paulo), control panels are ruled out, and the env files are the only state to keep (password manager).
-- Next step: the user picks how to publish the images (`workflow_dispatch` only runs once the workflow is on the default branch), then follows the guide on the VPS.
+- Image publishing decision (user, 2026-11-18): the workflow also runs on a pushed version tag `v*` (a push uses the workflow file of the tagged commit, so it works from this branch; `workflow_dispatch` only shows once the file is on the default branch). The image tag is the git tag on a tag push; `latest` is still pushed. The guide uses `IMAGE_TAG=v0.1.0`-style versions and never reuses a tag. Rejected: a temporary branch push trigger (easy to forget), local builds (manual, error-prone), waiting for `main` (PRs target `develop`, branch is stacked). Check: `npx @action-validator/cli` exit 0.
+- Next step: the user pushes the branch and the tag `v0.1.0`, makes the packages public or creates a `read:packages` token, then follows the guide on the VPS.
 
 ## Evidence
 

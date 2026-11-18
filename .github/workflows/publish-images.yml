@@ -1,10 +1,15 @@
 name: Publish images
 
-# Manual only: builds the five production images and pushes them to GHCR as
+# Builds the five production images and pushes them to GHCR as
 # ghcr.io/<owner>/teamworkflow-<app>, the names deploy/docker-compose.prod.yml pulls.
-# Each image gets two tags: the `tag` input (default: the short commit SHA, for
-# pinning and rollback) and `latest` (the compose default for IMAGE_TAG).
+# Triggers: pushing a version tag `v*` (from any branch; the run uses the workflow
+# file of the tagged commit) or a manual run (needs the file on the default branch).
+# Each image gets two tags: the version (git tag on a tag push; otherwise the `tag`
+# input, default the short commit SHA) and `latest` (the compose default for IMAGE_TAG).
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -70,7 +75,11 @@ jobs:
           INPUT_TAG: ${{ inputs.tag }}
         run: |
           owner="${GITHUB_REPOSITORY_OWNER,,}"
-          tag="${INPUT_TAG:-${GITHUB_SHA::7}}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            tag="${INPUT_TAG:-${GITHUB_SHA::7}}"
+          fi
           echo "name=ghcr.io/${owner}/${{ matrix.image }}" >> "$GITHUB_OUTPUT"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
       - name: Build and push

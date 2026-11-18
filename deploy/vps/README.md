@@ -174,9 +174,16 @@ The roles script lives in the repo (`backend/postgres/supabase/`); run it from y
 
 ## 6. Publish the images
 
-The workflow `.github/workflows/publish-images.yml` builds the five images and pushes them to `ghcr.io/<owner>/teamworkflow-<app>` (`core`, `core-migrate`, `telemetry`, `telemetry-migrate`, `frontend`). It is manual only.
+The workflow `.github/workflows/publish-images.yml` builds the five images and pushes them to `ghcr.io/<owner>/teamworkflow-<app>` (`core`, `core-migrate`, `telemetry`, `telemetry-migrate`, `frontend`).
 
-1. GitHub > Actions > "Publish images" > Run workflow, on the branch you want to deploy. A manual run normally needs the workflow file on the default branch (not verified for other branches). The optional `tag` input defaults to the short commit SHA; `latest` is always pushed too.
+1. Push a version tag on the commit you want to deploy, from any branch (the run uses the workflow file of the tagged commit). Each image gets the git tag and `latest`:
+
+   ```bash
+   git tag v0.1.0
+   git push origin <branch> v0.1.0
+   ```
+
+   Follow the run in GitHub > Actions > "Publish images". A manual run (Run workflow) also exists, but GitHub only offers it once the workflow is on the default branch; its optional `tag` input defaults to the short commit SHA. Never move or reuse a version tag: publish a new one (`v0.1.1`) for every deploy.
 2. The frontend is built for this single-origin setup: `NEXT_PUBLIC_USE_MOCKS=false`, `NEXT_PUBLIC_WS_URL` empty (Socket.IO uses the page origin, nginx serves `/ws`) and `BACKEND_URL=http://nginx`. No domain is baked in, so the same image works on any host.
 3. The packages are private by default. Either make each of the five public (GitHub > Packages > Package settings), or log the VPS in with a token that has only `read:packages`:
 
@@ -204,7 +211,7 @@ Set in `.env`:
 | Variable | Value |
 |----------|-------|
 | `GHCR_OWNER` | your GitHub owner, lowercase |
-| `IMAGE_TAG` | the tag you published (a short SHA, or `latest`) |
+| `IMAGE_TAG` | the version tag you published (for example `v0.1.0`); avoid `latest` so a rollback is one edit |
 
 Values specific to this setup in `env/core.env` (everything else keeps the example default):
 
