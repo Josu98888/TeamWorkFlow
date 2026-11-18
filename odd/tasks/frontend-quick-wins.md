@@ -26,10 +26,14 @@ Fix four small gaps the user found while smoke-testing the deployed app (https:/
 
 ## Tasks
 
-- [ ] **T1** Sidebar toggle: top bar button, mobile drawer, desktop hide/show remembered. Route: delegated (writer trigger).
-- [ ] **T2** Trial notice on register (and subscription view if needed). Route: delegated (same writer).
-- [ ] **T3** OSM attribution on the site map. Route: delegated (same writer).
-- [ ] **T4** Access role on employee create (invitation after profile). Route: delegated (same writer).
+- [x] **T1** Sidebar toggle: top bar button, mobile drawer, desktop hide/show remembered. Route: delegated (writer trigger).
+  - Evidence: `shared/providers/SidebarProvider.tsx` (new; context + useSyncExternalStore for localStorage pref and `lg` media query, in-memory fallback, close on route change by render-phase state adjust), `components/layout/Sidebar.tsx` (off-canvas drawer, backdrop, Escape, `inert` when hidden), `Topbar.tsx` (menu button with aria-label/expanded/controls), `app/(dashboard)/layout.tsx`. No Zustand (not installed). Checks: lint 0 errors / 2 pre-existing warnings (`window.location.href`), tsc 0. Commits 377cae0, ef370c8. Not verified: visual behavior in a browser.
+- [x] **T2** Trial notice on register (and subscription view if needed). Route: delegated (same writer).
+  - Evidence: notice in `app/register/page.tsx`; `SubscriptionPanel` already shows the `Período de prueba` badge plus the trial end date, so unchanged. Checks: lint 0 errors, tsc 0 (run together with T3/T4). Commit 43dd49d.
+- [x] **T3** OSM attribution on the site map. Route: delegated (same writer).
+  - Evidence: `SiteMap.tsx` attribution control on, tile layer `attribution` with the OSM copyright link. Checks as T2. Commit 735a79e. Not verified: rendering in a browser.
+- [x] **T4** Access role on employee create (invitation after profile). Route: delegated (same writer).
+  - Evidence: `EmployeeFormModal.tsx`: create-only `Acceso` select (Sin cuenta / Empleado / Supervisor, filtered by `manageableRoles`, disabled without email); `accessApi.createInvitation` after the profile; on failure the profile stays and a message points to Usuarios. Mock mode: writes are `mockUnavailable` already, so creation itself is unavailable there (unchanged). Imports `accessApi` via `@/features/access` public index (creates an index-level import cycle with access to organization, only used at call time). Checks as T2. Commit a2053b2. Not verified: real invitation flow against the backend.
 
 ## Acceptance criteria
 
@@ -49,4 +53,4 @@ Forecast: ~250-400 authored changed lines. Strategy: `ask-on-risk`; one PR. Bran
 ## Progress
 
 - Mapping done (read-only explorer): all four are frontend-only gaps; evidence in Engram `frontend/ux-gaps-after-deploy`.
-- Next step: T1.
+- T1-T4 done. `pnpm build` passes. Next step: user review, then push/PR (ask first).
