@@ -174,6 +174,11 @@ export default function RegisterPage() {
             />
           </div>
 
+          <p className="text-xs" style={{ color: 'var(--text-subtitle)' }}>
+            Las empresas nuevas comienzan con una prueba gratuita del plan Pro por 14 días. Podés cambiar de plan
+            cuando quieras desde Facturación.
+          </p>
+
           <button
             type="submit"
             disabled={isLoading}
