@@ -1,5 +1,5 @@
-# Production stack for one EC2 host (t3.small, 2 GB): NATS, core, telemetry, frontend and nginx.
-# PostgreSQL is RDS (no service here; `--profile local-db` adds a throwaway one for a local try-out).
+# Production stack for one 2 GB host (EC2 t3.small, or a VPS such as DonWeb with Supabase, see donweb/README.md): NATS, core, telemetry, frontend and nginx.
+# PostgreSQL is RDS or Supabase (no service here; `--profile local-db` adds a throwaway one for a local try-out).
 # Run from this folder: `docker compose -f docker-compose.prod.yml up -d` (see README.md).
 #
 # Startup order: nats (healthy) -> core-migrate / telemetry-migrate (exit 0) -> core / telemetry -> nginx.
