@@ -14,7 +14,7 @@ core -> Supabase Storage (S3 API);  browser -> Supabase Storage (presigned PUT/G
 
 ## 1. Overview, memory budget and caveats
 
-Reference host: HostGator VPS in São Paulo with 1 vCPU, 2 GB RAM, 50 GB NVMe, unmetered transfer, KVM and root SSH, Ubuntu with no control panel. Any KVM VPS with root and at least 2 GB RAM works (OpenVZ/LXC plans usually cannot run Docker). The commands below are for Ubuntu 24.04 LTS; a 22.04 image is upgraded first (section 3.0). Do not install a control panel (cPanel, Plesk, CloudPanel, Webmin): they take RAM and ports 80/443 from nginx.
+Reference host: HostGator VPS in São Paulo with 1 vCPU, 2 GB RAM, 50 GB NVMe, unmetered transfer, KVM and root SSH, Ubuntu with no control panel. Any KVM VPS with root and at least 2 GB RAM works (OpenVZ/LXC plans usually cannot run Docker). The commands below are for Ubuntu 24.04 LTS; 22.04 works too (section 3.0). Do not install a control panel (cPanel, Plesk, CloudPanel, Webmin): they take RAM and ports 80/443 from nginx.
 
 | Service | Memory limit (`mem_limit`) |
 |---------|----------------------------|
@@ -57,9 +57,16 @@ Caveats and open checks:
 
 You run every command yourself on the server. Replace `<user>`, `<ip>`, `<your-ip>` and `<ssh-port>`. Some providers move SSH off port 22 (the HostGator reference host listens on `22022`): a `Connection refused` on 22 usually means this. Check it from the provider's web console with `ss -tlnp | grep -i ssh`.
 
-### 3.0 Upgrade Ubuntu 22.04 to 24.04 (only on a 22.04 image)
+### 3.0 Ubuntu 22.04: stay, update, upgrade later
 
-Standard support for 22.04 ends in April 2027. Upgrade while the server is empty, before anything else:
+Ubuntu 22.04 runs this stack as is: the containers bring their own base OS, Docker supports 22.04, and the HWE kernel (6.8) is the same series as 24.04. Bring it up to date and reboot:
+
+```bash
+apt-get update && apt-get full-upgrade -y
+reboot
+```
+
+Standard support for 22.04 ends in April 2027. Before then, either attach the free personal Ubuntu Pro subscription (`pro attach <token>`, extends security updates; terms not verified here) or upgrade to 24.04 as a planned maintenance task. On the reference host the upgrade aborted because `/boot` (974 MB) had less than the 610 MB it needs; free it first (purge old `linux-*` kernel packages that are not `uname -r`, set `COMPRESS=xz` in `/etc/initramfs-tools/initramfs.conf`, run `update-initramfs -u -k all`). The upgrade itself:
 
 ```bash
 ssh -p <ssh-port> root@<ip>
