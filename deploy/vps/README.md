@@ -55,14 +55,14 @@ Caveats and open checks:
 
 ## 3. VPS preparation
 
-You run every command yourself on the server. Replace `<user>`, `<ip>` and `<your-ip>`.
+You run every command yourself on the server. Replace `<user>`, `<ip>`, `<your-ip>` and `<ssh-port>`. Some providers move SSH off port 22 (the HostGator reference host listens on `22022`): a `Connection refused` on 22 usually means this. Check it from the provider's web console with `ss -tlnp | grep -i ssh`.
 
 ### 3.0 Upgrade Ubuntu 22.04 to 24.04 (only on a 22.04 image)
 
 Standard support for 22.04 ends in April 2027. Upgrade while the server is empty, before anything else:
 
 ```bash
-ssh root@<ip>
+ssh -p <ssh-port> root@<ip>
 apt-get update && apt-get full-upgrade -y
 reboot
 # reconnect
@@ -70,18 +70,31 @@ do-release-upgrade        # accept the prompts; it reboots at the end
 lsb_release -d            # must print Ubuntu 24.04.x LTS
 ```
 
+If the upgrade asks about a modified `/etc/ssh/sshd_config` (or any config file), keep the locally installed version: the provider's SSH port lives there.
+
 ### 3.1 SSH key login, no root or password login
 
-From your machine, as the user your provider gave you (usually `root`):
+Create a key on your machine once (accept the default path, set a passphrase):
 
 ```bash
-ssh-copy-id root@<ip>                          # or paste your public key into ~/.ssh/authorized_keys
-ssh root@<ip>
+ssh-keygen -t ed25519 -C "<label>"
+```
+
+Copy the public key to the server. Linux/macOS: `ssh-copy-id -p <ssh-port> root@<ip>`. Windows PowerShell has no `ssh-copy-id`:
+
+```powershell
+type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh -p <ssh-port> root@<ip> "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+```
+
+Then, on the server, create your user and give it the same key:
+
+```bash
+ssh -p <ssh-port> root@<ip>
 adduser <user> && usermod -aG sudo <user>
 rsync --archive --chown=<user>:<user> ~/.ssh /home/<user>
 ```
 
-Open a second terminal and check that `ssh <user>@<ip>` and `sudo -v` work before locking the door:
+Open a second terminal and check that `ssh -p <ssh-port> <user>@<ip>` and `sudo -v` work before locking the door:
 
 ```bash
 sudo tee /etc/ssh/sshd_config.d/99-hardening.conf >/dev/null <<'CONF'
@@ -96,7 +109,7 @@ sudo sshd -t && sudo systemctl reload ssh
 ```bash
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
-sudo ufw allow from <your-ip> to any port 22 proto tcp    # or: sudo ufw allow 22/tcp if your IP changes
+sudo ufw allow <ssh-port>/tcp    # the real SSH port (22022 on the reference host); allow it BEFORE `ufw enable` or you lock yourself out
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 sudo ufw enable
