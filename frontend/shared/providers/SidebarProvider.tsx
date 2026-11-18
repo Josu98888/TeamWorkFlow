@@ -1,49 +1,54 @@
 'use client';
 
-import { createContext, useContext, useState, useSyncExternalStore } from 'react';
+import { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 
-const STORAGE_KEY = 'sidebar-hidden';
+const STORAGE_KEY = 'sidebar-collapsed';
 const DESKTOP_QUERY = '(min-width: 1024px)';
+const TABLET_QUERY = '(min-width: 640px)';
+
+/** desktop >= 1024px, tablet 640-1023px, mobile < 640px. */
+export type SidebarMode = 'desktop' | 'tablet' | 'mobile';
 
 type SidebarContextValue = {
-  /** True when the viewport is at least `lg` (sidebar is a static column). */
-  isDesktop: boolean;
-  /** Whether the sidebar is currently visible for the active viewport. */
+  mode: SidebarMode;
+  /** Labels are visible: full sidebar on desktop, or the tablet/mobile overlay. False in the icon-only rail. */
   isOpen: boolean;
+  /** Tablet or mobile overlay is showing (backdrop, Escape and navigation close it). */
+  isOverlay: boolean;
   toggle: () => void;
-  closeMobile: () => void;
+  close: () => void;
 };
 
 const SidebarContext = createContext<SidebarContextValue | null>(null);
 
-// Desktop preference store. localStorage may be unavailable (private mode, blocked
-// site data), so every access is guarded and an in-memory value is the fallback.
-let memoryHidden = false;
+// Desktop preference store (true = icon-only rail). localStorage may be unavailable (private mode,
+// blocked site data), so every access is guarded and an in-memory value is the fallback.
+let memoryCollapsed = false;
 const listeners = new Set<() => void>();
 
-function readHidden(): boolean {
+function readCollapsed(): boolean {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored !== null) return stored === '1';
   } catch {
     // Ignore: fall back to the in-memory value.
   }
-  return memoryHidden;
+  return memoryCollapsed;
 }
 
-function writeHidden(hidden: boolean) {
-  memoryHidden = hidden;
+function writeCollapsed(collapsed: boolean) {
+  memoryCollapsed = collapsed;
   try {
-    localStorage.setItem(STORAGE_KEY, hidden ? '1' : '0');
+    localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0');
   } catch {
     // Ignore: the in-memory value still applies for this session.
   }
   listeners.forEach((notify) => notify());
 }
 
-function subscribeHidden(notify: () => void) {
+function subscribeCollapsed(notify: () => void) {
   listeners.add(notify);
   window.addEventListener('storage', notify);
   return () => {
@@ -52,40 +57,58 @@ function subscribeHidden(notify: () => void) {
   };
 }
 
-function subscribeDesktop(notify: () => void) {
-  const query = window.matchMedia(DESKTOP_QUERY);
-  query.addEventListener('change', notify);
-  return () => query.removeEventListener('change', notify);
+function subscribeMode(notify: () => void) {
+  const queries = [window.matchMedia(DESKTOP_QUERY), window.matchMedia(TABLET_QUERY)];
+  queries.forEach((query) => query.addEventListener('change', notify));
+  return () => queries.forEach((query) => query.removeEventListener('change', notify));
+}
+
+function getMode(): SidebarMode {
+  if (window.matchMedia(DESKTOP_QUERY).matches) return 'desktop';
+  return window.matchMedia(TABLET_QUERY).matches ? 'tablet' : 'mobile';
 }
 
 export function SidebarProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [overlayOpen, setOverlayOpen] = useState(false);
   const [lastPathname, setLastPathname] = useState(pathname);
 
-  const desktopHidden = useSyncExternalStore(subscribeHidden, readHidden, () => false);
-  const isDesktop = useSyncExternalStore(
-    subscribeDesktop,
-    () => window.matchMedia(DESKTOP_QUERY).matches,
-    () => false,
-  );
+  const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false);
+  const mode = useSyncExternalStore<SidebarMode>(subscribeMode, getMode, () => 'desktop');
+  const [lastMode, setLastMode] = useState(mode);
 
-  // Close the drawer on navigation (adjust state during render, no effect needed).
+  // Close the overlay on navigation or when the viewport changes class (adjust state during render).
   if (pathname !== lastPathname) {
     setLastPathname(pathname);
-    setMobileOpen(false);
+    setOverlayOpen(false);
+  }
+  if (mode !== lastMode) {
+    setLastMode(mode);
+    setOverlayOpen(false);
   }
 
+  const isOverlay = mode !== 'desktop' && overlayOpen;
+
+  useEffect(() => {
+    if (!isOverlay) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOverlayOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isOverlay]);
+
   const toggle = () => {
-    if (isDesktop) writeHidden(!desktopHidden);
-    else setMobileOpen(!mobileOpen);
+    if (mode === 'desktop') writeCollapsed(!collapsed);
+    else setOverlayOpen(!overlayOpen);
   };
 
   const value: SidebarContextValue = {
-    isDesktop,
-    isOpen: isDesktop ? !desktopHidden : mobileOpen,
+    mode,
+    isOpen: mode === 'desktop' ? !collapsed : overlayOpen,
+    isOverlay,
     toggle,
-    closeMobile: () => setMobileOpen(false),
+    close: () => setOverlayOpen(false),
   };
 
   return <SidebarContext value={value}>{children}</SidebarContext>;
