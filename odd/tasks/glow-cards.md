@@ -48,8 +48,14 @@ Filas con fondo `--bg-main` al 60 %, borde `--border-main`, radio de 14 px, chip
 - Sin dependencias nuevas.
 
 ## Tasks
-- [ ] G1 Tokens de brillo, chip y sombra en claro y oscuro.
-- [ ] G2 `Card` con radio, sombra y `glow` (`corner` | `bottom` | `none`), más el hover en las tarjetas con link.
-- [ ] G3 `KpiTile` con el nuevo layout (chip con ícono, valor, pastilla de tono), compatible con los usos actuales.
-- [ ] G4 Agregar íconos y `delta` a los KPI de Torre de Control y usar `glow="bottom"` en sus tarjetas anchas.
+- [x] G1 Tokens de brillo, chip y sombra en claro y oscuro. Evidence: `frontend/app/globals.css` (`--glow-1/2`, `--chip-bg/fg`, `--tile-bg/border/shadow`, `--color-chip`, `--color-chip-fg`); commit 4e5aa21. Deviation: la sombra de la tarjeta se llama `--tile-shadow` (no `--card-shadow`) porque la rama sidebar ya usa `--card-shadow` para el panel del shell.
+- [x] G2 `Card` con radio, sombra y `glow` (`corner` | `bottom` | `none`), más el hover en las tarjetas con link. Evidence: `shared/components/Card.tsx`, `shared/components/card.css` (props `glow` e `interactive`, `prefers-reduced-motion`); formularios y tablas densas con `glow="none"`; commit 4e5aa21.
+- [x] G3 `KpiTile` con el nuevo layout (chip con ícono, valor, pastilla de tono), compatible con los usos actuales. Evidence: `shared/components/KpiTile.tsx`, `shared/components/KpiIcon.tsx`; sin `delta` no hay pastilla y `tone` pinta el valor; commit 9d5e32b.
+- [x] G4 Agregar íconos y `delta` a los KPI de Torre de Control y usar `glow="bottom"` en sus tarjetas anchas. Evidence: `features/telemetry/components/TowerView.tsx`; `delta` solo en "Presentes ahora" (faltantes calculados de `present`/`expected`), el resto solo ícono; commit bc62a08.
 - [ ] G5 Revisar en 1280 y 390 px, en claro y oscuro, contra las capturas; `pnpm lint` y `pnpm build`.
+
+## Progress
+G1 a G4 hechas. Checks en `frontend/`: `pnpm lint` 0 errores y 2 warnings previos (`window.location.href`); `npx tsc --noEmit` OK; `pnpm build` OK. Sin navegador: no hubo revisión visual (queda en G5).
+
+## Delivery
+Apilada sobre `feat/frontend/sidebar-glass`. Ruta: delegada (un writer). TDD: off.
