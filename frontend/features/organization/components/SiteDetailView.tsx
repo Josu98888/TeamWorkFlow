@@ -1,40 +1,33 @@
 'use client';
 
-import { Can } from '@/shared/hooks/useCan';
+import { Can, useCan } from '@/shared/hooks/useCan';
 import { useState } from 'react';
 import { useResource } from '@/shared/hooks/useResource';
 import { Avatar } from '@/shared/components/Avatar';
-import { Badge } from '@/shared/components/Badge';
+import { Badge, type Tone } from '@/shared/components/Badge';
 import { Button } from '@/shared/components/Button';
 import { Card, SectionLabel } from '@/shared/components/Card';
+import { KpiTile } from '@/shared/components/KpiTile';
+import { ListRow, RowList } from '@/shared/components/List';
 import { PageHeader } from '@/shared/components/PageHeader';
 import { EmptyState, ErrorState, LoadingState } from '@/shared/components/States';
-import {
-  formatCoordinates,
-  formatDate,
-  formatMeters,
-  formatTime,
-  fullName,
-  initials,
-} from '@/shared/lib/format';
+import { formatMeters, formatTime, fullName, initials } from '@/shared/lib/format';
 import { organizationApi } from '../api';
 import { SHIFT_STATUS_LABELS, SHIFT_STATUS_TONES } from '../labels';
 import type { Post } from '../types';
 import { PostFormModal } from './PostFormModal';
-import { RotateQrButton } from './RotateQrButton';
 import { SiteFormModal } from './SiteFormModal';
 import { SiteMap } from './SiteMap';
+import { SiteQrCard } from './SiteQrCard';
 
 const BACK = { href: '/sedes', label: 'Volver a Sedes y Geocercas' } as const;
-
-/** Keeps the first characters of an opaque code visible and masks the rest. */
-const maskCode = (code: string) => `${code.slice(0, 6)}••••••${code.slice(-4)}`;
 
 export function SiteDetailView({ siteId }: { siteId: string }) {
   const site = useResource(organizationApi.getSite, siteId);
   const posts = useResource(organizationApi.listPosts, siteId);
   const employees = useResource(organizationApi.listEmployees, { siteId });
   const shifts = useResource(organizationApi.listShifts, { siteId });
+  const canManage = useCan()('sites.manage');
   const [editingSite, setEditingSite] = useState(false);
   // `null` = closed, `'new'` = create, a post = edit.
   const [postForm, setPostForm] = useState<Post | 'new' | null>(null);
@@ -87,26 +80,30 @@ export function SiteDetailView({ siteId }: { siteId: string }) {
         ? {
             id: person.id,
             name: fullName(person),
+            initials: initials(person),
             postName: postById.get(shift.postId)?.name,
           }
         : null;
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
 
+  const activePosts = posts.data.items.filter((post) => post.isActive).length;
+  const expectedShifts = allShifts.filter((shift) => shift.status !== 'CANCELLED').length;
+
   return (
     <>
       <PageHeader
         title={current.name}
-        description={current.address}
         back={BACK}
+        badge={<Badge tone={current.isActive ? 'success' : 'neutral'}>{current.isActive ? 'Activa' : 'Inactiva'}</Badge>}
+        description={`${current.address} · Geocerca de ${formatMeters(current.geofenceRadiusMeters)}`}
         actions={
-          <div className="flex items-center gap-2">
-            <Badge tone={current.isActive ? 'success' : 'neutral'}>{current.isActive ? 'Activa' : 'Inactiva'}</Badge>
-            <Can capability="sites.manage">
-              <Button onClick={() => setEditingSite(true)}>Editar sede</Button>
-              <RotateQrButton siteId={siteId} onRotated={site.reload} />
-            </Can>
-          </div>
+          <Can capability="sites.manage">
+            <Button onClick={() => setEditingSite(true)}>Editar</Button>
+            <Button variant="primary" onClick={() => setPostForm('new')}>
+              Nuevo puesto
+            </Button>
+          </Can>
         }
       />
       {editingSite && (
@@ -131,8 +128,19 @@ export function SiteDetailView({ siteId }: { siteId: string }) {
         />
       )}
 
+      <div className="mb-4 grid grid-cols-3 gap-3 sm:gap-4">
+        <KpiTile compact label="Presentes" value={activePersonnel.length} secondary={`/${expectedShifts}`} />
+        <KpiTile
+          compact
+          label="Puestos"
+          value={activePosts}
+          hint={posts.data.total !== activePosts ? `de ${posts.data.total}` : undefined}
+        />
+        <KpiTile compact label="Turnos de hoy" value={shifts.data.total} />
+      </div>
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      <Card flush glow="none" className="overflow-hidden lg:col-span-2">
+        <Card flush glow="none" className="lg:col-span-2">
           <SiteMap
             siteName={current.name}
             latitude={current.latitude}
@@ -143,65 +151,75 @@ export function SiteDetailView({ siteId }: { siteId: string }) {
           />
         </Card>
 
-        <Card>
-          <SectionLabel>Geocerca</SectionLabel>
-          <dl className="space-y-3 text-sm">
-            <Field label="Radio" value={formatMeters(current.geofenceRadiusMeters)} />
-            <Field label="Coordenadas" value={formatCoordinates(current.latitude, current.longitude)} />
-            <Field label="Zona horaria" value={current.timezone} />
-            {current.qrCode && <Field label="Código QR" value={maskCode(current.qrCode)} mono />}
-            {current.qrRotatedAt && <Field label="QR rotado" value={formatDate(current.qrRotatedAt)} />}
-          </dl>
-        </Card>
+        <div className="flex flex-col gap-4">
+          <Can capability="sites.manage">
+            <SiteQrCard site={current} onRotated={site.reload} />
+          </Can>
+
+          <Card flush glow="none">
+            <div className="px-5 pt-5">
+              <SectionLabel>Puestos · {posts.data.total}</SectionLabel>
+            </div>
+            {posts.data.items.length === 0 ? (
+              <div className="px-5 pb-5">
+                <EmptyState title="Esta sede todavía no tiene puestos" />
+              </div>
+            ) : (
+              <RowList variant="lines">
+                {posts.data.items.map((post) => {
+                  const postShifts = orderedShifts.filter(
+                    (shift) => shift.postId === post.id && shift.status !== 'CANCELLED',
+                  );
+                  const onDuty = postShifts.find((shift) => shift.status === 'IN_PROGRESS' && shift.employeeId);
+                  const person = onDuty?.employeeId ? employeeById.get(onDuty.employeeId) : undefined;
+                  const schedule = postShifts.length
+                    ? postShifts.map((shift) => `${formatTime(shift.startsAt)} a ${formatTime(shift.endsAt)}`).join(' · ')
+                    : `mín. ${post.minPeople} ${post.minPeople === 1 ? 'persona' : 'personas'}`;
+                  const status: { tone: Tone; label: string } = !post.isActive
+                    ? { tone: 'neutral', label: 'Inactivo' }
+                    : person
+                      ? { tone: 'success', label: 'Cubierto' }
+                      : { tone: 'warning', label: 'Sin cubrir' };
+                  const content = (
+                    <>
+                      <p className="truncate text-sm font-semibold text-title">{post.name}</p>
+                      <p className="truncate text-xs text-muted">{schedule}</p>
+                    </>
+                  );
+                  return (
+                    <ListRow
+                      key={post.id}
+                      leading={
+                        person ? (
+                          <Avatar initials={initials(person)} label={fullName(person)} />
+                        ) : (
+                          <Avatar muted initials="?" label="Sin asignar" />
+                        )
+                      }
+                      trailing={<Badge tone={status.tone}>{status.label}</Badge>}
+                    >
+                      {canManage ? (
+                        <button
+                          type="button"
+                          onClick={() => setPostForm(post)}
+                          aria-label={`Editar puesto ${post.name}`}
+                          className="block w-full cursor-pointer text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-medium"
+                        >
+                          {content}
+                        </button>
+                      ) : (
+                        content
+                      )}
+                    </ListRow>
+                  );
+                })}
+              </RowList>
+            )}
+          </Card>
+        </div>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card flush glow="none">
-          <div className="px-5 pt-5">
-            <SectionLabel action={<Can capability="sites.manage"><Button onClick={() => setPostForm('new')}>Nuevo puesto</Button></Can>}>
-              Puestos · {posts.data.total}
-            </SectionLabel>
-          </div>
-          {posts.data.items.length === 0 ? (
-            <div className="px-5 pb-5">
-              <EmptyState title="Esta sede todavía no tiene puestos" />
-            </div>
-          ) : (
-            <ul className="divide-y divide-line border-t border-line">
-              {posts.data.items.map((post) => {
-                const onDuty = allShifts.find(
-                  (shift) => shift.postId === post.id && shift.status === 'IN_PROGRESS',
-                );
-                const person = onDuty?.employeeId ? employeeById.get(onDuty.employeeId) : undefined;
-                return (
-                  <li key={post.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-title">{post.name}</p>
-                      <p className="text-xs text-muted">
-                        {post.requiredSkills.join(' · ')} · mín. {post.minPeople}{' '}
-                        {post.minPeople === 1 ? 'persona' : 'personas'}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {!post.isActive && <Badge>Inactivo</Badge>}
-                      {person ? (
-                        <Badge tone="success">{fullName(person)}</Badge>
-                      ) : (
-                        <Badge tone="danger">Sin cubrir</Badge>
-                      )}
-                      <Can capability="sites.manage">
-                        <Button variant="ghost" onClick={() => setPostForm(post)}>
-                          Editar
-                        </Button>
-                      </Can>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
-
         <Card flush glow="none">
           <div className="px-5 pt-5">
             <SectionLabel>Personal habilitado · {employees.data.total}</SectionLabel>
@@ -211,71 +229,56 @@ export function SiteDetailView({ siteId }: { siteId: string }) {
               <EmptyState title="No hay personal habilitado en esta sede" />
             </div>
           ) : (
-            <ul className="divide-y divide-line border-t border-line">
+            <RowList variant="lines">
               {employees.data.items.map((employee) => (
-                <li key={employee.id} className="flex items-center gap-3 px-5 py-3">
-                  <Avatar initials={initials(employee)} label={fullName(employee)} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-title">{fullName(employee)}</p>
-                    <p className="truncate text-xs text-muted">{employee.skills.join(' · ')}</p>
-                  </div>
-                  {!employee.isActive && <Badge>Inactivo</Badge>}
-                </li>
+                <ListRow
+                  key={employee.id}
+                  leading={<Avatar initials={initials(employee)} label={fullName(employee)} />}
+                  trailing={!employee.isActive && <Badge>Inactivo</Badge>}
+                >
+                  <p className="truncate text-sm font-semibold text-title">{fullName(employee)}</p>
+                  <p className="truncate text-xs text-muted">{employee.skills.join(' · ')}</p>
+                </ListRow>
               ))}
-            </ul>
+            </RowList>
+          )}
+        </Card>
+
+        <Card flush glow="none">
+          <div className="px-5 pt-5">
+            <SectionLabel>Turnos de hoy · {shifts.data.total}</SectionLabel>
+          </div>
+          {orderedShifts.length === 0 ? (
+            <div className="px-5 pb-5">
+              <EmptyState title="No hay turnos programados" description="Esta sede no tiene turnos para hoy." />
+            </div>
+          ) : (
+            <RowList variant="lines">
+              {orderedShifts.map((shift) => {
+                const person = shift.employeeId ? employeeById.get(shift.employeeId) : undefined;
+                return (
+                  <ListRow
+                    key={shift.id}
+                    leading={
+                      person ? (
+                        <Avatar initials={initials(person)} label={fullName(person)} />
+                      ) : (
+                        <Avatar muted initials="?" label="Sin asignar" />
+                      )
+                    }
+                    trailing={<Badge tone={SHIFT_STATUS_TONES[shift.status]}>{SHIFT_STATUS_LABELS[shift.status]}</Badge>}
+                  >
+                    <p className="truncate text-sm font-semibold text-title">
+                      {formatTime(shift.startsAt)} – {formatTime(shift.endsAt)} · {postById.get(shift.postId)?.name ?? 'Puesto'}
+                    </p>
+                    <p className="truncate text-xs text-muted">{person ? fullName(person) : 'Sin asignar'}</p>
+                  </ListRow>
+                );
+              })}
+            </RowList>
           )}
         </Card>
       </div>
-
-      <Card flush glow="none" className="mt-4">
-        <div className="px-5 pt-5">
-          <SectionLabel>Turnos de hoy · {shifts.data.total}</SectionLabel>
-        </div>
-        {orderedShifts.length === 0 ? (
-          <div className="px-5 pb-5">
-            <EmptyState title="No hay turnos programados" description="Esta sede no tiene turnos para hoy." />
-          </div>
-        ) : (
-          <div className="overflow-x-auto border-t border-line">
-            <table className="w-full min-w-[34rem] text-left text-sm">
-              <thead>
-                <tr className="text-[11px] font-semibold uppercase tracking-wider text-muted">
-                  <th scope="col" className="px-5 py-3">Horario</th>
-                  <th scope="col" className="px-5 py-3">Puesto</th>
-                  <th scope="col" className="px-5 py-3">Empleado</th>
-                  <th scope="col" className="px-5 py-3">Estado</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {orderedShifts.map((shift) => {
-                  const person = shift.employeeId ? employeeById.get(shift.employeeId) : undefined;
-                  return (
-                    <tr key={shift.id}>
-                      <td className="whitespace-nowrap px-5 py-3 font-semibold text-title">
-                        {formatTime(shift.startsAt)} – {formatTime(shift.endsAt)}
-                      </td>
-                      <td className="px-5 py-3 text-body">{postById.get(shift.postId)?.name ?? 'Puesto'}</td>
-                      <td className="px-5 py-3 text-body">{person ? fullName(person) : <span className="text-muted">Sin asignar</span>}</td>
-                      <td className="px-5 py-3">
-                        <Badge tone={SHIFT_STATUS_TONES[shift.status]}>{SHIFT_STATUS_LABELS[shift.status]}</Badge>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
     </>
-  );
-}
-
-function Field({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div>
-      <dt className="text-[11px] font-semibold uppercase tracking-wider text-muted">{label}</dt>
-      <dd className={`mt-0.5 font-semibold text-title ${mono ? 'font-mono text-xs' : ''}`}>{value}</dd>
-    </div>
   );
 }

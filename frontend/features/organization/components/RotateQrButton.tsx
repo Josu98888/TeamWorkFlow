@@ -7,7 +7,7 @@ import { useAction } from '@/shared/hooks/useAction';
 import { organizationApi } from '../api';
 
 /** Rotates the QR of a site and shows the new code once it is returned. */
-export function RotateQrButton({ siteId, onRotated }: { siteId: string; onRotated: () => void }) {
+export function RotateQrButton({ siteId, onRotated, label = 'Rotar QR' }: { siteId: string; onRotated: () => void; label?: string }) {
   const [qrCode, setQrCode] = useState<string | null>(null);
   const { run, pending, error } = useAction();
 
@@ -23,7 +23,7 @@ export function RotateQrButton({ siteId, onRotated }: { siteId: string; onRotate
   return (
     <>
       <Button onClick={rotate} disabled={pending}>
-        {pending ? 'Rotando...' : 'Rotar QR'}
+        {pending ? 'Rotando...' : label}
       </Button>
       {error && (
         <p role="alert" className="mt-2 text-xs text-danger">
