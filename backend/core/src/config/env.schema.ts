@@ -40,7 +40,12 @@ export interface Envs {
   graceDays: number;
   dataRetentionDays: number;
   appUrl: string;
+  webOrigin: string;
   cookieSecure: boolean;
+  rateLimitPublicTtlMs: number;
+  rateLimitPublicLimit: number;
+  rateLimitAuthTtlMs: number;
+  rateLimitAuthLimit: number;
   jwtSecret: string;
   accessTokenTtl: string;
   refreshTokenTtl: string;
@@ -78,7 +83,12 @@ interface EnvVars {
   GRACE_DAYS: number;
   DATA_RETENTION_DAYS: number;
   APP_URL: string;
+  WEB_ORIGIN: string;
   COOKIE_SECURE: boolean;
+  RATE_LIMIT_PUBLIC_TTL_MS: number;
+  RATE_LIMIT_PUBLIC_LIMIT: number;
+  RATE_LIMIT_AUTH_TTL_MS: number;
+  RATE_LIMIT_AUTH_LIMIT: number;
   JWT_SECRET: string;
   ACCESS_TOKEN_TTL: string;
   REFRESH_TOKEN_TTL: string;
@@ -160,9 +170,14 @@ const envsSchema = joi
     GRACE_DAYS: joi.number().integer().positive().default(7),
     DATA_RETENTION_DAYS: joi.number().integer().positive().default(90),
     APP_URL: joi.string().uri().default('http://localhost:3002'),
+    WEB_ORIGIN: joi.string().uri().default('http://localhost:3002'),
     // Secure auth cookies by default. Set to false only for an HTTP-only test
     // deployment: browsers drop Secure cookies on plain http (except localhost).
     COOKIE_SECURE: joi.boolean().default(true),
+    RATE_LIMIT_PUBLIC_TTL_MS: joi.number().integer().positive().default(60000),
+    RATE_LIMIT_PUBLIC_LIMIT: joi.number().integer().positive().default(30),
+    RATE_LIMIT_AUTH_TTL_MS: joi.number().integer().positive().default(60000),
+    RATE_LIMIT_AUTH_LIMIT: joi.number().integer().positive().default(300),
     JWT_SECRET: joi.string().min(32).required(),
     ACCESS_TOKEN_TTL: joi.string().pattern(DURATION_PATTERN).default('15m'),
     REFRESH_TOKEN_TTL: joi.string().pattern(DURATION_PATTERN).default('7d'),
@@ -231,7 +246,12 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
     graceDays: envVars.GRACE_DAYS,
     dataRetentionDays: envVars.DATA_RETENTION_DAYS,
     appUrl: envVars.APP_URL,
+    webOrigin: envVars.WEB_ORIGIN,
     cookieSecure: envVars.COOKIE_SECURE,
+    rateLimitPublicTtlMs: envVars.RATE_LIMIT_PUBLIC_TTL_MS,
+    rateLimitPublicLimit: envVars.RATE_LIMIT_PUBLIC_LIMIT,
+    rateLimitAuthTtlMs: envVars.RATE_LIMIT_AUTH_TTL_MS,
+    rateLimitAuthLimit: envVars.RATE_LIMIT_AUTH_LIMIT,
     jwtSecret: envVars.JWT_SECRET,
     accessTokenTtl: envVars.ACCESS_TOKEN_TTL,
     refreshTokenTtl: envVars.REFRESH_TOKEN_TTL,
