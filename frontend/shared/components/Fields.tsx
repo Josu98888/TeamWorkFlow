@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
+import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
 import { Button } from './Button';
 
 const CONTROL =
@@ -83,3 +83,18 @@ export function FormFooter({ error, pending, submitLabel, onCancel }: { error: s
 
 /** Parses a comma separated list into trimmed non-empty unique items. */
 export const parseList = (text: string): string[] => [...new Set(text.split(',').map((item) => item.trim()).filter(Boolean))];
+
+type TextAreaFieldProps = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'onChange' | 'value'> & {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (value: string) => void;
+};
+
+export function TextAreaField({ label, hint, onChange, className = '', rows = 3, ...rest }: TextAreaFieldProps) {
+  return (
+    <Label label={label} hint={hint}>
+      <textarea rows={rows} className={`${CONTROL} ${className}`} onChange={(event) => onChange(event.target.value)} {...rest} />
+    </Label>
+  );
+}

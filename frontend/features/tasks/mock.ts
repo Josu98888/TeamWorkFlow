@@ -2,6 +2,7 @@ import { minutesFromNow, mockResponse } from '@/shared/lib/mock';
 import { TENANT_ID, employeeId, mockId, postId, shiftId, siteId } from '@/shared/mocks/world';
 import type { TasksApi } from './api';
 import { buildTaskReport } from './report';
+import { formsMock } from './mock-forms';
 import type { Task, TaskStatus } from './types';
 
 type Seed = {
@@ -51,6 +52,7 @@ const TASKS: Task[] = SEEDS.map((seed, index) => ({
 }));
 
 export const tasksMockApi: TasksApi = {
+  ...formsMock,
   listTasks: (query = {}) =>
     mockResponse(
       TASKS.filter(

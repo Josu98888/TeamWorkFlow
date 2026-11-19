@@ -1,7 +1,7 @@
 import { apiFetch } from '@/shared/lib/http';
 import type { TasksApi } from './api';
 import { buildTaskReport } from './report';
-import type { ListTasksQuery, Task, TasksPage } from './types';
+import type { Form, FormInput, FormVersion, FormsPage, ListTasksQuery, Task, TasksPage } from './types';
 
 /** Backend maximum for `pageSize` (`ListTasksQueryDto`). */
 const PAGE_SIZE = 100;
@@ -34,4 +34,9 @@ async function listAll(query: ListTasksQuery): Promise<Task[]> {
 export const tasksHttpApi: TasksApi = {
   listTasks: (query = {}) => listAll(query),
   getTaskReport: async () => buildTaskReport(await listAll({})),
+  listForms: () => apiFetch<FormsPage>('/forms?page=1&pageSize=100'),
+  getForm: (formId) => apiFetch<Form>(`/forms/${formId}`),
+  createForm: (input: FormInput) => apiFetch<Form>('/forms', { method: 'POST', body: JSON.stringify(input) }),
+  updateForm: (formId, input) => apiFetch<Form>(`/forms/${formId}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  publishForm: (formId) => apiFetch<FormVersion>(`/forms/${formId}/publish`, { method: 'POST', body: '{}' }),
 };

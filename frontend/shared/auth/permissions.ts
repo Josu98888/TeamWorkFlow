@@ -24,6 +24,9 @@ export type Capability =
   | 'shifts.view'
   | 'shifts.manage'
   | 'tasks.view'
+  | 'forms.manage'
+  | 'tasks.create'
+  | 'tasks.answer'
   | 'users.manage'
   | 'billing.manage'
   | 'platform.billing'
@@ -59,6 +62,12 @@ const CAPABILITY_ROLES: Record<Capability, readonly Role[]> = {
   'shifts.manage': MANAGERS,
   // core `tasks/AGENTS.md` role table (task screens for employees are not built yet).
   'tasks.view': MANAGERS,
+  // core `tasks/http/forms.controller.ts` assertManager: owner, admin.
+  'forms.manage': OWNER_ADMIN,
+  // core `tasks/http/tasks.controller.ts` create: owner, admin, supervisor (inside `siteIds`).
+  'tasks.create': MANAGERS,
+  // core `tasks/http/tasks.controller.ts` claim/answer and `media.controller.ts` uploads: employee.
+  'tasks.answer': EMPLOYEE_ONLY,
   // core `auth/users/user-policy.ts` `isUserManager` + `invitations/invitation-policy.ts`: owner, admin.
   'users.manage': OWNER_ADMIN,
   // core `billing/billing.service.ts` `assertTenantRole`: plans, subscription, invoices, payment links, change
@@ -97,6 +106,7 @@ export const ROUTE_RULES: readonly { path: string; exact?: boolean; capability: 
   { path: '/', exact: true, capability: 'dashboard.view' },
   { path: '/torre-control', capability: 'tower.view' },
   { path: '/sedes', capability: 'sites.view' },
+  { path: '/tareas/formularios', capability: 'forms.manage' },
   { path: '/tareas', capability: 'tasks.view' },
   { path: '/empleados', capability: 'employees.view' },
   { path: '/turnos', capability: 'shifts.view' },

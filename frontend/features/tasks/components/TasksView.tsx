@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { organizationApi } from '@/features/organization';
+import { Can } from '@/shared/hooks/useCan';
 import { useResource } from '@/shared/hooks/useResource';
 import { Badge } from '@/shared/components/Badge';
-import { FilterChip } from '@/shared/components/Button';
+import { ButtonLink, FilterChip } from '@/shared/components/Button';
 import { Card, SectionLabel } from '@/shared/components/Card';
 import { KpiTile } from '@/shared/components/KpiTile';
 import { PageHeader } from '@/shared/components/PageHeader';
@@ -25,7 +26,15 @@ export function TasksView() {
   const [filter, setFilter] = useState<Filter>('ALL');
 
   const header = (
-    <PageHeader title="Tareas y Reportes" description="Seguimiento de tareas operativas y cumplimiento por sede." />
+    <PageHeader
+      title="Tareas y Reportes"
+      description="Seguimiento de tareas operativas y cumplimiento por sede."
+      actions={
+        <Can capability="forms.manage">
+          <ButtonLink href="/tareas/formularios">Formularios</ButtonLink>
+        </Can>
+      }
+    />
   );
 
   if (tasks.error || report.error || sites.error || employees.error) {
