@@ -37,7 +37,8 @@ export type AppErrorCode =
   | 'media_type_not_allowed'
   | 'media_not_uploaded'
   | 'notification_not_found'
-  | 'invalid_push_token';
+  | 'invalid_push_token'
+  | 'rate_limited';
 
 export interface ValidationErrorItem {
   field: string;
@@ -349,5 +350,11 @@ export class NotificationNotFoundException extends AppException {
 export class InvalidPushTokenException extends AppException {
   constructor(message = 'Push token is empty or malformed') {
     super(422, 'invalid_push_token', message);
+  }
+}
+
+export class RateLimitedException extends AppException {
+  constructor() {
+    super(429, 'rate_limited', 'Too many requests, please try again later');
   }
 }
