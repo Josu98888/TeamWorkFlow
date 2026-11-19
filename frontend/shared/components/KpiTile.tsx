@@ -15,6 +15,8 @@ type KpiTileProps = {
   icon?: ReactNode;
   /** Text of the tone pill. Without it there is no pill and `tone` colors the value. */
   delta?: string;
+  /** Small variant for secondary rows (detail pages): shorter, smaller value. */
+  compact?: boolean;
 };
 
 const PILL_BG = {
@@ -26,11 +28,11 @@ const PILL_BG = {
   neutral: 'bg-alt',
 } as const satisfies Record<Tone, string>;
 
-export function KpiTile({ label, value, secondary, hint, tone = 'neutral', href, icon, delta }: KpiTileProps) {
+export function KpiTile({ label, value, secondary, hint, tone = 'neutral', href, icon, delta, compact = false }: KpiTileProps) {
   const valueColor = delta || tone === 'neutral' ? 'text-title' : TONE_TEXT[tone];
 
   const content = (
-    <Card interactive={Boolean(href)} className="flex h-full min-h-[150px] flex-col sm:min-h-[176px]">
+    <Card interactive={Boolean(href)} className={`flex h-full flex-col ${compact ? 'min-h-[88px] !p-4' : 'min-h-[150px] sm:min-h-[176px]'}`}>
       <div className="flex items-center gap-2.5">
         {icon && (
           <span className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-chip text-chip-fg">
@@ -44,7 +46,7 @@ export function KpiTile({ label, value, secondary, hint, tone = 'neutral', href,
           </span>
         )}
       </div>
-      <p className={`mt-auto text-4xl font-bold tracking-tight ${valueColor}`}>
+      <p className={`mt-auto font-bold tracking-tight ${compact ? 'text-2xl sm:text-3xl' : 'text-4xl'} ${valueColor}`}>
         {value}
         {secondary && <span className="ml-0.5 text-lg font-semibold text-muted">{secondary}</span>}
       </p>

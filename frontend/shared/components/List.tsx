@@ -9,8 +9,12 @@ export function Toolbar({ children, columns = 3 }: { children: ReactNode; column
 }
 
 /** Stacked rows list; place inside `<Card flush glow="none">`. Rows wrap on narrow screens. */
-export function RowList({ children }: { children: ReactNode }) {
-  return <ul className="list-rows">{children}</ul>;
+export function RowList({ children, variant = 'boxed' }: { children: ReactNode; variant?: 'boxed' | 'lines' }) {
+  return (
+    <ul className="list-rows" data-variant={variant}>
+      {children}
+    </ul>
+  );
 }
 
 type ListRowProps = {
