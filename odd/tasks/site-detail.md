@@ -42,8 +42,13 @@ Usa el estilo de las otras ramas de diseño: las cards con brillo violeta (`odd/
 - Sin dependencias nuevas sin confirmarlo con el equipo (ver QR).
 
 ## Tasks
-- [ ] D1 Encabezado con etiqueta de estado, dirección, geocerca y acciones; los tres números chicos.
-- [ ] D2 Grilla mapa + columna derecha; estilo del mapa (tiles, geocerca, marcador, avatares, zoom y pastillas).
-- [ ] D3 Card de QR con renovar, copiar e imprimir (y la imagen del QR si el equipo aprueba la librería).
-- [ ] D4 Lista de puestos con avatar y estado; Personal habilitado y Turnos de hoy con el mismo estilo.
+- [x] D1 Encabezado con etiqueta de estado, dirección, geocerca y acciones; los tres números chicos.
+  - Evidence: `PageHeader` gained `badge`/`secondaryActions`; `SiteDetailView` shows status badge, address + geofence, "Editar"/"Nuevo puesto" under `Can`, three compact `KpiTile` (Presentes, Puestos, Turnos de hoy). Alerts per site have no data in the organization feature, so the third tile is Turnos de hoy as the spec allows (commit 9a926eb).
+- [x] D2 Grilla mapa + columna derecha; estilo del mapa (tiles, geocerca, marcador, avatares, zoom y pastillas).
+  - Evidence: `map/map.css` + `map/markers.ts` + `MapControls.tsx` (muted tiles via CSS filter, dashed violet geofence, gradient pin, initials avatars with red-ring support, custom zoom, glass pills); `SiteMap` rebuilt on them. Grid 2/3 + right column (9a926eb).
+- [x] D3 Card de QR con renovar, copiar e imprimir (y la imagen del QR si el equipo aprueba la librería).
+  - Evidence: `SiteQrCard` (code text in a `--qr-bg` white box, Renovar via `RotateQrButton`, Copiar, Imprimir through a print window); no QR library (9a926eb).
+- [x] D4 Lista de puestos con avatar y estado; Personal habilitado y Turnos de hoy con el mismo estilo.
+  - Evidence: posts, Personal habilitado and Turnos de hoy as `RowList variant="lines"` rows with avatar and `Badge`; clicking a post opens `PostFormModal` when `sites.manage` (9a926eb).
 - [ ] D5 Revisar en 1280 y 390 px, en claro y oscuro, contra las capturas; `pnpm lint` y `pnpm build`.
+  - Merged into main-pages M8 (decided 2026-11-19).

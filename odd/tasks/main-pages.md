@@ -82,11 +82,13 @@ Se apoya en las otras ramas de diseño. Hacerlas antes, o reutilizar sus tokens 
 - Sin dependencias nuevas sin confirmarlo con el equipo.
 
 ## Tasks
-- [ ] M1 Patrones compartidos: selector segmentado, encabezado de página, barras de progreso y filas de lista.
+- [x] M1 Patrones compartidos: selector segmentado, encabezado de página, barras de progreso y filas de lista.
+  - Evidence: `Segmented`, `PageHeader` (`badge`, `secondaryActions`, hidden on phones), `ProgressBar` tones `brand` and `done`, `RowList variant="lines"`, `KpiTile compact`, `Avatar muted` in `frontend/shared/components` (7412800).
 - [ ] M2 Panel principal.
 - [ ] M3 Torre de Control (mapa de sedes, alertas, estado por sede; orden en el celular).
 - [ ] M4 Asistencia (semana, línea de tiempo de jornadas, fichadas, celular).
-- [ ] M5 Sedes, lista (mapa general y tarjetas).
+- [x] M5 Sedes, lista (mapa general y tarjetas).
+  - Evidence: `SitesOverviewMap` (Leaflet, initial markers, pill), `Segmented` filter + search, card grid 1/2/3 with `SiteTilePreview` (one lazy OSM tile + CSS ring/pin), stats, stacked avatars, assignment bar, one OSM attribution line (e14ab4a).
 - [ ] M6 Facturación (plan actual, comparación, medio de pago, facturas).
 - [ ] M7 Mi jornada (botón de fichar, GPS, fichadas y jornadas).
 - [ ] M8 Revisar cada página en 1280 y 390 px, en claro y oscuro, contra las capturas; `pnpm lint` y `pnpm build`.
@@ -107,3 +109,5 @@ Branch `feat/frontend/main-pages`, stacked on `feat/frontend/list-pages`; the de
 
 ## Progress
 - Designs received and adjustments recorded. Next: writer 1.
+- Writer 1 done: M1, site detail D1-D4 and M5 (commits 7412800, 9a926eb, e14ab4a). `pnpm lint` (2 pre-existing warnings), `npx tsc --noEmit`, `pnpm build` run; no browser, so no visual check yet (M8).
+- Deviations of writer 1: (1) the site map no longer fakes "adentro/fuera" counts: the API has no per-person geofence status, so the pill reads "N en turno" and the red ring/"fuera" pill appear only when `MapPersonMarker.outside` is set (Torre can use it with real data); person markers stay spread deterministically inside the geofence as before. (2) Geofence fill is a flat lavender with opacity, not a radial gradient: Leaflet paths are SVG and take no CSS radial gradient. (3) Sedes cards' coverage bar shows "turnos con persona asignada / turnos del día" (real data) instead of presence percentage, with teal when complete and warning otherwise; no per-site alert state exists, so card badges are only Activa/Inactiva. (4) Sedes map markers use `ok`/`off` states only for the same reason. (5) The QR print view is a popup with the code as text, escaped HTML and no color tokens (print document). (6) Site detail "Alertas" tile replaced by Turnos de hoy (no alert source in the organization feature).
