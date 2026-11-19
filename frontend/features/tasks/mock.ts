@@ -4,7 +4,7 @@ import type { TasksApi } from './api';
 import { buildTaskReport } from './report';
 import { ApiError } from '@/shared/lib/http';
 import { formsMock, mockFormVersions } from './mock-forms';
-import type { Task, TaskStatus } from './types';
+import type { MediaUpload, Task, TaskStatus } from './types';
 
 type Seed = {
   title: string;
@@ -58,6 +58,16 @@ const TASKS: Task[] = SEEDS.map((seed, index) => ({
   answer: null,
 }));
 
+/** The demo employee: owns the pending seeded task of employee 2 and can claim the unclaimed ones. */
+const MY_EMPLOYEE_ID = employeeId(2);
+
+function findOpenTask(taskId: string): Task {
+  const task = TASKS.find((item) => item.id === taskId);
+  if (!task) throw new ApiError(404, 'task_not_found', 'Task not found');
+  if (task.status !== 'PENDING') throw new ApiError(409, 'task_not_open', 'Task is not open');
+  return task;
+}
+
 export const tasksMockApi: TasksApi = {
   ...formsMock,
   listTasks: (query = {}) =>
@@ -70,6 +80,49 @@ export const tasksMockApi: TasksApi = {
       ).sort((a, b) => a.deadline.localeCompare(b.deadline)),
     ),
   getTaskReport: () => mockResponse(buildTaskReport(TASKS)),
+  listMyTasks: () =>
+    mockResponse(
+      TASKS.filter((task) => task.status === 'PENDING' && (task.employeeId === null || task.employeeId === MY_EMPLOYEE_ID)).sort(
+        (a, b) => a.deadline.localeCompare(b.deadline),
+      ),
+    ),
+  claimTask: (taskId) => {
+    try {
+      const task = findOpenTask(taskId);
+      if (task.employeeId !== null && task.employeeId !== MY_EMPLOYEE_ID) throw new ApiError(409, 'task_already_claimed', 'Task already claimed');
+      task.employeeId = MY_EMPLOYEE_ID;
+      task.claimedAt = task.claimedAt ?? new Date().toISOString();
+      return mockResponse({ ...task });
+    } catch (cause) {
+      return Promise.reject(cause);
+    }
+  },
+  answerTask: (taskId, input) => {
+    try {
+      const task = findOpenTask(taskId);
+      const qrField = task.formVersion?.fields.find((field) => field.type === 'qr');
+      if (task.expectedQr && qrField && input.answers[qrField.key] !== task.expectedQr) {
+        throw new ApiError(422, 'qr_mismatch', 'Scanned QR code does not match expected QR');
+      }
+      task.employeeId = MY_EMPLOYEE_ID;
+      task.status = 'COMPLETED';
+      task.answer = {
+        id: mockId(11, TASKS.length),
+        taskId,
+        answers: input.answers,
+        deviceTime: input.deviceTime,
+        receivedAt: new Date().toISOString(),
+        reviewResult: 'NONE',
+        reviewNote: null,
+      };
+      return mockResponse({ ...task });
+    } catch (cause) {
+      return Promise.reject(cause);
+    }
+  },
+  requestUpload: (): Promise<MediaUpload> =>
+    mockResponse({ mediaId: crypto.randomUUID(), uploadUrl: 'mock://storage/upload', expiresAt: minutesFromNow(5) }),
+  uploadFile: () => mockResponse(undefined),
   createTask: (input) => {
     const version = mockFormVersions().find((item) => item.id === input.formVersionId);
     if (!version) return Promise.reject(new ApiError(409, 'form_not_published', 'Form version is not published'));

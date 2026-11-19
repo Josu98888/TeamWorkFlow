@@ -131,3 +131,28 @@ export type CreateTaskInput = {
   /** Defaults to the form name in core. */
   title?: string;
 };
+
+/** Body of `POST /tasks/:taskId/answer` (employee). `answers` maps each field `key` to its value (`photo`: media id). */
+export type AnswerTaskInput = {
+  /** Client generated; core ignores a duplicate and returns the stored answer. */
+  clientAnswerId: string;
+  /** ISO instant; core rejects answers older than 24 hours (`answer_too_old`). */
+  deviceTime: string;
+  answers: Record<string, unknown>;
+};
+
+/** Body of `POST /media/uploads` (employee): photos only, `image/jpeg|png|webp`, up to 10 MB. */
+export type RequestUploadInput = {
+  mime: string;
+  sizeBytes: number;
+  /** Hex digest of the file. */
+  sha256: string;
+  takenAt: string;
+};
+
+export type MediaUpload = {
+  mediaId: string;
+  /** Presigned PUT URL (storage origin). */
+  uploadUrl: string;
+  expiresAt: string;
+};
