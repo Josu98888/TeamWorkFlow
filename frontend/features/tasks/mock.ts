@@ -2,7 +2,8 @@ import { minutesFromNow, mockResponse } from '@/shared/lib/mock';
 import { TENANT_ID, employeeId, mockId, postId, shiftId, siteId } from '@/shared/mocks/world';
 import type { TasksApi } from './api';
 import { buildTaskReport } from './report';
-import { formsMock } from './mock-forms';
+import { ApiError } from '@/shared/lib/http';
+import { formsMock, mockFormVersions } from './mock-forms';
 import type { Task, TaskStatus } from './types';
 
 type Seed = {
@@ -36,6 +37,8 @@ const SEEDS: readonly Seed[] = [
   { title: 'Auditoría de libro de actas', site: 3, post: 1, employee: null, status: 'CANCELLED', deadline: -400 },
 ];
 
+const VERSIONS = mockFormVersions();
+
 const TASKS: Task[] = SEEDS.map((seed, index) => ({
   id: mockId(8, index + 1),
   tenantId: TENANT_ID,
@@ -49,6 +52,10 @@ const TASKS: Task[] = SEEDS.map((seed, index) => ({
   postId: postId(seed.site, seed.post),
   shiftId: seed.perShift ? shiftId(seed.site, seed.post, 'current') : null,
   createdAt: minutesFromNow(-600),
+  formVersionId: VERSIONS[index % VERSIONS.length].id,
+  formVersion: VERSIONS[index % VERSIONS.length],
+  expectedQr: null,
+  answer: null,
 }));
 
 export const tasksMockApi: TasksApi = {
@@ -63,4 +70,28 @@ export const tasksMockApi: TasksApi = {
       ).sort((a, b) => a.deadline.localeCompare(b.deadline)),
     ),
   getTaskReport: () => mockResponse(buildTaskReport(TASKS)),
+  createTask: (input) => {
+    const version = mockFormVersions().find((item) => item.id === input.formVersionId);
+    if (!version) return Promise.reject(new ApiError(409, 'form_not_published', 'Form version is not published'));
+    const task: Task = {
+      id: mockId(8, TASKS.length + 1),
+      tenantId: TENANT_ID,
+      kind: 'SINGLE',
+      status: 'PENDING',
+      title: input.title?.trim() || version.name,
+      deadline: input.deadline,
+      employeeId: input.employeeId ?? null,
+      claimedAt: null,
+      siteId: input.siteId,
+      postId: input.postId,
+      shiftId: null,
+      createdAt: new Date().toISOString(),
+      formVersionId: version.id,
+      formVersion: version,
+      expectedQr: input.expectedQr ?? null,
+      answer: null,
+    };
+    TASKS.push(task);
+    return mockResponse(task);
+  },
 };

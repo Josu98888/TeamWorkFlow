@@ -5,7 +5,7 @@ import { organizationApi } from '@/features/organization';
 import { Can } from '@/shared/hooks/useCan';
 import { useResource } from '@/shared/hooks/useResource';
 import { Badge } from '@/shared/components/Badge';
-import { ButtonLink, FilterChip } from '@/shared/components/Button';
+import { Button, ButtonLink, FilterChip } from '@/shared/components/Button';
 import { Card, SectionLabel } from '@/shared/components/Card';
 import { KpiTile } from '@/shared/components/KpiTile';
 import { PageHeader } from '@/shared/components/PageHeader';
@@ -13,6 +13,7 @@ import { ProgressBar } from '@/shared/components/ProgressBar';
 import { EmptyState, ErrorState, LoadingState } from '@/shared/components/States';
 import { formatDateTime, formatPercent, fullName } from '@/shared/lib/format';
 import { tasksApi } from '../api';
+import { CreateTaskModal } from './CreateTaskModal';
 import { TASK_KIND_LABELS, TASK_STATUS_LABELS, TASK_STATUS_TONES } from '../labels';
 import { TASK_STATUSES, type TaskStatus } from '../types';
 
@@ -24,17 +25,37 @@ export function TasksView() {
   const sites = useResource(organizationApi.listSites);
   const employees = useResource(organizationApi.listEmployees);
   const [filter, setFilter] = useState<Filter>('ALL');
+  const [creating, setCreating] = useState(false);
 
   const header = (
-    <PageHeader
-      title="Tareas y Reportes"
-      description="Seguimiento de tareas operativas y cumplimiento por sede."
-      actions={
-        <Can capability="forms.manage">
-          <ButtonLink href="/tareas/formularios">Formularios</ButtonLink>
-        </Can>
-      }
-    />
+    <>
+      <PageHeader
+        title="Tareas y Reportes"
+        description="Seguimiento de tareas operativas y cumplimiento por sede."
+        secondaryActions={
+          <Can capability="forms.manage">
+            <ButtonLink href="/tareas/formularios">Formularios</ButtonLink>
+          </Can>
+        }
+        actions={
+          <Can capability="tasks.create">
+            <Button variant="primary" onClick={() => setCreating(true)}>
+              Nueva tarea
+            </Button>
+          </Can>
+        }
+      />
+      {creating && (
+        <CreateTaskModal
+          onClose={() => setCreating(false)}
+          onCreated={() => {
+            setCreating(false);
+            tasks.reload();
+            report.reload();
+          }}
+        />
+      )}
+    </>
   );
 
   if (tasks.error || report.error || sites.error || employees.error) {

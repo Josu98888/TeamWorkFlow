@@ -117,3 +117,17 @@ export type FormsPage = { items: Form[]; total: number };
 
 /** Body of `POST /forms` and `PATCH /forms/:formId` (the PATCH accepts partial bodies; the builder always sends both). */
 export type FormInput = { name: string; fields: FormField[] };
+
+/** Body of `POST /tasks` (owner/admin/supervisor). Without `employeeId` any employee on shift at the post can claim it. */
+export type CreateTaskInput = {
+  formVersionId: string;
+  /** ISO instant. */
+  deadline: string;
+  siteId: string;
+  postId: string;
+  employeeId?: string;
+  /** The answer to a `qr` field must match it. */
+  expectedQr?: string;
+  /** Defaults to the form name in core. */
+  title?: string;
+};
