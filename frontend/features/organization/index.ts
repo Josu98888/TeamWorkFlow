@@ -7,6 +7,9 @@ export { SiteDetailView } from './components/SiteDetailView';
 export { SitesView } from './components/SitesView';
 export type {
   Employee,
+  InvitableRole,
+  InviteEmployee,
+  InviteRoleOption,
   Paginated,
   Post,
   Shift,

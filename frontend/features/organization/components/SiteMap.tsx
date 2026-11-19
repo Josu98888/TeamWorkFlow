@@ -23,6 +23,9 @@ type SiteMapProps = {
 };
 
 const OSM_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+// Required by the OpenStreetMap tile usage policy and licence.
+const OSM_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
 
 export function SiteMap({
   siteName,
@@ -65,7 +68,7 @@ export function SiteMap({
         center: [latitude, longitude],
         zoom,
         zoomControl: !compact,
-        attributionControl: false,
+        attributionControl: true,
         dragging: !compact,
         scrollWheelZoom: false,
         doubleClickZoom: !compact,
@@ -73,7 +76,7 @@ export function SiteMap({
         keyboard: !compact,
       });
 
-      L.tileLayer(OSM_TILES, { maxZoom: 19 }).addTo(map);
+      L.tileLayer(OSM_TILES, { maxZoom: 19, attribution: OSM_ATTRIBUTION }).addTo(map);
 
       const accent = isActive ? '#0d9488' : '#64748b';
 

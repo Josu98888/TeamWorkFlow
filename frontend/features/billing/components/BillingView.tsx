@@ -90,7 +90,7 @@ export function BillingView() {
         )}
       </Card>
 
-      <Card flush>
+      <Card flush glow="none">
         <div className="px-5 pt-5">
           <SectionLabel>Facturas</SectionLabel>
         </div>

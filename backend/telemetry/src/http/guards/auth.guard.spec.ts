@@ -136,7 +136,8 @@ describe('AuthGuard', () => {
     mockTenantState.isSuspended.mockResolvedValueOnce(false);
     mockTenantState.hasFeature.mockResolvedValueOnce(true);
     mockReflector.getAllAndOverride
-      .mockReturnValueOnce(undefined)
+      .mockReturnValueOnce(undefined) // public
+      .mockReturnValueOnce(undefined) // roles
       .mockReturnValueOnce('alerts');
 
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
@@ -147,10 +148,9 @@ describe('AuthGuard', () => {
       ...validActor,
       role: 'employee',
     });
-    mockReflector.getAllAndOverride.mockReturnValueOnce([
-      'supervisor',
-      'admin',
-    ]);
+    mockReflector.getAllAndOverride
+      .mockReturnValueOnce(undefined) // public
+      .mockReturnValueOnce(['supervisor', 'admin']);
     const ctx = createMockContext({ authorization: 'Bearer test-token' });
 
     await expect(guard.canActivate(ctx)).rejects.toThrow(ForbiddenException);
@@ -161,14 +161,23 @@ describe('AuthGuard', () => {
       ...validActor,
       features: { alerts: false },
     });
-    // First call roles -> undefined, second call features -> 'alerts'
+    // Calls in order: public, roles, features
     mockReflector.getAllAndOverride
-      .mockReturnValueOnce(undefined)
+      .mockReturnValueOnce(undefined) // public
+      .mockReturnValueOnce(undefined) // roles
       .mockReturnValueOnce('alerts');
 
     const ctx = createMockContext({ authorization: 'Bearer test-token' });
     await expect(guard.canActivate(ctx)).rejects.toThrow(
       FeatureNotInPlanException,
     );
+  });
+
+  it('lets @Public() routes through without a token or verification', async () => {
+    mockReflector.getAllAndOverride.mockReturnValueOnce(true);
+    const ctx = createMockContext({});
+
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    expect(mockNatsClient.verifyToken).not.toHaveBeenCalled();
   });
 });

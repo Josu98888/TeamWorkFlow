@@ -109,7 +109,7 @@ export function TasksView() {
         </section>
 
         <section aria-label="Listado de tareas" className="lg:col-span-3">
-          <Card flush>
+          <Card flush glow="none">
             <div className="px-5 pt-5">
               <SectionLabel>Tareas</SectionLabel>
               <div className="flex flex-wrap gap-2 pb-4">

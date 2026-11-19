@@ -1,6 +1,8 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CurrentActor } from '../../http/decorators/current-actor.decorator';
 import { Public } from '../../http/decorators/public.decorator';
+import { AUTH_STRICT_THROTTLE } from '../../http/guards/throttler.guard';
 import { toServiceActor } from '../service-actor';
 import type { TokenPair } from '../token.service';
 import type { VerifiedActor } from '../verified-actor';
@@ -41,6 +43,7 @@ export class InvitationsController {
   // Public: the invitation token in the body is the credential. Declared
   // before the `:invitationId` routes; the paths differ in segment count.
   @Public()
+  @Throttle(AUTH_STRICT_THROTTLE)
   @Post('accept')
   accept(@Body() body: AcceptInvitationDto): Promise<TokenPair> {
     return this.accepts.accept(body);

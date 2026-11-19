@@ -1,9 +1,12 @@
 import { INestApplication } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
+import { ThrottlerModule } from '@nestjs/throttler';
 import request from 'supertest';
 import { configureApp } from '../src/app.config';
 import { AuthGuard } from '../src/http/guards/auth.guard';
+import { AppThrottlerGuard } from '../src/http/guards/throttler.guard';
+import { HealthController } from '../src/http/health/health.controller';
 import { NatsClientService } from '../src/nats/nats-client.service';
 import { JetStreamService } from '../src/nats/jetstream.service';
 import { AttendancePrismaService } from '../src/prisma/attendance-prisma.service';
@@ -69,11 +72,21 @@ describe('Telemetry E2E Integration', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
+      imports: [
+        ThrottlerModule.forRoot([
+          {
+            name: 'default',
+            ttl: 60_000,
+            limit: 4,
+          },
+        ]),
+      ],
       controllers: [
         ClockInsController,
         WorkdaysController,
         AlertsController,
         TowerController,
+        HealthController,
       ],
       providers: [
         { provide: NatsClientService, useValue: mockNatsClient },
@@ -85,6 +98,7 @@ describe('Telemetry E2E Integration', () => {
         { provide: TowerService, useValue: mockTowerService },
         { provide: TenantStateService, useValue: mockTenantStateService },
         { provide: APP_GUARD, useClass: AuthGuard },
+        { provide: APP_GUARD, useClass: AppThrottlerGuard },
       ],
     }).compile();
 
@@ -202,6 +216,9 @@ describe('Telemetry E2E Integration', () => {
         features: { tower: false },
       };
       mockNatsClient.verifyToken.mockResolvedValue(actor);
+      // The guard falls back to the local tenant features when the token lacks
+      // the feature: make that lookup answer "not included".
+      mockTenantStateService.hasFeature.mockResolvedValueOnce(false);
 
       const response = await request(app.getHttpServer())
         .get('/api/v1/telemetry/tower/snapshot')
@@ -261,6 +278,70 @@ describe('Telemetry E2E Integration', () => {
         actor,
         expect.objectContaining({ page: 1, pageSize: 20 }),
       );
+    });
+  });
+
+  describe('HTTP Security (Helmet, CORS, Throttling)', () => {
+    it('sets Helmet security headers (CSP, nosniff, frameguard) and removes X-Powered-By', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api/v1/telemetry/health')
+        .expect(200);
+
+      expect(response.headers['content-security-policy']).toBeDefined();
+      expect(response.headers['x-content-type-options']).toBe('nosniff');
+      expect(response.headers['x-frame-options']).toBe('SAMEORIGIN');
+      expect(response.headers['x-powered-by']).toBeUndefined();
+    });
+
+    it('enables CORS for WEB_ORIGIN with credentials and X-CSRF-Token preflight', async () => {
+      const preflight = await request(app.getHttpServer())
+        .options('/api/v1/telemetry/clock-events')
+        .set('Origin', 'http://localhost:3000')
+        .set('Access-Control-Request-Method', 'POST')
+        .set('Access-Control-Request-Headers', 'Content-Type,X-CSRF-Token')
+        .expect(204);
+
+      expect(preflight.headers['access-control-allow-origin']).toBe(
+        'http://localhost:3000',
+      );
+      expect(preflight.headers['access-control-allow-credentials']).toBe(
+        'true',
+      );
+      expect(preflight.headers['access-control-allow-headers']).toContain(
+        'X-CSRF-Token',
+      );
+    });
+
+    it('throttles authenticated requests per userId with 429 rate_limited', async () => {
+      const actor: VerifiedActor = {
+        userId: 'throttled-sup-1',
+        tenantId: 't1',
+        role: 'supervisor',
+        siteIds: ['site-1'],
+        tenantStatus: 'active',
+        plan: 'pro',
+        features: { alerts: true },
+      };
+      mockNatsClient.verifyToken.mockResolvedValue(actor);
+
+      for (let i = 0; i < 4; i++) {
+        await request(app.getHttpServer())
+          .get('/api/v1/telemetry/alerts')
+          .set('Authorization', 'Bearer valid-jwt')
+          .set('X-Forwarded-For', `198.51.100.${20 + i}`)
+          .expect(200);
+      }
+
+      const throttled = await request(app.getHttpServer())
+        .get('/api/v1/telemetry/alerts')
+        .set('Authorization', 'Bearer valid-jwt')
+        .set('X-Forwarded-For', '198.51.100.99')
+        .expect(429);
+
+      expect(throttled.body).toEqual({
+        detail: 'Too many requests, please try again later',
+        code: 'rate_limited',
+      });
     });
   });
 });

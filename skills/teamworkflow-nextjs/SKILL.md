@@ -19,7 +19,7 @@ allowed-tools: Read, Edit, Write, Glob, Grep, Bash, WebFetch, WebSearch, Task
 
 ## Project Status (READ FIRST)
 
-The frontend is a fresh Next.js scaffold. The NestJS backend already exists in `backend/`. The target is 2 services behind one origin: `core` (public HTTP API under `/api/v1`, modular monolith) and `telemetry` (`/api/v1/telemetry` and the `/ws` WebSocket). `core` is real code (`auth` module and HTTP layer; the legacy `backend/gateway` and `backend/auth` apps were removed) and `telemetry` has no code yet (see teamworkflow-nest).
+The frontend is integrated with the backend for every screen (auth, organization, attendance, tower, users, billing, tasks, notifications). Today it is built under `frontend/features/<domain>/` (`api.ts` switching `USE_MOCKS`, `http.ts` over `shared/lib/http.ts`, `mock.ts`, `types.ts`) with client-side fetching; the `domains/` and server-side patterns below are the target shape, so check what exists before applying them. The NestJS backend already exists in `backend/`. The target is 2 services behind one origin: `core` (public HTTP API under `/api/v1`, modular monolith) and `telemetry` (`/api/v1/telemetry` and the `/ws` WebSocket). `core` is real code (modules `auth`, `organization`, `tasks`, `notifications`, `billing` and the HTTP layer; the legacy `backend/gateway` and `backend/auth` apps were removed) and `telemetry` is implemented too (see teamworkflow-nest).
 Most files in this skill **do not exist yet**.
 
 - Before importing any module or library, check it exists (Glob/Grep, `frontend/package.json`).
@@ -493,9 +493,9 @@ export const config = {
 
 ---
 
-## Auth (NOT IMPLEMENTED YET)
+## Auth (current state and target)
 
-When the user decides to implement auth:
+Current state: cookie auth is implemented client-side (`frontend/features/auth`, `shared/lib/http.ts` with CSRF header and refresh, `shared/lib/session.ts`, `proxy.ts` and `RouteGuard` for route protection; role rules in `shared/auth/permissions.ts`). The server-side helpers below were never built; they are the target if auth moves to Server Components:
 
 - Session helpers → `domains/auth/session.ts` (`import "server-only"`), with at least `getSession()` and `requireSession()`.
 - Expose them via `domains/auth/server.ts` so other domains import `@/domains/auth/server`.
@@ -503,7 +503,7 @@ When the user decides to implement auth:
 - Pages → `app/(auth)/login/page.tsx`, `app/(auth)/signup/page.tsx`.
 - Then Grep for `TODO(auth)` and resolve every occurrence.
 
-Until then, do NOT invent auth helpers or import them.
+Do NOT invent server-side auth helpers or import them unless they exist.
 
 ---
 

@@ -1,4 +1,9 @@
 import * as joi from 'joi';
+import {
+  DB_SSL_CA_PATTERN,
+  normalizePem,
+} from '../common/prisma/pg-pool-config';
+import { NATS_CREDS_PATTERN, normalizeNatsCreds } from './nats-options';
 
 // Durations understood by jsonwebtoken / ms, e.g. `15m`, `7d`.
 const DURATION_PATTERN = /^\d+[smhd]$/;
@@ -6,9 +11,25 @@ const DURATION_PATTERN = /^\d+[smhd]$/;
 export interface Envs {
   port: number;
   natsServers: string[];
+  natsCreds?: string;
   authDatabaseUrl: string;
   organizationDatabaseUrl: string;
   billingDatabaseUrl: string;
+  tasksDatabaseUrl: string;
+  notificationsDatabaseUrl: string;
+  dbPoolMax: number;
+  dbSsl: boolean;
+  dbSslCa?: string;
+  s3Endpoint?: string;
+  s3Region: string;
+  s3Bucket: string;
+  s3AccessKey?: string;
+  s3SecretKey?: string;
+  s3ForcePathStyle: boolean;
+  mediaUrlTtlSeconds: number;
+  fcmEnabled: boolean;
+  fcmProjectId?: string;
+  fcmCredentials?: string;
   paymentProvider: 'mercadopago' | 'fake';
   mpAccessToken?: string;
   mpWebhookSecret?: string;
@@ -19,6 +40,12 @@ export interface Envs {
   graceDays: number;
   dataRetentionDays: number;
   appUrl: string;
+  webOrigin: string;
+  cookieSecure: boolean;
+  rateLimitPublicTtlMs: number;
+  rateLimitPublicLimit: number;
+  rateLimitAuthTtlMs: number;
+  rateLimitAuthLimit: number;
   jwtSecret: string;
   accessTokenTtl: string;
   refreshTokenTtl: string;
@@ -27,9 +54,25 @@ export interface Envs {
 interface EnvVars {
   PORT: number;
   NATS_SERVER: string[];
+  NATS_CREDS?: string;
   AUTH_DATABASE_URL: string;
   ORGANIZATION_DATABASE_URL: string;
   BILLING_DATABASE_URL: string;
+  TASKS_DATABASE_URL: string;
+  NOTIFICATIONS_DATABASE_URL: string;
+  DB_POOL_MAX: number;
+  DB_SSL: boolean;
+  DB_SSL_CA?: string;
+  S3_ENDPOINT?: string;
+  S3_REGION: string;
+  S3_BUCKET: string;
+  S3_ACCESS_KEY?: string;
+  S3_SECRET_KEY?: string;
+  S3_FORCE_PATH_STYLE: boolean;
+  MEDIA_URL_TTL_SECONDS: number;
+  FCM_ENABLED: boolean;
+  FCM_PROJECT_ID?: string;
+  FCM_CREDENTIALS?: string;
   PAYMENT_PROVIDER: 'mercadopago' | 'fake';
   MP_ACCESS_TOKEN?: string;
   MP_WEBHOOK_SECRET?: string;
@@ -40,6 +83,12 @@ interface EnvVars {
   GRACE_DAYS: number;
   DATA_RETENTION_DAYS: number;
   APP_URL: string;
+  WEB_ORIGIN: string;
+  COOKIE_SECURE: boolean;
+  RATE_LIMIT_PUBLIC_TTL_MS: number;
+  RATE_LIMIT_PUBLIC_LIMIT: number;
+  RATE_LIMIT_AUTH_TTL_MS: number;
+  RATE_LIMIT_AUTH_LIMIT: number;
   JWT_SECRET: string;
   ACCESS_TOKEN_TTL: string;
   REFRESH_TOKEN_TTL: string;
@@ -48,6 +97,7 @@ interface EnvVars {
 const envsSchema = joi
   .object<EnvVars>({
     PORT: joi.number().port().required(),
+    NATS_CREDS: joi.string().pattern(NATS_CREDS_PATTERN),
     NATS_SERVER: joi.array().items(joi.string().uri()).min(1).required(),
     AUTH_DATABASE_URL: joi
       .string()
@@ -61,10 +111,48 @@ const envsSchema = joi
       .string()
       .uri({ scheme: ['postgresql', 'postgres'] })
       .required(),
-    PAYMENT_PROVIDER: joi
+    TASKS_DATABASE_URL: joi
       .string()
-      .valid('mercadopago', 'fake')
-      .default('fake'),
+      .uri({ scheme: ['postgresql', 'postgres'] })
+      .required(),
+    NOTIFICATIONS_DATABASE_URL: joi
+      .string()
+      .uri({ scheme: ['postgresql', 'postgres'] })
+      .required(),
+    // Pool size of EACH Prisma client (core opens 5). The default is the pg
+    // default; lower it on hosts with a small connection budget.
+    DB_POOL_MAX: joi.number().integer().min(1).default(10),
+    // Encrypt database connections. `DB_SSL_CA` (PEM) makes them verified; it
+    // needs `DB_SSL=true`.
+    DB_SSL: joi.boolean().default(false),
+    DB_SSL_CA: joi.string().pattern(DB_SSL_CA_PATTERN).when('DB_SSL', {
+      is: true,
+      then: joi.optional(),
+      otherwise: joi.forbidden(),
+    }),
+    // Unset on AWS (the SDK targets Amazon S3); set for an S3-compatible
+    // emulator such as SeaweedFS. An empty value counts as unset.
+    S3_ENDPOINT: joi.string().uri().optional().allow(''),
+    S3_REGION: joi.string().default('us-east-1'),
+    S3_BUCKET: joi.string().default('teamworkflow-tasks'),
+    // Static keys are for emulators only. Unset on AWS: the SDK default
+    // credential chain (IAM role, instance profile, ECS task role) applies.
+    S3_ACCESS_KEY: joi.string().optional().allow(''),
+    S3_SECRET_KEY: joi.string().optional().allow(''),
+    S3_FORCE_PATH_STYLE: joi.boolean().default(false),
+    MEDIA_URL_TTL_SECONDS: joi.number().integer().positive().default(300),
+    FCM_ENABLED: joi.boolean().default(false),
+    FCM_PROJECT_ID: joi.string().when('FCM_ENABLED', {
+      is: true,
+      then: joi.required(),
+      otherwise: joi.optional().allow(''),
+    }),
+    FCM_CREDENTIALS: joi.string().when('FCM_ENABLED', {
+      is: true,
+      then: joi.required(),
+      otherwise: joi.optional().allow(''),
+    }),
+    PAYMENT_PROVIDER: joi.string().valid('mercadopago', 'fake').default('fake'),
     MP_ACCESS_TOKEN: joi.string().when('PAYMENT_PROVIDER', {
       is: 'mercadopago',
       then: joi.required(),
@@ -82,6 +170,14 @@ const envsSchema = joi
     GRACE_DAYS: joi.number().integer().positive().default(7),
     DATA_RETENTION_DAYS: joi.number().integer().positive().default(90),
     APP_URL: joi.string().uri().default('http://localhost:3002'),
+    WEB_ORIGIN: joi.string().uri().default('http://localhost:3002'),
+    // Secure auth cookies by default. Set to false only for an HTTP-only test
+    // deployment: browsers drop Secure cookies on plain http (except localhost).
+    COOKIE_SECURE: joi.boolean().default(true),
+    RATE_LIMIT_PUBLIC_TTL_MS: joi.number().integer().positive().default(60000),
+    RATE_LIMIT_PUBLIC_LIMIT: joi.number().integer().positive().default(30),
+    RATE_LIMIT_AUTH_TTL_MS: joi.number().integer().positive().default(60000),
+    RATE_LIMIT_AUTH_LIMIT: joi.number().integer().positive().default(300),
     JWT_SECRET: joi.string().min(32).required(),
     ACCESS_TOKEN_TTL: joi.string().pattern(DURATION_PATTERN).default('15m'),
     REFRESH_TOKEN_TTL: joi.string().pattern(DURATION_PATTERN).default('7d'),
@@ -92,6 +188,8 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
   const { error, value } = envsSchema.validate(
     {
       ...raw,
+      NATS_CREDS: normalizeNatsCreds(raw.NATS_CREDS),
+      DB_SSL_CA: normalizePem(raw.DB_SSL_CA),
       NATS_SERVER: raw.NATS_SERVER?.split(',').map((server) => server.trim()),
     },
     { abortEarly: false },
@@ -108,12 +206,36 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
 
   const envVars = value as EnvVars;
 
+  // Static keys come as a pair: half a pair is a misconfiguration, not a
+  // reason to silently fall back to the default credential chain.
+  if (Boolean(envVars.S3_ACCESS_KEY) !== Boolean(envVars.S3_SECRET_KEY)) {
+    throw new Error(
+      'Config validation error: invalid or missing S3_ACCESS_KEY, S3_SECRET_KEY (set both or neither)',
+    );
+  }
+
   return {
     port: envVars.PORT,
     natsServers: envVars.NATS_SERVER,
+    natsCreds: envVars.NATS_CREDS,
     authDatabaseUrl: envVars.AUTH_DATABASE_URL,
     organizationDatabaseUrl: envVars.ORGANIZATION_DATABASE_URL,
     billingDatabaseUrl: envVars.BILLING_DATABASE_URL,
+    tasksDatabaseUrl: envVars.TASKS_DATABASE_URL,
+    notificationsDatabaseUrl: envVars.NOTIFICATIONS_DATABASE_URL,
+    dbPoolMax: envVars.DB_POOL_MAX,
+    dbSsl: envVars.DB_SSL,
+    dbSslCa: envVars.DB_SSL_CA,
+    s3Endpoint: envVars.S3_ENDPOINT || undefined,
+    s3Region: envVars.S3_REGION,
+    s3Bucket: envVars.S3_BUCKET,
+    s3AccessKey: envVars.S3_ACCESS_KEY || undefined,
+    s3SecretKey: envVars.S3_SECRET_KEY || undefined,
+    s3ForcePathStyle: envVars.S3_FORCE_PATH_STYLE,
+    mediaUrlTtlSeconds: envVars.MEDIA_URL_TTL_SECONDS,
+    fcmEnabled: envVars.FCM_ENABLED,
+    fcmProjectId: envVars.FCM_PROJECT_ID || undefined,
+    fcmCredentials: envVars.FCM_CREDENTIALS || undefined,
     paymentProvider: envVars.PAYMENT_PROVIDER,
     mpAccessToken: envVars.MP_ACCESS_TOKEN,
     mpWebhookSecret: envVars.MP_WEBHOOK_SECRET,
@@ -124,6 +246,12 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
     graceDays: envVars.GRACE_DAYS,
     dataRetentionDays: envVars.DATA_RETENTION_DAYS,
     appUrl: envVars.APP_URL,
+    webOrigin: envVars.WEB_ORIGIN,
+    cookieSecure: envVars.COOKIE_SECURE,
+    rateLimitPublicTtlMs: envVars.RATE_LIMIT_PUBLIC_TTL_MS,
+    rateLimitPublicLimit: envVars.RATE_LIMIT_PUBLIC_LIMIT,
+    rateLimitAuthTtlMs: envVars.RATE_LIMIT_AUTH_TTL_MS,
+    rateLimitAuthLimit: envVars.RATE_LIMIT_AUTH_LIMIT,
     jwtSecret: envVars.JWT_SECRET,
     accessTokenTtl: envVars.ACCESS_TOKEN_TTL,
     refreshTokenTtl: envVars.REFRESH_TOKEN_TTL,

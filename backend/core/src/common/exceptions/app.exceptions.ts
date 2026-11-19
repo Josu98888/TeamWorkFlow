@@ -23,7 +23,22 @@ export type AppErrorCode =
   | 'invoice_exists'
   | 'invalid_webhook_signature'
   | 'payment_provider_error'
-  | 'feature_not_in_plan';
+  | 'feature_not_in_plan'
+  | 'form_not_found'
+  | 'task_not_found'
+  | 'media_not_found'
+  | 'form_not_published'
+  | 'task_not_open'
+  | 'task_already_claimed'
+  | 'no_shift_in_progress'
+  | 'qr_mismatch'
+  | 'answer_too_old'
+  | 'media_too_large'
+  | 'media_type_not_allowed'
+  | 'media_not_uploaded'
+  | 'notification_not_found'
+  | 'invalid_push_token'
+  | 'rate_limited';
 
 export interface ValidationErrorItem {
   field: string;
@@ -239,5 +254,107 @@ export class PaymentProviderErrorException extends AppException {
 export class FeatureNotInPlanException extends AppException {
   constructor() {
     super(403, 'feature_not_in_plan', 'Feature not included in current plan');
+  }
+}
+
+export class FormNotFoundException extends AppException {
+  constructor() {
+    super(404, 'form_not_found', 'Form not found');
+  }
+}
+
+export class TaskNotFoundException extends AppException {
+  constructor() {
+    super(404, 'task_not_found', 'Task not found');
+  }
+}
+
+export class MediaNotFoundException extends AppException {
+  constructor() {
+    super(404, 'media_not_found', 'Media not found');
+  }
+}
+
+export class FormNotPublishedException extends AppException {
+  constructor() {
+    super(409, 'form_not_published', 'Form version is not published');
+  }
+}
+
+export class TaskNotOpenException extends AppException {
+  constructor() {
+    super(409, 'task_not_open', 'Task is not open for answering or claiming');
+  }
+}
+
+export class TaskAlreadyClaimedException extends AppException {
+  constructor() {
+    super(
+      409,
+      'task_already_claimed',
+      'Task has already been claimed by another employee',
+    );
+  }
+}
+
+export class NoShiftInProgressException extends AppException {
+  constructor() {
+    super(
+      403,
+      'no_shift_in_progress',
+      'Employee does not have a shift in progress at this site and post',
+    );
+  }
+}
+
+export class QrMismatchException extends AppException {
+  constructor() {
+    super(422, 'qr_mismatch', 'Scanned QR code does not match expected QR');
+  }
+}
+
+export class AnswerTooOldException extends AppException {
+  constructor() {
+    super(422, 'answer_too_old', 'Offline answer timestamp is older than 24 hours');
+  }
+}
+
+export class MediaTooLargeException extends AppException {
+  constructor() {
+    super(422, 'media_too_large', 'Media size exceeds maximum allowed limit');
+  }
+}
+
+export class MediaTypeNotAllowedException extends AppException {
+  constructor() {
+    super(422, 'media_type_not_allowed', 'Media MIME type is not allowed');
+  }
+}
+
+export class MediaNotUploadedException extends AppException {
+  constructor() {
+    super(
+      422,
+      'media_not_uploaded',
+      'Referenced media has not been uploaded or validated in storage',
+    );
+  }
+}
+
+export class NotificationNotFoundException extends AppException {
+  constructor() {
+    super(404, 'notification_not_found', 'Notification not found');
+  }
+}
+
+export class InvalidPushTokenException extends AppException {
+  constructor(message = 'Push token is empty or malformed') {
+    super(422, 'invalid_push_token', message);
+  }
+}
+
+export class RateLimitedException extends AppException {
+  constructor() {
+    super(429, 'rate_limited', 'Too many requests, please try again later');
   }
 }

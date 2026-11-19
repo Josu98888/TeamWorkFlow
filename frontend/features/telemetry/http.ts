@@ -1,7 +1,7 @@
-import { TELEMETRY_API_PREFIX } from '@/shared/lib/config';
+import { API_PREFIX, TELEMETRY_API_PREFIX } from '@/shared/lib/config';
 import { apiFetch } from '@/shared/lib/http';
 import type { TelemetryApi } from './api';
-import type { ListAlertsQuery, ListClockEventsQuery, ListWorkdaysQuery } from './types';
+import type { ListAlertsQuery, ListClockEventsQuery, ListWorkdaysQuery, SocketTokenResponse } from './types';
 
 const options = { prefix: TELEMETRY_API_PREFIX };
 
@@ -33,3 +33,12 @@ export const telemetryHttpApi: TelemetryApi = {
   listWorkdays: (query = {}) => apiFetch(`/workdays${toQueryString(query)}`, options),
   getWorkday: (shiftId) => apiFetch(`/workdays/${shiftId}`, options),
 };
+
+/**
+ * Asks `core` (not telemetry) for a short-lived token (60 s) to authenticate the Tower socket handshake.
+ * Goes through `apiFetch`, so the session cookies, the CSRF header and the 401 rotation apply. Rejects with
+ * `ApiError` (401 no session, 403 role or plan without the tower).
+ */
+export function fetchSocketToken(): Promise<SocketTokenResponse> {
+  return apiFetch<SocketTokenResponse>('/auth/socket-token', { prefix: API_PREFIX, method: 'POST' });
+}

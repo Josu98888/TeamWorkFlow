@@ -118,6 +118,24 @@ describe('ConsumedEventProcessor', () => {
     expect(effect).toHaveBeenCalled();
   });
 
+  it('records the tenant of the event next to its id for deduplication', async () => {
+    const createMany = jest.fn().mockResolvedValue({ count: 1 });
+    mockPrisma.$transaction = jest.fn(async (callback) =>
+      callback({ processedEvent: { createMany } }),
+    );
+    const handler: ConsumedEventHandler = {
+      filter: 't.*.auth.tenant_created',
+      handle: jest.fn().mockResolvedValue([]),
+    };
+
+    await processor.process(handler, validMessage);
+
+    expect(createMany).toHaveBeenCalledWith({
+      data: [{ eventId: validEventId, tenantId: validTenant }],
+      skipDuplicates: true,
+    });
+  });
+
   it('deduplicates when eventId was already processed', async () => {
     mockPrisma.$transaction = jest.fn(async (callback) => {
       const tx = {

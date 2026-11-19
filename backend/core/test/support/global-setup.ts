@@ -1,7 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { connect } from 'node:net';
 import { resolve } from 'node:path';
-import { applyTestEnv, TEST_DB_PORT, TEST_NATS_PORT } from './test-env';
+import {
+  applyTestEnv,
+  TEST_DB_PORT,
+  TEST_S3_PORT,
+  TEST_NATS_PORT,
+} from './test-env';
 
 const START_HINT =
   'Start it from the repo root with: docker compose -f backend/docker-compose.test.yml up -d --wait';
@@ -23,13 +28,15 @@ function isReachable(port: number, timeoutMs = 2_000) {
 export default async function globalSetup() {
   applyTestEnv();
 
-  const [nats, database] = await Promise.all([
+  const [nats, database, s3] = await Promise.all([
     isReachable(TEST_NATS_PORT),
     isReachable(TEST_DB_PORT),
+    isReachable(TEST_S3_PORT),
   ]);
   const down = [
     nats ? null : `NATS (localhost:${TEST_NATS_PORT})`,
     database ? null : `PostgreSQL (localhost:${TEST_DB_PORT})`,
+    s3 ? null : `SeaweedFS S3 (localhost:${TEST_S3_PORT})`,
   ].filter(Boolean);
   if (down.length > 0) {
     throw new Error(
@@ -42,6 +49,9 @@ export default async function globalSetup() {
   for (const config of [
     'prisma.auth.config.ts',
     'prisma.organization.config.ts',
+    'prisma.billing.config.ts',
+    'prisma.tasks.config.ts',
+    'prisma.notifications.config.ts',
   ]) {
     execFileSync(
       process.execPath,

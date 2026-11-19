@@ -265,7 +265,7 @@ Models are PascalCase, fields camelCase, tables plural snake_case through `@@map
 - `InvoiceLine`: `id`, `tenantId`, `invoiceId`, `kind` (`PLAN` | `VAT`), `description`, `quantity`, `unitPrice`, `amount`.
 - `Payment`: `id`, `tenantId`, `invoiceId`, `provider` (`MERCADOPAGO` | `MANUAL`), `providerPaymentId` (unique per provider), `amount`, `currency`, `status` (`APPROVED` | `NEEDS_REVIEW` | `REJECTED`), `registeredByUserId` (manual), `paidAt`, `createdAt`.
 - `WebhookNotification`: `id`, `notificationId` (unique), `receivedAt`, `result`. NEVER store the full body or the signature.
-- `ProcessedEvent`: `eventId` (unique), `processedAt`.
+- `ProcessedEvent`: `eventId` (unique), `tenantId` (indexed, lets the purge delete a tenant's rows), `processedAt`.
 
 Every query filters by `tenantId` (admin operations filter by the explicit target tenant). Indexes for the real lookups: invoices by `(tenantId, status, dueDate)` for collections, by `(tenantId, period)`; subscriptions by `(status, trialEndsAt)` for the trial job; payments by `(invoiceId)` (`teamworkflow-postgres`). The jobs are the only code that reads across tenants; they process one tenant at a time.
 

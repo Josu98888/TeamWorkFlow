@@ -22,7 +22,7 @@ import type {
   JsMsg,
 } from '@nats-io/jetstream';
 import { connect } from '@nats-io/transport-node';
-import type { NatsConnection } from '@nats-io/transport-node';
+import type { Authenticator, NatsConnection } from '@nats-io/transport-node';
 import {
   InMemoryOutboxStore,
   OutboxRelay,
@@ -54,6 +54,7 @@ export const BILLING_EVENTS_OPTIONS = Symbol('BILLING_EVENTS_OPTIONS');
 
 export interface BillingEventsOptions {
   servers: string[];
+  authenticator?: Authenticator;
   retryInitialMs?: number;
   retryMaxMs?: number;
 }
@@ -73,6 +74,17 @@ export function handlerRetryDelayMs(deliveryCount: number) {
     HANDLER_FAILED_NAK_MS * 2 ** Math.max(deliveryCount - 1, 0),
     HANDLER_FAILED_NAK_MAX_MS,
   );
+}
+
+function errorLabel(error: unknown) {
+  if (!(error instanceof Error)) return 'UnknownError';
+  // Never the message: a Prisma validation error embeds the payload and
+  // starts with a blank line. Prisma errors carry a stable, payload-free
+  // `code` (for example P2002).
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' && /^[A-Z0-9_]{1,32}$/i.test(code)
+    ? `${error.name} ${code}`
+    : error.name;
 }
 
 function errorMessage(error: unknown) {
@@ -99,6 +111,7 @@ export class BillingEventsService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     this.connection = await connect({
       servers: this.options.servers,
+      authenticator: this.options.authenticator,
       name: 'billing',
     });
     this.js = jetstream(this.connection);
@@ -143,6 +156,7 @@ export class BillingEventsService implements OnModuleInit, OnModuleDestroy {
     const serialized = JSON.stringify({
       ...payload,
       eventId,
+      tenantId,
       occurredAt: now.toISOString(),
     });
     await this.outboxRelay.enqueue(
@@ -169,9 +183,13 @@ export class BillingEventsService implements OnModuleInit, OnModuleDestroy {
       const eventId = customEventId ?? randomUUID();
       const now = new Date();
       const subject = billingEventSubject(tenantId, event);
+      // Envelope fields last so a payload can never override them. Consumers
+      // (auth, telemetry, tasks, notifications) reject an event without a
+      // `tenantId` matching the subject tenant as malformed.
       const serialized = JSON.stringify({
         ...payload,
         eventId,
+        tenantId,
         occurredAt: now.toISOString(),
       });
       try {
@@ -330,14 +348,14 @@ export class BillingEventsService implements OnModuleInit, OnModuleDestroy {
       const deliveries = message.info.deliveryCount;
       if (deliveries >= MAX_DELIVERIES) {
         this.logger.error(
-          `Handler for ${message.subject} failed ${deliveries} times, terminating message: ${errorMessage(error)}`,
+          `Handler for ${message.subject} failed ${deliveries} times, terminating message (${errorLabel(error)})`,
         );
         message.term();
         return;
       }
       const delay = handlerRetryDelayMs(deliveries);
       this.logger.warn(
-        `Handler for ${message.subject} failed (delivery ${deliveries}/${MAX_DELIVERIES}), retrying in ${delay}ms: ${errorMessage(error)}`,
+        `Handler for ${message.subject} failed (delivery ${deliveries}/${MAX_DELIVERIES}), retrying in ${delay}ms (${errorLabel(error)})`,
       );
       message.nak(delay);
     }

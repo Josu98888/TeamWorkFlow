@@ -2,7 +2,7 @@ import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react
 import { Button } from './Button';
 
 const CONTROL =
-  'w-full rounded-lg border border-line bg-page px-3 py-2 text-sm text-body outline-none focus-visible:outline-2 focus-visible:outline-brand-medium';
+  'w-full rounded-xl border border-line bg-page/60 px-3 py-2 text-sm text-body outline-none focus-visible:outline-2 focus-visible:outline-brand-medium';
 
 function Label({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (

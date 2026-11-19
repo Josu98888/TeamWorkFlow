@@ -21,6 +21,21 @@ Out of scope (do NOT implement here):
 - Clock-ins and alerts: owned by the `attendance` domain, which lives in the `telemetry` service.
 - Thumbnails, automatic retention or deletion of photos, video, document uploads. Future work; ask before adding.
 
+### Current status
+
+The `tasks` module is fully implemented in `backend/core/src/tasks/` (`TasksModule`). It includes:
+- Pure domain engines: form validator (`form-validator.ts`), answer validator (`answer-validator.ts`), and deadline calculator (`deadline-calculator.ts`).
+- Data access: Prisma 7 (`TasksPrismaService`, `schema.prisma`) with offline-generated `init_tasks` SQL migration and independent schema `tasks` (live `migrate deploy`/`status` pending Docker PostgreSQL).
+- Media and Storage: S3 presigned upload/download URLs and answer photo verification (`StorageService`, `MediaService`, `MediaVerificationService`).
+- Forms sub-module: draft editing, validation, immutable versions (`FormsService`, `FormsController`).
+- Task Templates: recurring task templates per site/post (`TaskTemplatesService`, `TaskTemplatesController`).
+- Task Management: task creation, claiming, answering, supervisor review, and status lifecycle (`TaskManagementService`, `TasksController`).
+- Background expiration job: cron job every 5 minutes expiring overdue pending tasks (`TaskExpirationJob`).
+- Event bus & consumed events: JetStream service (`TASKS_EVENTS` stream) and consumer processor (`ConsumedEventsProcessor`) handling shift start/cancellation, tenant status changes, plan/feature gating, and data retention purge.
+- Public facade: `TasksService` exporting operations cleanly without leaking internal Prisma entities.
+- HTTP routing: wired under `/api/v1/` with inline role checks and `@RequiresFeature('tasks')` gating.
+- E2E testing: `test/e2e/tasks.e2e-spec.ts` covering full lifecycle and cross-tenant isolation (live `pnpm test:e2e` pending Docker test stack).
+
 ## Business Rules
 
 ### Forms
@@ -66,7 +81,7 @@ Same rule as attendance: the app sends a client-generated unique `clientAnswerId
 
 ### Photos and storage
 
-1. Storage is S3-compatible (MinIO locally). The module never receives the file bytes.
+1. Storage is Amazon S3 in production and an S3-compatible emulator (SeaweedFS) locally. The module never receives the file bytes.
 2. Flow: the app calls `tasks.media.request-upload` with `mime`, `sizeBytes`, `sha256` and `takenAt`; the module validates the limits, creates a `Media` row (`pending`) and returns `{ mediaId, uploadUrl, expiresAt }` with a presigned PUT URL. The app uploads directly to storage and then submits the answer with the `mediaId` in the `photo` field.
 3. When the answer is submitted, the module checks that each referenced media belongs to the tenant, was requested by the same user, and the object exists with the declared size; then marks it `uploaded`. Otherwise `media_not_uploaded` (422).
 4. Limits: 10 MB, `image/jpeg`, `image/png`, `image/webp`. Rejected otherwise (`media_too_large`, `media_type_not_allowed`, 422).
@@ -107,7 +122,7 @@ The actor (`userId`, `tenantId`, `role`, `siteIds`) comes from the HTTP layer of
 
 - NestJS 12 module inside `backend/core`; HTTP controllers for this module's endpoints live in `src/tasks/` (see `backend/core/AGENTS.md`). NATS is used for JetStream events only: this module answers no NATS requests.
 - PostgreSQL + Prisma 7 with its own `prisma/schema.prisma` in the `tasks` schema of the shared `teamworkflow` database, accessed through its own Prisma client with its own `tasks_svc` role that cannot read other schemas (see `backend/STEPS.md` S1.1). Not installed yet.
-- S3-compatible client for presigned URLs (for example `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`) against MinIO locally. Not installed yet.
+- S3-compatible client for presigned URLs (for example `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`) against Amazon S3 in production and SeaweedFS locally. Installed.
 - `class-validator` + `class-transformer` with the global `ValidationPipe` of `core` (422 `validation_error`). Not installed yet.
 - Scheduling for the expiration job (for example `@nestjs/schedule`). Not installed yet.
 - Env validation with joi in `src/config/envs.ts`, same pattern as the rest of `core`.
@@ -117,15 +132,7 @@ Ask before installing any dependency.
 
 ## Current Status (READ FIRST)
 
-`backend/core` exists (scaffold, HTTP layer and `auth` module) but this module is not built. This folder contains only this `AGENTS.md`: there is no `TasksModule`, no Prisma schema, no controllers, no MinIO container in `backend/docker-compose.yml`.
-
-First tasks, in order (ask before each install):
-
-- [ ] Create `TasksModule` in `backend/core/src/tasks/` (needs `backend/core` from T6), its config in `src/config/envs.ts` and `.env.example`.
-- [ ] Prisma schema and first migration (`Form`, `FormVersion`).
-- [ ] Sub-modules `forms`, `tasks`, `media`, with their HTTP controllers, the exported facade service and operation-name constants.
-- [ ] Consumers of `organization` and `auth` events and the expiration job.
-- [ ] MinIO in `backend/docker-compose.yml` and the module routes in its HTTP controllers (feature `tasks` required on every route).
+The module is built (see "Current status" above): `TasksModule`, Prisma schema and migration, sub-modules with HTTP controllers, event consumers, the expiration job, and SeaweedFS in both compose files. Pending: the first real run of the Docker e2e suite and migrations (`STEPS.index.md` B6).
 
 ## NATS Contract
 
@@ -214,14 +221,22 @@ Every query filters by `tenantId`. Indexes for the real lookups: tasks by `(tena
 |----------|-------------|
 | `NATS_SERVER` | Comma-separated NATS URLs (shared by all of `core`) |
 | `DATABASE_URL` | PostgreSQL connection string for this module (its own role and schema) |
-| `S3_ENDPOINT` | Storage endpoint (MinIO URL locally) |
-| `S3_REGION` | Storage region |
+| `S3_ENDPOINT` | Optional. Storage endpoint of an S3-compatible emulator (SeaweedFS `http://seaweedfs:8333` locally). Unset on AWS: the SDK targets Amazon S3. Empty counts as unset |
+| `S3_REGION` | Storage region (default `us-east-1`; the bucket's region on AWS) |
 | `S3_BUCKET` | Bucket for photos |
-| `S3_ACCESS_KEY` / `S3_SECRET_KEY` | Storage credentials |
-| `S3_FORCE_PATH_STYLE` | `true` for MinIO |
+| `S3_ACCESS_KEY` / `S3_SECRET_KEY` | Optional static credentials, both or neither (validation fails if only one is set). Local emulator only. Unset on AWS: the SDK default credential chain applies (IAM role, instance profile, ECS task role) |
+| `S3_FORCE_PATH_STYLE` | Default `false` (AWS virtual-hosted style). `true` for SeaweedFS |
 | `MEDIA_URL_TTL_SECONDS` | Presigned URL lifetime. Default `300` |
 
 Variable names are provisional until the shared `core` config exists (T4/T6): in `core` each module has its own database URL for its own role. Validate all of them in `src/config/envs.ts` and list them in `.env.example`. Never commit `.env`.
+
+## Production on AWS
+
+- Bucket: private (Block Public Access on). Objects are only reached through presigned URLs.
+- Credentials: leave `S3_ENDPOINT`, `S3_ACCESS_KEY` and `S3_SECRET_KEY` unset and attach an IAM role to the runtime (EC2 instance profile, ECS task role). Set `S3_REGION` and `S3_BUCKET`; keep `S3_FORCE_PATH_STYLE` at `false`.
+- IAM policy of that role, on the bucket: `s3:PutObject`, `s3:GetObject` and `s3:DeleteObject` on `arn:aws:s3:::<bucket>/*`, and `s3:ListBucket` on `arn:aws:s3:::<bucket>` (the tenant purge lists and deletes by prefix; `HeadObject` needs `s3:GetObject`).
+- Bucket CORS: the browser uploads photos with a presigned `PUT` straight to S3, so allow `PUT` (and `GET` for display) from the web origin, with the `Content-Type` header allowed. Mobile apps are not subject to CORS.
+- Known local gap: presigned URLs are signed for the host in `S3_ENDPOINT` (`seaweedfs:8333` inside Docker), which a browser or phone outside Docker cannot resolve. Local uploads from a real client need a reachable endpoint; this is not solved yet (on AWS the URLs point to the public S3 host, so it does not apply).
 
 ## Security Rules (non-negotiable)
 
@@ -236,7 +251,7 @@ Variable names are provisional until the shared `core` config exists (T4/T6): in
 
 - Unit tests for every use case with Prisma, the facades of other modules and the S3 client mocked (`pnpm test`).
 - Always covered: tenant isolation on forms, tasks and media; supervisor limited to `siteIds`; site/post task claimed by an employee with a shift in progress there (and refused with `no_shift_in_progress` otherwise), first claim wins and the second gets `task_already_claimed`, answer on an unassigned task claiming it in one step, only the assignee can answer afterwards; `shift_cancelled` cancelling pending per-shift tasks only (completed and expired untouched), idempotent, and answering a cancelled task giving `task_not_open`; draft editable and publish creating an immutable version; answers referencing the version used; every field type validated; required fields; QR answer matching and mismatch; per-shift generation on `shift_started` (idempotent for the same event twice, one task per template); expiration job; review `approved`/`observed` (note mandatory for observed); offline duplicates ignored and `answer_too_old` after 24 hours; photo limits (size, mime), media ownership and `media_not_uploaded`; suspended and cancelled tenants skipped by generation and expiration; plan gating (basic tenant: `tasks.task.create` answers `feature_not_in_plan` and `shift_started` generates no tasks; pro tenant: both work; `subscription_created`/`plan_changed` idempotent and stale events ignored; downgrade keeps existing tasks); tenant data purge (`data_retention_expired` deletes the tenant's S3 objects and rows, leaves other tenants untouched, is idempotent, and is redelivered when the storage call fails); idempotent handling of every consumed event.
-- E2E tests (to create in `test/`) once the transport, the database and MinIO are set up, against a dedicated test database and bucket.
+- E2E tests (to create in `test/`) once the transport, the database and SeaweedFS are set up, against a dedicated test database and bucket.
 
 ## Before Finishing a Task
 

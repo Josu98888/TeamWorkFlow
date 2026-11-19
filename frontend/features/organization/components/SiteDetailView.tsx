@@ -132,7 +132,7 @@ export function SiteDetailView({ siteId }: { siteId: string }) {
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      <Card flush className="overflow-hidden lg:col-span-2">
+      <Card flush glow="none" className="overflow-hidden lg:col-span-2">
           <SiteMap
             siteName={current.name}
             latitude={current.latitude}
@@ -156,7 +156,7 @@ export function SiteDetailView({ siteId }: { siteId: string }) {
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card flush>
+        <Card flush glow="none">
           <div className="px-5 pt-5">
             <SectionLabel action={<Can capability="sites.manage"><Button onClick={() => setPostForm('new')}>Nuevo puesto</Button></Can>}>
               Puestos · {posts.data.total}
@@ -202,7 +202,7 @@ export function SiteDetailView({ siteId }: { siteId: string }) {
           )}
         </Card>
 
-        <Card flush>
+        <Card flush glow="none">
           <div className="px-5 pt-5">
             <SectionLabel>Personal habilitado · {employees.data.total}</SectionLabel>
           </div>
@@ -227,7 +227,7 @@ export function SiteDetailView({ siteId }: { siteId: string }) {
         </Card>
       </div>
 
-      <Card flush className="mt-4">
+      <Card flush glow="none" className="mt-4">
         <div className="px-5 pt-5">
           <SectionLabel>Turnos de hoy · {shifts.data.total}</SectionLabel>
         </div>

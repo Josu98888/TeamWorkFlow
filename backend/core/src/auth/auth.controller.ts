@@ -9,13 +9,19 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
+import { envs } from '../config';
+import { CurrentActor } from '../http/decorators/current-actor.decorator';
 import { Public } from '../http/decorators/public.decorator';
+import { RequiresFeature } from '../http/decorators/requires-feature.decorator';
+import { AUTH_STRICT_THROTTLE } from '../http/guards/throttler.guard';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
-import type { TokenPair } from './token.service';
+import type { SocketToken, TokenPair } from './token.service';
+import type { VerifiedActor } from './verified-actor';
 
 const REFRESH_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
@@ -31,9 +37,14 @@ function parseCookies(header: string | undefined): Record<string, string> {
   return out;
 }
 
+// Secure is on by default (COOKIE_SECURE); never derived from NODE_ENV.
+function secureAttribute(): string {
+  return envs.cookieSecure ? '; Secure' : '';
+}
+
 function setAuthCookies(res: Response | undefined, pair: TokenPair): void {
   if (!res || typeof res.setHeader !== 'function') return;
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  const secure = secureAttribute();
   const csrfToken = randomBytes(24).toString('hex');
   const accessMaxAge = Math.max(1, pair.expiresIn);
 
@@ -46,7 +57,7 @@ function setAuthCookies(res: Response | undefined, pair: TokenPair): void {
 
 function clearAuthCookies(res: Response | undefined): void {
   if (!res || typeof res.setHeader !== 'function') return;
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  const secure = secureAttribute();
   res.setHeader('Set-Cookie', [
     `access_token=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0${secure}`,
     `refresh_token=; HttpOnly; Path=/api/v1/auth; SameSite=Lax; Max-Age=0${secure}`,
@@ -61,7 +72,10 @@ export class CookieRefreshHydratorGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const req = context.switchToHttp().getRequest<Request>();
     const body = (req.body ?? {}) as Record<string, unknown>;
-    if (typeof body.refreshToken !== 'string' || body.refreshToken.length === 0) {
+    if (
+      typeof body.refreshToken !== 'string' ||
+      body.refreshToken.length === 0
+    ) {
       const cookies = parseCookies(req.headers?.cookie);
       if (cookies.refresh_token) {
         req.body = { ...body, refreshToken: cookies.refresh_token };
@@ -78,6 +92,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
+  @Throttle(AUTH_STRICT_THROTTLE)
   @Post('register')
   async register(
     @Body() body: RegisterDto,
@@ -89,6 +104,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(AUTH_STRICT_THROTTLE)
   @Post('login')
   async login(
     @Body() body: LoginDto,
@@ -100,6 +116,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(AUTH_STRICT_THROTTLE)
   @UseGuards(CookieRefreshHydratorGuard)
   @Post('refresh')
   async refresh(
@@ -120,5 +137,14 @@ export class AuthController {
     const result = await this.authService.logout(body);
     clearAuthCookies(res);
     return result;
+  }
+
+  // Guarded like every non-public route (cookie + CSRF, or bearer). The token
+  // is returned in the body on purpose: JavaScript hands it to the socket
+  // handshake. It is never logged and never set as a cookie.
+  @RequiresFeature('tower')
+  @Post('socket-token')
+  socketToken(@CurrentActor() actor: VerifiedActor): Promise<SocketToken> {
+    return this.authService.issueSocketToken(actor);
   }
 }

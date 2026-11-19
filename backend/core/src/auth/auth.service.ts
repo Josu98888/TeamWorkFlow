@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { hashPassword, hashToken, verifyPassword } from './crypto';
 import { normalizeEmail } from '../common/email';
@@ -7,17 +7,27 @@ import { isWireRole, toWirePlan, toWireRole, toWireTenantStatus } from './wire';
 import { envs } from '../config';
 import {
   EmailTakenException,
+  FeatureNotInPlanException,
+  ForbiddenException,
   InvalidCredentialsException,
   InvalidTokenException,
+  TenantCancelledException,
+  TenantSuspendedException,
 } from '../common/exceptions/app.exceptions';
 import { AUTH_EVENTS } from './events/auth.events';
 import { JetStreamService } from './events/jetstream.service';
 import { PrismaService } from './prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
-import { VerifyTokenDto } from './dto/verify-token.dto';
+import {
+  SOCKET_TOKEN_TYP,
+  TokenPurpose,
+  VerifyTokenDto,
+} from './dto/verify-token.dto';
 import { RegisterDto } from './dto/register.dto';
-import { TokenPair, TokenService } from './token.service';
+import { SocketToken, TokenPair, TokenService } from './token.service';
+import type { ListRecipientsDto } from './users/dto/user-list-recipients.dto';
+import { UserListRecipientsService } from './users/user-list-recipients.service';
 import type { VerifiedActor } from './verified-actor';
 
 const UNIQUE_VIOLATION = 'P2002';
@@ -51,6 +61,7 @@ export class AuthService {
     private readonly tokens: TokenService,
     private readonly jwt: JwtService,
     private readonly events: JetStreamService,
+    @Optional() private readonly userListRecipients?: UserListRecipientsService,
   ) {}
 
   // Creates a tenant and its OWNER in one transaction (AGENTS § Tenants and
@@ -229,7 +240,8 @@ export class AuthService {
   // come from the token; identity, role, tenant and plan come from the
   // database, so deactivation, role changes and suspension apply immediately.
   async verify(dto: VerifyTokenDto): Promise<VerifiedActor> {
-    const claims = await this.readAccessToken(dto.accessToken);
+    const purpose = dto.purpose ?? 'access';
+    const claims = await this.readToken(dto.accessToken, purpose);
 
     const user = await this.prisma.user.findUnique({
       where: { id: claims.sub },
@@ -266,13 +278,44 @@ export class AuthService {
     };
   }
 
-  // Any signature, algorithm, expiry or shape problem is the same error.
-  private async readAccessToken(
-    accessToken: string,
+  // Short-lived ticket for the Torre de Control WebSocket (the browser cannot
+  // send the httpOnly cookie to the telemetry service, which is another
+  // origin).
+  // The actor comes from the guard's verify; every rule is re-checked here so
+  // the facade is safe even if a route forgets a decorator.
+  async issueSocketToken(actor: VerifiedActor): Promise<SocketToken> {
+    if (
+      (actor.role !== 'owner' &&
+        actor.role !== 'admin' &&
+        actor.role !== 'supervisor') ||
+      !actor.tenantId
+    ) {
+      throw new ForbiddenException();
+    }
+    if (actor.tenantStatus === 'suspended')
+      throw new TenantSuspendedException();
+    if (actor.tenantStatus === 'cancelled')
+      throw new TenantCancelledException();
+    if (!actor.features?.tower) throw new FeatureNotInPlanException();
+
+    return this.tokens.issueSocketToken({
+      userId: actor.userId,
+      tenantId: actor.tenantId,
+      role: actor.role,
+    });
+  }
+
+  // Any signature, algorithm, expiry, shape or purpose problem is the same
+  // error. The purpose keeps the two token kinds apart: an `access` token never
+  // carries a `typ` claim and a `socket` token must carry `typ: 'socket'`, so
+  // neither can be replayed where the other is expected.
+  private async readToken(
+    token: string,
+    purpose: TokenPurpose,
   ): Promise<{ sub: string; tenantId: string | null }> {
     let claims: unknown;
     try {
-      claims = await this.jwt.verifyAsync(accessToken, {
+      claims = await this.jwt.verifyAsync(token, {
         secret: envs.jwtSecret,
         algorithms: ['HS256'],
       });
@@ -280,7 +323,10 @@ export class AuthService {
       throw new InvalidTokenException();
     }
 
-    const { sub, tenantId, role } = (claims ?? {}) as Record<string, unknown>;
+    const { sub, tenantId, role, typ } = (claims ?? {}) as Record<
+      string,
+      unknown
+    >;
     if (
       typeof sub !== 'string' ||
       sub === '' ||
@@ -289,7 +335,24 @@ export class AuthService {
     ) {
       throw new InvalidTokenException();
     }
+    if (purpose === 'socket') {
+      // Socket tokens are tenant-scoped: platform_admin never gets one.
+      if (typ !== SOCKET_TOKEN_TYP || role === 'platform_admin' || !tenantId) {
+        throw new InvalidTokenException();
+      }
+    } else if (typ !== undefined) {
+      throw new InvalidTokenException();
+    }
     return { sub, tenantId };
+  }
+
+  // Internal-only facade method for core modules (`auth.user.list-recipients`);
+  // never expose via HTTP controllers or NATS responders.
+  async listRecipients(dto: ListRecipientsDto): Promise<{ userIds: string[] }> {
+    if (!this.userListRecipients) {
+      throw new Error('UserListRecipientsService is not available');
+    }
+    return this.userListRecipients.listRecipients(dto);
   }
 
   // The increment is atomic; the 5th consecutive failure sets the lock and

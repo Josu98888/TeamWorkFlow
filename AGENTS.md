@@ -83,11 +83,11 @@ TeamWorkFlow is a multitenant SaaS for managing and monitoring field staff acros
 
 | Component | Location | Tech Stack | Port |
 |-----------|----------|------------|------|
-| Core (modular monolith) | `backend/core/` (`auth` module and HTTP layer are real code; the other modules are docs only) | NestJS 12, modules `auth`, `organization`, `tasks`, `notifications`, `billing`, public HTTP API (former gateway), NATS (request/reply + JetStream), Prisma 7 | 3000 (HTTP, prefix `/api/v1`) |
-| Telemetry | `backend/telemetry/` (docs only, code not created yet) | NestJS 12, whole `attendance` domain (clock-ins, corrections, workdays, alerts, Torre de Control), Socket.IO, NATS, Prisma 7 | 3003 (HTTP `/api/v1/telemetry` + WebSocket `/ws`) |
+| Core (modular monolith) | `backend/core/` (real code: `auth`, `organization`, `tasks`, `notifications`, `billing` and the HTTP layer; tests and CI pending) | NestJS 12, modules `auth`, `organization`, `tasks`, `notifications`, `billing`, public HTTP API (former gateway), NATS (request/reply + JetStream), Prisma 7 | 3000 (HTTP, prefix `/api/v1`) |
+| Telemetry | `backend/telemetry/` (real code: clock-ins, workdays, alerts, tower) | NestJS 12, whole `attendance` domain (clock-ins, corrections, workdays, alerts, Torre de Control), Socket.IO, NATS, Prisma 7 | 3003 (HTTP `/api/v1/telemetry` + WebSocket `/ws`) |
 | Message broker | `backend/docker-compose.yml` (`nats-server`) | NATS with JetStream | 4222 (client), 8222 (monitoring) |
-| Frontend | `frontend/` | Next.js 16, React 19, Tailwind 4, TypeScript 5 | 3000 by default (see note below) |
-| Database | not set up yet | PostgreSQL + Prisma 7 (one shared database `teamworkflow`; one PostgreSQL schema, role, Prisma client and migration history per core module and for telemetry) | — |
+| Frontend | `frontend/` (every screen integrated with the HTTP API, with a mock mode) | Next.js 16, React 19, Tailwind 4, TypeScript 5 | 3000 by default (see note below) |
+| Database | `backend/docker-compose.yml` (`postgres`) | PostgreSQL + Prisma 7 (one shared database `teamworkflow`; one PostgreSQL schema, role, Prisma client and migration history per core module and for telemetry) | — |
 
 The MVP backend is exactly 2 services (see [`docs/architecture.md`](docs/architecture.md)):
 
@@ -96,7 +96,7 @@ The MVP backend is exactly 2 services (see [`docs/architecture.md`](docs/archite
 
 A reverse proxy publishes both under one origin, routing by path (`/api/v1/telemetry` and `/ws` to `telemetry`, the rest of `/api/v1` to `core`; longest prefix first), so the frontend still sees one API.
 
-> **Status.** `backend/core` is real code for the `auth` module and the HTTP layer (the legacy `gateway` and `auth` apps were merged into it and removed in task T6/T7 of `odd/tasks/two-service-architecture.md`). The other modules (`organization`, `tasks`, `notifications`, `billing`) and `backend/telemetry` are documented but not built. Their design docs already live in `backend/core/src/<module>/AGENTS.md` and `backend/telemetry/AGENTS.md`.
+> **Status.** `backend/core` has real code for every module (`auth`, `organization`, `tasks`, `notifications`, `billing`) and the HTTP layer (the legacy `gateway` and `auth` apps were merged into it and removed in task T6/T7 of `odd/tasks/two-service-architecture.md`), and `backend/telemetry` is implemented. Per-module PostgreSQL schemas, roles, Prisma clients and migrations are in place. The frontend is integrated with every screen (mock mode via `NEXT_PUBLIC_USE_MOCKS`). Pending: automated tests and CI/CD, and the Docker e2e verification of `tasks` and `notifications` (see `STEPS.index.md`). Design docs live in `backend/core/src/<module>/AGENTS.md` and `backend/telemetry/AGENTS.md`.
 Naming is English everywhere in the MVP (folders, NATS patterns `<module>.<resource>.<action>`, events `t.<tenant>.<module>.<event>`, error codes, data model); the Spanish names in the root `README.md` belong to the 16-service target architecture, which stays as the long-term reference (each core module is a natural extraction candidate).
 
 > Port clash: `core` and `next dev` both default to 3000. Run the frontend on another port (`pnpm dev -p 3002`) until this is fixed in config.
@@ -146,6 +146,30 @@ pnpm build       # nest build
 ```
 
 Frontend: `pnpm lint` (eslint) and `pnpm build`.
+
+### CI
+
+`.github/workflows/ci.yml` runs on pull requests to `develop`/`main`, on pushes to them and on manual dispatch. Three parallel jobs, each skipped when its app did not change (`dorny/paths-filter`; a change to the workflow runs all):
+
+- `core` and `telemetry`: Prisma generate, `pnpm lint`, `pnpm test` (unit, no Postgres or NATS; dummy non-secret env in the job), `pnpm build`.
+- `frontend`: `pnpm lint`, `npx tsc --noEmit`, `pnpm build` (mock mode).
+
+Two more jobs run the e2e suites (same path filters):
+
+- `core-e2e`: starts `backend/docker-compose.test.yml` (PostgreSQL with the per-module schemas and roles, NATS with JetStream, SeaweedFS S3; compose because service containers cannot pass `-js` or mount the init script), creates the bucket, generates the Prisma clients and runs `pnpm test:e2e` (its `globalSetup` applies the migrations). No env is set in the job: `test/support/test-env.ts` pins the throwaway values and ports 5433, 4223 and 9002.
+- `telemetry`: also runs `pnpm test:e2e` after the unit tests (its e2e mocks NATS and the database, so it needs no services).
+
+One more job verifies the production images (path filter `docker`: Dockerfiles, `.dockerignore`, `next.config.*`, package and lock files, Prisma configs and migrations, test compose, `backend/postgres/**`):
+
+- `docker`: builds `core` (runner and migrate), `telemetry` (runner and migrate) and the frontend with Buildx (`push: false`, GitHub cache), starts only `postgres-test` from `backend/docker-compose.test.yml`, runs both migrate images on the compose network with each module's `<module>_svc` test role, and smoke-tests the frontend image (`curl /` answers 2xx or 3xx). The `core` and `telemetry` runners are only built (they need NATS, PostgreSQL and the full env to boot).
+
+The `docker` job also validates the production stack under `deploy/` (`docker compose config -q` for the base and TLS files, `nginx -t` for the HTTP and HTTPS configs); `deploy/**` is in its path filter.
+
+Node 24 and pnpm 11.5.2. The e2e and docker jobs are pending a green PR run (see `odd/tasks/ci-cd.md`).
+
+### Deploy
+
+`deploy/` holds the production stack for one EC2 host (Compose, nginx, env examples) and its runbook: `deploy/README.md`. PostgreSQL is RDS, images come from GHCR, and `deploy/.env` and `deploy/env/*.env` are git-ignored. A zero-cost demo on Vercel, Render, Koyeb, Synadia Cloud and Supabase has its own guide: `deploy/free-tier/README.md`. One VPS running this same stack with Supabase for PostgreSQL and task media has its own guide: `deploy/vps/README.md`.
 
 ---
 

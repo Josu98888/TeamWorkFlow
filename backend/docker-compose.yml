@@ -50,9 +50,23 @@ services:
       - AUTH_DATABASE_URL=postgresql://auth_svc:${AUTH_DB_PASSWORD}@postgres:5432/teamworkflow?schema=auth
       - ORGANIZATION_DATABASE_URL=postgresql://organization_svc:${ORGANIZATION_DB_PASSWORD}@postgres:5432/teamworkflow?schema=organization
       - BILLING_DATABASE_URL=postgresql://billing_svc:${BILLING_DB_PASSWORD}@postgres:5432/teamworkflow?schema=billing
+      - TASKS_DATABASE_URL=postgresql://tasks_svc:${TASKS_DB_PASSWORD}@postgres:5432/teamworkflow?schema=tasks
+      - NOTIFICATIONS_DATABASE_URL=postgresql://notifications_svc:${NOTIFICATIONS_DB_PASSWORD}@postgres:5432/teamworkflow?schema=notifications
+      - FCM_ENABLED=${FCM_ENABLED:-false}
+      - FCM_PROJECT_ID=${FCM_PROJECT_ID:-}
+      - FCM_CREDENTIALS=${FCM_CREDENTIALS:-}
+      # Local S3 emulator (SeaweedFS). On AWS leave S3_ENDPOINT and the keys unset.
+      - S3_ENDPOINT=http://seaweedfs:8333
+      - S3_REGION=us-east-1
+      - S3_BUCKET=teamworkflow-tasks
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-local-s3-access}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-local-s3-secret-key}
+      - S3_FORCE_PATH_STYLE=true
+      - MEDIA_URL_TTL_SECONDS=300
       - JWT_SECRET=${JWT_SECRET:?set JWT_SECRET in backend/.env}
       - ACCESS_TOKEN_TTL=${ACCESS_TOKEN_TTL:-15m}
       - REFRESH_TOKEN_TTL=${REFRESH_TOKEN_TTL:-7d}
+      - WEB_ORIGIN=${WEB_ORIGIN:-http://localhost:3002}
       # Bind mounts on Windows do not emit file events; polling makes --watch reload work
       - CHOKIDAR_USEPOLLING=true
     depends_on:
@@ -60,6 +74,8 @@ services:
         condition: service_started
       postgres:
         condition: service_healthy
+      seaweedfs-init:
+        condition: service_completed_successfully
 
   telemetry:
     build:
@@ -83,6 +99,41 @@ services:
       postgres:
         condition: service_healthy
 
+  # S3-compatible storage for local development (the app uses Amazon S3 in production).
+  # Local dev credentials only; the S3 gateway admin identity comes from the AWS_* variables.
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    command: ["server", "-s3", "-s3.port=8333"]
+    ports:
+      - "8333:8333"
+    environment:
+      - AWS_ACCESS_KEY_ID=${S3_ACCESS_KEY:-local-s3-access}
+      - AWS_SECRET_ACCESS_KEY=${S3_SECRET_KEY:-local-s3-secret-key}
+    volumes:
+      - seaweedfs-data:/data
+
+  # Creates the bucket (idempotent) and exits 0.
+  seaweedfs-init:
+    image: chrislusf/seaweedfs:latest
+    depends_on:
+      - seaweedfs
+    restart: "no"
+    environment:
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-local-s3-access}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-local-s3-secret-key}
+      - S3_BUCKET=teamworkflow-tasks
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        for i in $$(seq 1 60); do
+          code=$$(curl -s -o /dev/null -w '%{http_code}' -X PUT --aws-sigv4 'aws:amz:us-east-1:s3' --user "$$S3_ACCESS_KEY:$$S3_SECRET_KEY" "http://seaweedfs:8333/$$S3_BUCKET")
+          case "$$code" in 200|409) echo "bucket $$S3_BUCKET ready ($$code)"; exit 0;; esac
+          sleep 2
+        done
+        echo "could not create bucket $$S3_BUCKET" >&2
+        exit 1
+
   proxy:
     image: nginx:alpine
     ports:
@@ -96,3 +147,4 @@ services:
 volumes:
   nats-data:
   postgres-data:
+  seaweedfs-data:

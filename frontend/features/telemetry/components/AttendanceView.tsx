@@ -124,7 +124,7 @@ function ClockEventsTab({ siteId, employeeId, employeeNames, siteNames }: TabPro
       ) : events.data.items.length === 0 ? (
         <EmptyState title="No hay fichadas" description="Probá con otros filtros o registrá una fichada manual." />
       ) : (
-        <Card flush>
+        <Card flush glow="none">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[46rem] text-left text-sm">
               <thead>
@@ -198,7 +198,7 @@ function WorkdaysTab({ siteId, employeeId, employeeNames, siteNames }: TabProps)
       ) : workdays.data.items.length === 0 ? (
         <EmptyState title="No hay jornadas" description="Las jornadas se generan a partir de las fichadas de cada turno." />
       ) : (
-        <Card flush>
+        <Card flush glow="none">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[46rem] text-left text-sm">
               <thead>

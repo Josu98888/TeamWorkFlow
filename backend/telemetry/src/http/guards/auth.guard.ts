@@ -19,6 +19,7 @@ import type { Role } from '../../nats/dto/nats-contracts';
 import { TenantStateService } from '../../tenants/tenant-state.service';
 import type { AuthenticatedRequest } from '../authenticated-request';
 import { REQUIRE_FEATURE_KEY } from '../decorators/features.decorator';
+import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -57,6 +58,13 @@ export class AuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    // Only the health route is public (deliberate exception, see AGENTS.md).
+    const isPublic = this.reflector.getAllAndOverride<boolean | undefined>(
+      IS_PUBLIC_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+    if (isPublic) return true;
+
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
 
     // 1. Extract token (bearer takes precedence for mobile, cookie for web)

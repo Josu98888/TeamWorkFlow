@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { envs } from '../../config';
+import { buildNatsOptions } from '../../config/nats-options';
 import { JETSTREAM_OPTIONS, JetStreamService } from './jetstream.service';
 
 // Private to `auth`. `ConsumedEventProcessor` and the event handlers live in
@@ -9,7 +10,7 @@ import { JETSTREAM_OPTIONS, JetStreamService } from './jetstream.service';
   providers: [
     {
       provide: JETSTREAM_OPTIONS,
-      useFactory: () => ({ servers: envs.natsServers }),
+      useFactory: () => buildNatsOptions(envs.natsServers, envs.natsCreds),
     },
     JetStreamService,
   ],

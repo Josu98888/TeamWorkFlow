@@ -126,8 +126,7 @@ Si el plan no incluye la funcionalidad de una ruta (`tasks`), la respuesta es 40
 |----------|-------------|
 | `PORT` | Puerto HTTP |
 | `NATS_SERVER` | URLs de NATS separadas por coma |
-| `WEB_ORIGIN` | Origen web permitido (CORS, credenciales habilitadas) |
-| `COOKIE_SECURE` | Flag `Secure` de las cookies; si falta, se deriva de `NODE_ENV` |
+| `COOKIE_SECURE` | Flag `Secure` de las cookies; por defecto `true` en todos los entornos (no depende de `NODE_ENV`). `false` solo para un despliegue de prueba solo-HTTP (advertencia al arrancar si `NODE_ENV=production`) |
 | `RATE_LIMIT_PUBLIC_TTL_MS`, `RATE_LIMIT_PUBLIC_LIMIT` | Rutas públicas por IP. Valores iniciales: `60000`, `30` |
 | `RATE_LIMIT_AUTH_TTL_MS`, `RATE_LIMIT_AUTH_LIMIT` | Rutas autenticadas por usuario. Valores iniciales: `60000`, `300` |
 

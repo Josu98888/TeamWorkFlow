@@ -1,6 +1,9 @@
 import { createHmac } from 'node:crypto';
 import { of, throwError, NEVER } from 'rxjs';
-import { NatsClientService } from './nats-client.service';
+import {
+  NatsClientService,
+  verifyHs256JwtLocally,
+} from './nats-client.service';
 import { NATS_PATTERNS } from './nats.constants';
 import {
   AppException,
@@ -161,7 +164,7 @@ describe('NatsClientService', () => {
       'verifyToken',
       NATS_PATTERNS.AUTH_TOKEN_VERIFY,
       ['tok'],
-      { accessToken: 'tok' },
+      { accessToken: 'tok', purpose: 'access' },
     ],
     [
       'getEmployee',
@@ -193,4 +196,161 @@ describe('NatsClientService', () => {
       expect(client.send).toHaveBeenCalledWith(pattern, payload);
     },
   );
+
+  describe('token purpose', () => {
+    const secret = 'super-secret-jwt-key-for-testing-1234';
+    const actor = {
+      userId: 'user-1',
+      tenantId: 'tenant-1',
+      role: 'supervisor' as const,
+      siteIds: ['site-1'],
+      tenantStatus: 'active' as const,
+      plan: 'pro' as const,
+      features: { tower: true },
+    };
+    const noResponders = () => {
+      const err = new Error('No responders');
+      err.name = 'EmptyResponseException';
+      return throwError(() => err);
+    };
+    const claims = (extra: Record<string, unknown> = {}) => ({
+      sub: 'user-1',
+      tenantId: 'tenant-1',
+      role: 'supervisor',
+      exp: Math.floor(Date.now() / 1000) + 60,
+      ...extra,
+    });
+
+    it('verifies as access by default and sends the purpose in the payload', async () => {
+      client.send.mockReturnValueOnce(of(actor));
+
+      await service.verifyToken('tok');
+
+      expect(client.send).toHaveBeenCalledWith(
+        NATS_PATTERNS.AUTH_TOKEN_VERIFY,
+        {
+          accessToken: 'tok',
+          purpose: 'access',
+        },
+      );
+    });
+
+    it('sends the socket purpose in the payload', async () => {
+      client.send.mockReturnValueOnce(of(actor));
+
+      await service.verifyToken('tok', { purpose: 'socket' });
+
+      expect(client.send).toHaveBeenCalledWith(
+        NATS_PATTERNS.AUTH_TOKEN_VERIFY,
+        {
+          accessToken: 'tok',
+          purpose: 'socket',
+        },
+      );
+    });
+
+    it('never serves a result cached for one purpose to the other', async () => {
+      client.send.mockReturnValue(of(actor));
+
+      await service.verifyToken('same-token', { cacheTtlMs: 5000 });
+      await service.verifyToken('same-token', {
+        cacheTtlMs: 5000,
+        purpose: 'socket',
+      });
+
+      expect(client.send).toHaveBeenCalledTimes(2);
+      expect(client.send).toHaveBeenLastCalledWith(
+        NATS_PATTERNS.AUTH_TOKEN_VERIFY,
+        { accessToken: 'same-token', purpose: 'socket' },
+      );
+    });
+
+    it('still caches access verification keyed by purpose', async () => {
+      client.send.mockReturnValue(
+        of({ ...actor, exp: Math.floor(Date.now() / 1000) + 300 }),
+      );
+
+      await service.verifyToken('tok', { cacheTtlMs: 5000, purpose: 'access' });
+      await service.verifyToken('tok', { cacheTtlMs: 5000 });
+
+      expect(client.send).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not cache socket verification', async () => {
+      client.send.mockReturnValue(
+        of({ ...actor, exp: Math.floor(Date.now() / 1000) + 300 }),
+      );
+
+      await service.verifyToken('tok', { cacheTtlMs: 5000, purpose: 'socket' });
+      await service.verifyToken('tok', { cacheTtlMs: 5000, purpose: 'socket' });
+
+      expect(client.send).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects a socket token on the local fallback for access (HTTP)', async () => {
+      client.send.mockReturnValueOnce(noResponders());
+
+      await expect(
+        service.verifyToken(
+          signTestHs256Jwt(claims({ typ: 'socket' }), secret),
+          {
+            jwtSecret: secret,
+          },
+        ),
+      ).rejects.toBeInstanceOf(InvalidTokenException);
+    });
+
+    it('verifyHs256JwtLocally rejects any token with a typ claim and accepts one without', () => {
+      expect(
+        verifyHs256JwtLocally(signTestHs256Jwt(claims(), secret), secret),
+      ).toMatchObject({ userId: 'user-1', role: 'supervisor' });
+      for (const typ of ['socket', 'access', '']) {
+        expect(() =>
+          verifyHs256JwtLocally(
+            signTestHs256Jwt(claims({ typ }), secret),
+            secret,
+          ),
+        ).toThrow(InvalidTokenException);
+      }
+    });
+
+    it('never uses the local fallback for the socket purpose', async () => {
+      client.send.mockReturnValue(noResponders());
+
+      for (const extra of [{ typ: 'socket' }, {}]) {
+        await expect(
+          service.verifyToken(signTestHs256Jwt(claims(extra), secret), {
+            jwtSecret: secret,
+            purpose: 'socket',
+          }),
+        ).rejects.toBeInstanceOf(UpstreamUnavailableException);
+      }
+    });
+
+    it('never serves a previously verified socket actor when core is down', async () => {
+      client.send.mockReturnValueOnce(
+        of({ ...actor, exp: Math.floor(Date.now() / 1000) + 300 }),
+      );
+      await service.verifyToken('tok', { cacheTtlMs: 5000, purpose: 'socket' });
+      client.send.mockReturnValueOnce(noResponders());
+
+      await expect(
+        service.verifyToken('tok', { cacheTtlMs: 5000, purpose: 'socket' }),
+      ).rejects.toBeInstanceOf(UpstreamUnavailableException);
+    });
+
+    it('propagates the invalid_token answer of core for a socket token', async () => {
+      client.send.mockReturnValueOnce(
+        throwError(() => ({
+          status: 401,
+          code: 'invalid_token',
+          message: 'Invalid token',
+        })),
+      );
+
+      await expect(
+        service.verifyToken('tok', { purpose: 'socket' }),
+      ).rejects.toMatchObject({ status: 401, code: 'invalid_token' });
+    });
+  });
 });

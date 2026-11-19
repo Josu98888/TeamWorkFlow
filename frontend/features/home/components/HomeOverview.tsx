@@ -111,9 +111,9 @@ export function HomeOverview() {
           <Link
             key={area.href}
             href={area.href}
-            className="group block rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-medium"
+            className="group block rounded-[22px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-medium"
           >
-            <Card className="h-full transition-colors group-hover:bg-alt">
+            <Card interactive className="h-full">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-teal">Área</p>
               <h2 className="mt-1 text-lg font-bold text-title">{area.title}</h2>
               <p className="mt-1 text-sm text-muted">{area.description}</p>

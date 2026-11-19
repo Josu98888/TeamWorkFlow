@@ -98,6 +98,8 @@ Out of scope (do NOT implement here):
 - `auth.logout` revokes the current refresh token. The access token stays valid until it expires (max 15 minutes); this is accepted for the token itself, but `auth.token.verify` rechecks the user and the tenant on every call (below), so deactivation and suspension take effect immediately.
 - Revoked tokens stay in `auth`: revocation means refresh tokens revoked in the `auth` database. There is no revocation list in NATS KV.
 - `auth.token.verify` (called by the HTTP layer of `core` on every authenticated request and on every WebSocket connection) checks signature, expiry, that the user still exists and is active, and that the tenant status allows access (see Tenant status). It returns `{ userId, tenantId, role, siteIds, tenantStatus, plan, features }`. `siteIds` is returned only for `supervisor`. For `platform_admin`, `tenantId`, `tenantStatus`, `plan` and `features` are `null` (it has no tenant and is never blocked by a tenant status). `plan` and `features` are the tenant's current ones (see Plan and features); they are `null` until the first `subscription_created` arrives.
+- Socket token (`auth.socket-token.issue`, `POST /auth/socket-token`): a JWT signed with the same secret and HS256 as the access token, with claims `sub`, `tenantId`, `role`, `typ: 'socket'`, `jti`, `iat`, `exp` (60 seconds; response `{ token, expiresIn: 60 }`). It exists because the Tower WebSocket connects straight to `telemetry` on another origin, where the httpOnly `access_token` cookie is not sent and JavaScript cannot read it. It is only a ticket for the handshake, not a session: no refresh token is stored, and the socket session length is `telemetry`'s own fixed limit. The service re-checks everything (role owner/admin/supervisor, a tenant, status not suspended/cancelled, feature `tower`); `platform_admin` never gets one.
+- `purpose` in `auth.token.verify`: optional, `access` (default) or `socket`. `access` rejects any token that has a `typ` claim (existing access tokens have none, so they keep working); `socket` requires `typ === 'socket'` and a tenant (never `platform_admin`). Everything else (signature, HS256 only, expiry, user, tenant, plan and features read from the database) is the same for both. The two kinds are separated by the claim, not by a second key; every verifier (this one and the local fallback in `telemetry`) must keep that check.
 - The HTTP layer of `core` MUST take `tenantId`, `role`, `siteIds`, `plan` and `features` from the verified result, never from the request body, query or headers. It blocks routes whose feature the plan lacks with 403 `feature_not_in_plan`, and routes `billing.admin.*` only to `platform_admin`.
 
 ### Tenant status (past due, suspension, cancellation)
@@ -181,6 +183,7 @@ Layout (all under `src/auth/`, all providers of `AuthModule`; none is exported):
 
 | Method + path | Operation | Auth | Roles |
 |---|---|---|---|
+| `POST /auth/socket-token` | `auth.socket-token.issue` | guarded (cookie + CSRF, or bearer); `@RequiresFeature('tower')` | owner, admin, supervisor (`platform_admin` and `employee` refused; suspended or cancelled tenant answers 403) |
 | `POST /auth/invitations` | `auth.invitation.create` | guarded | owner, admin (admin only for `supervisor`/`employee`) |
 | `GET /auth/invitations` | `auth.invitation.list` | guarded | owner, admin |
 | `POST /auth/invitations/:invitationId/regenerate` | `auth.invitation.regenerate` | guarded | owner, admin (admin only for non-admin invitations) |
@@ -211,7 +214,8 @@ In `core` the operations below are **in-process calls** to the module's facade s
 | `auth.login` | HTTP controller (public) | `email`, `password` | token pair |
 | `auth.token.refresh` | HTTP controller (public) | `refreshToken` | token pair |
 | `auth.logout` | HTTP controller | `refreshToken` | `{ ok: true }` |
-| `auth.token.verify` | HTTP guard of `core` (facade call); `telemetry` for its HTTP guard and WebSocket connections (NATS responder) | `accessToken` | `{ userId, tenantId, role, siteIds, tenantStatus, plan, features }` |
+| `auth.token.verify` | HTTP guard of `core` (facade call); `telemetry` for its HTTP guard and WebSocket connections (NATS responder) | `accessToken`, optional `purpose` (`access` default, or `socket`) | `{ userId, tenantId, role, siteIds, tenantStatus, plan, features }` |
+| `auth.socket-token.issue` | HTTP controller (owner/admin/supervisor, feature `tower`); not a NATS responder | actor (verified, with `tenantStatus` and `features`) | `{ token, expiresIn }` (60 s, `typ: 'socket'`) |
 | `auth.invitation.create` | HTTP controller (owner/admin) | actor, `email`, `role` | `{ invitationId, token, expiresAt }` |
 | `auth.invitation.list` | HTTP controller (owner/admin) | actor | pending invitations (`invitationId`, `email`, `role`, `expiresAt`) |
 | `auth.invitation.regenerate` | HTTP controller (owner/admin) | actor, `invitationId` | `{ invitationId, token, expiresAt }` |

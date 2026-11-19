@@ -2,4 +2,9 @@ node_modules/
 .next/
 out/
 .env
+.env.*
+coverage/
+test-results/
+*.tsbuildinfo
 .vscode/
+.git/

@@ -22,7 +22,7 @@ import type {
   JsMsg,
 } from '@nats-io/jetstream';
 import { connect } from '@nats-io/transport-node';
-import type { NatsConnection } from '@nats-io/transport-node';
+import type { Authenticator, NatsConnection } from '@nats-io/transport-node';
 import {
   InMemoryOutboxStore,
   OutboxRelay,
@@ -50,6 +50,7 @@ export const ORGANIZATION_EVENTS_OPTIONS = Symbol(
 
 export interface OrganizationEventsOptions {
   servers: string[];
+  authenticator?: Authenticator;
   // Backoff while a producer's stream does not exist yet (durable creation).
   retryInitialMs?: number;
   retryMaxMs?: number;
@@ -74,8 +75,13 @@ export function handlerRetryDelayMs(deliveryCount: number) {
   );
 }
 
-function errorName(error: unknown) {
-  return error instanceof Error ? error.name : 'UnknownError';
+function errorLabel(error: unknown) {
+  if (!(error instanceof Error)) return 'UnknownError';
+  // Prisma errors carry a stable, payload-free `code` (for example P2002).
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' && /^[A-Z0-9_]{1,32}$/i.test(code)
+    ? `${error.name} ${code}`
+    : error.name;
 }
 
 function errorMessage(error: unknown) {
@@ -108,6 +114,7 @@ export class OrganizationEventsService
   async onModuleInit() {
     this.connection = await connect({
       servers: this.options.servers,
+      authenticator: this.options.authenticator,
       name: 'organization',
     });
     this.js = jetstream(this.connection);
@@ -313,13 +320,13 @@ export class OrganizationEventsService
       const deliveries = message.info.deliveryCount;
       if (deliveries >= MAX_DELIVERIES) {
         this.logger.error(
-          `Handler failed for ${message.subject} (${errorName(error)}) after ${deliveries} deliveries, giving up`,
+          `Handler failed for ${message.subject} (${errorLabel(error)}) after ${deliveries} deliveries, giving up`,
         );
         message.term('max deliveries reached');
         return;
       }
       this.logger.error(
-        `Handler failed for ${message.subject} (${errorName(error)}), will be redelivered`,
+        `Handler failed for ${message.subject} (${errorLabel(error)}), will be redelivered`,
       );
       message.nak(handlerRetryDelayMs(deliveries));
     }

@@ -6,6 +6,7 @@ import { Badge } from '@/shared/components/Badge';
 import { Button } from '@/shared/components/Button';
 import { Card } from '@/shared/components/Card';
 import { SelectField, TextField } from '@/shared/components/Fields';
+import { DataTable, Toolbar } from '@/shared/components/List';
 import { PageHeader } from '@/shared/components/PageHeader';
 import { EmptyState, ErrorState, LoadingState } from '@/shared/components/States';
 import { useAction } from '@/shared/hooks/useAction';
@@ -98,7 +99,7 @@ export function ShiftsView() {
         </p>
       )}
 
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <Toolbar>
         <SelectField
           label="Sede"
           value={siteId}
@@ -112,7 +113,7 @@ export function ShiftsView() {
           options={[{ value: '', label: 'Todos' }, ...(employees.data?.items ?? []).map((employee) => ({ value: employee.id, label: fullName(employee) }))]}
         />
         <TextField label="Día" type="date" value={day} onChange={setDay} disabled={!siteId} hint={siteId ? undefined : 'Elegí una sede para filtrar por día.'} />
-      </div>
+      </Toolbar>
 
       {shifts.error ? (
         <ErrorState message="No pudimos cargar los turnos." onRetry={shifts.reload} />
@@ -121,33 +122,32 @@ export function ShiftsView() {
       ) : shifts.data.items.length === 0 ? (
         <EmptyState title="No hay turnos" description="Probá con otros filtros o creá un turno." />
       ) : (
-        <Card flush>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[44rem] text-left text-sm">
+        <Card flush glow="none">
+          <DataTable>
               <thead>
-                <tr className="text-[11px] font-semibold uppercase tracking-wider text-muted">
-                  <th scope="col" className="px-5 py-3">Horario</th>
-                  <th scope="col" className="px-5 py-3">Sede</th>
-                  <th scope="col" className="px-5 py-3">Empleado</th>
-                  <th scope="col" className="px-5 py-3">Estado</th>
-                  <th scope="col" className="px-5 py-3"><span className="sr-only">Acciones</span></th>
+                <tr>
+                  <th scope="col">Horario</th>
+                  <th scope="col">Sede</th>
+                  <th scope="col">Empleado</th>
+                  <th scope="col">Estado</th>
+                  <th scope="col"><span className="sr-only">Acciones</span></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-line">
+              <tbody>
                 {shifts.data.items.map((shift) => {
                   const person = shift.employeeId ? employeeById.get(shift.employeeId) : undefined;
                   const open = shift.status === 'SCHEDULED' || shift.status === 'IN_PROGRESS';
                   return (
                     <tr key={shift.id}>
-                      <td className="whitespace-nowrap px-5 py-3 font-semibold text-title">
+                      <td className="whitespace-nowrap font-semibold text-title">
                         {formatDateTime(shift.startsAt)} – {formatDateTime(shift.endsAt)}
                       </td>
-                      <td className="px-5 py-3 text-body">{siteById.get(shift.siteId)?.name ?? 'Sede'}</td>
-                      <td className="px-5 py-3 text-body">{person ? fullName(person) : <span className="text-muted">Sin asignar</span>}</td>
-                      <td className="px-5 py-3">
+                      <td className="text-body">{siteById.get(shift.siteId)?.name ?? 'Sede'}</td>
+                      <td className="text-body">{person ? fullName(person) : <span className="text-muted">Sin asignar</span>}</td>
+                      <td>
                         <Badge tone={SHIFT_STATUS_TONES[shift.status]}>{SHIFT_STATUS_LABELS[shift.status]}</Badge>
                       </td>
-                      <td className="whitespace-nowrap px-5 py-3 text-right">
+                      <td className="whitespace-nowrap text-right">
                         {open && (
                           <Can capability="shifts.manage">
                             <Button variant="ghost" onClick={() => setDialog({ kind: 'edit', shift })}>Editar</Button>
@@ -160,8 +160,7 @@ export function ShiftsView() {
                   );
                 })}
               </tbody>
-            </table>
-          </div>
+            </DataTable>
         </Card>
       )}
     </>

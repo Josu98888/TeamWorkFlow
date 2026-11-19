@@ -1,0 +1,11 @@
+# TLS override, used once a certificate exists (see README.md, "Enable TLS"):
+#   docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml --profile tls up -d
+# or set COMPOSE_FILE=docker-compose.prod.yml:docker-compose.tls.yml and COMPOSE_PROFILES=tls in deploy/.env.
+
+services:
+  nginx:
+    ports: # appended to the base "80:80"
+      - "443:443"
+    volumes:
+      # Same target as the base file, so this replaces the HTTP-only server block.
+      - ./nginx/tls/https.conf:/etc/nginx/conf.d/default.conf:ro

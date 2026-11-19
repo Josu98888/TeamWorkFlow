@@ -3,8 +3,8 @@ import type { ButtonHTMLAttributes } from 'react';
 type Variant = 'primary' | 'secondary' | 'ghost';
 
 const VARIANTS = {
-  primary: 'bg-brand text-white hover:opacity-90',
-  secondary: 'border border-line bg-page text-body hover:bg-hover',
+  primary: 'bg-brand text-white shadow-sm hover:opacity-90',
+  secondary: 'border border-line bg-card text-body hover:bg-alt',
   ghost: 'text-link hover:bg-alt',
 } as const satisfies Record<Variant, string>;
 
@@ -16,7 +16,7 @@ export function Button({ variant = 'secondary', className = '', type = 'button',
   return (
     <button
       type={type}
-      className={`cursor-pointer rounded-lg px-3 py-1.5 text-xs font-semibold tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS} ${VARIANTS[variant]} ${className}`}
+      className={`cursor-pointer rounded-xl px-3.5 py-1.5 text-xs font-semibold tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS} ${VARIANTS[variant]} ${className}`}
       {...rest}
     />
   );

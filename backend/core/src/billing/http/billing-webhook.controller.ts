@@ -1,4 +1,4 @@
-import { Controller, Headers, Post, Req } from '@nestjs/common';
+import { Controller, Headers, HttpCode, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { Public } from '../../http/decorators/public.decorator';
 import { BillingService } from '../billing.service';
@@ -9,6 +9,7 @@ export class BillingWebhookController {
 
   @Public()
   @Post('mercadopago')
+  @HttpCode(200)
   async handleMercadoPago(
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Req() req: Request,

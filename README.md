@@ -6,12 +6,13 @@
 
 ## Estado actual del repositorio
 
-Hoy solo existen:
+Hoy existen:
 
-- `backend/core`: monolito modular con el módulo `auth` y la capa HTTP pública (guard de autenticación, filtro de excepciones, rutas de auth), ya implementados.
-- `frontend/`: esqueleto de Next.js.
+- `backend/core`: monolito modular con los módulos `auth`, `organization`, `tasks`, `notifications` y `billing` y la capa HTTP pública (guard de autenticación, filtro de excepciones), ya implementados.
+- `backend/telemetry`: dominio `attendance` (fichadas, jornadas, alertas) y Torre de Control, ya implementado.
+- `frontend/`: aplicación Next.js integrada con la API HTTP pública (con modo demo mediante datos simulados).
 
-El MVP se rediseñó como **2 servicios** (`core` y `telemetry`; ver [MVP](#mvp) y [docs/architecture.md](docs/architecture.md)). `backend/core` ya contiene la capa HTTP y el módulo `auth` (las apps `backend/gateway` y `backend/auth` se fusionaron en él y se eliminaron). `backend/telemetry` no existe todavía. También hay documentación de diseño (sin código) de los módulos del MVP en `backend/organization`, `backend/attendance`, `backend/tasks`, `backend/notifications` y `backend/billing`; esa documentación se reorganizará en `backend/core` y `backend/telemetry`. Todo lo demás (esos módulos, las bases de datos, la Torre de Control, etc.) está **planificado**; consulte la sección [MVP](#mvp) y, más abajo, la arquitectura objetivo.
+El MVP se rediseñó como **2 servicios** (`core` y `telemetry`; ver [MVP](#mvp) y [docs/architecture.md](docs/architecture.md)). `backend/core` ya contiene la capa HTTP y los módulos `auth`, `organization`, `tasks`, `notifications` y `billing` (las apps `backend/gateway` y `backend/auth` se fusionaron en él y se eliminaron), y `backend/telemetry` implementa el dominio `attendance` y la Torre de Control. Cada módulo tiene su esquema de PostgreSQL, rol, cliente Prisma y migraciones. Quedan pendientes las pruebas automatizadas, el CI/CD y la verificación con Docker de `tasks` y `notifications`. La documentación de diseño de cada módulo está en `backend/core/src/<módulo>/AGENTS.md` y en `backend/telemetry/AGENTS.md`. Los servicios de la arquitectura objetivo que no son parte del MVP siguen **planificados**; consulte la sección [MVP](#mvp) y, más abajo, la arquitectura objetivo.
 
 ## Descripción de la aplicación
 
@@ -65,8 +66,8 @@ El MVP se construye con **2 servicios de backend** (los nombres de carpetas, los
 
 | Servicio del MVP | Carpeta | Contiene | Expone |
 |---|---|---|---|
-| `core` (monolito modular) | `backend/core/` (`auth` y capa HTTP implementados; el resto de módulos por crear) | Módulos `auth`, `organization`, `tasks`, `notifications` y `billing`, y la API HTTP pública (el antiguo `gateway`) | HTTP `/api/v1`; responde las peticiones NATS de telemetría (`auth.token.verify`, `organization.*.get`) |
-| `telemetry` | `backend/telemetry/` (por crear) | Todo el dominio `attendance`: ingesta de fichadas, correcciones, jornadas, alertas en tiempo real y Torre de Control | HTTP `/api/v1/telemetry`; WebSocket (Socket.IO) de la Torre de Control |
+| `core` (monolito modular) | `backend/core/` (`auth`, `organization`, `tasks`, `notifications`, `billing` y capa HTTP implementados) | Módulos `auth`, `organization`, `tasks`, `notifications` y `billing`, y la API HTTP pública (el antiguo `gateway`) | HTTP `/api/v1`; responde las peticiones NATS de telemetría (`auth.token.verify`, `organization.*.get`) |
+| `telemetry` | `backend/telemetry/` (implementado) | Todo el dominio `attendance`: ingesta de fichadas, correcciones, jornadas, alertas en tiempo real y Torre de Control | HTTP `/api/v1/telemetry`; WebSocket (Socket.IO) de la Torre de Control |
 
 Un proxy inverso publica ambos servicios bajo el mismo origen y enruta por path (`/api/v1/telemetry` y `/ws` hacia `telemetry`, el resto de `/api/v1` hacia `core`; gana el prefijo más largo), de modo que el frontend sigue viendo una sola API y nunca se conecta a NATS.
 
@@ -147,7 +148,7 @@ Hay 18 servicios: 16 de dominio y 2 transversales. Cada uno es dueño de sus dat
 - **Rate limiting:** `@nestjs/throttler` en memoria: las rutas públicas (login, registro, aceptar invitación, restablecer contraseña, webhooks) se limitan por IP; las rutas autenticadas se limitan por usuario. Pasa a un almacén compartido (Redis) cuando el gateway corre con más de una réplica.
 - **Restricción por plan:** toma `plan` y `features` del resultado verificado y responde 403 `feature_not_in_plan` en las rutas cuya funcionalidad el plan no incluye. Enruta `billing.admin.*` solo a `platform_admin`.
 - **Tenant en mora, suspendido o cancelado:** lee `tenantStatus` del resultado de `auth.token.verify`. Si el tenant está `suspended` o `cancelled`, solo deja pasar al `owner` y a los `admin` hacia las rutas de facturación (pagar o volver a suscribirse) y de exportación de datos; todo lo demás responde 403 `tenant_suspended` o `tenant_cancelled`.
-- **WebSocket de la Torre de Control:** con `@nestjs/websockets` (Socket.IO), el navegador se conecta a `telemetry` (ruta `/ws` del mismo origen) enviando el token de acceso. `telemetry` lo valida con `auth.token.verify`, une el socket a una sala por cada sede permitida (supervisor: sus `siteIds`; `owner`/`admin`: todas las sedes del tenant), se suscribe del lado del servidor a `t.<tenant>.attendance.site_summary_updated` y reenvía cada mensaje a la sala de su `siteId`. El estado inicial se solicita por solicitud-respuesta con `attendance.tower.snapshot`. Esto significa que `telemetry` mantiene conexiones WebSocket abiertas; más adelante puede pasar a un servicio `tower` dedicado sin cambiar el frontend. (Diseño objetivo: en el MVP el gateway es la capa HTTP de `core`.)
+- **WebSocket de la Torre de Control:** con `@nestjs/websockets` (Socket.IO), el navegador se conecta a `telemetry` (ruta `/ws` del mismo origen) enviando un token de socket de 60 segundos emitido por `core` (`POST /api/v1/auth/socket-token`). `telemetry` lo valida con `auth.token.verify`, une el socket a una sala por cada sede permitida (supervisor: sus `siteIds`; `owner`/`admin`: todas las sedes del tenant), se suscribe del lado del servidor a `t.<tenant>.attendance.site_summary_updated` y reenvía cada mensaje a la sala de su `siteId`. El estado inicial se solicita por solicitud-respuesta con `attendance.tower.snapshot`. Esto significa que `telemetry` mantiene conexiones WebSocket abiertas; más adelante puede pasar a un servicio `tower` dedicado sin cambiar el frontend. (Diseño objetivo: en el MVP el gateway es la capa HTTP de `core`.)
 - **Webhooks:** expone la ruta pública del webhook de Mercado Pago y reenvía el cuerpo sin procesar a `billing.webhook.mercadopago`.
 - **BFF (futuro):** APIs separadas para móvil y web solo si una única API compartida deja de ser suficiente.
 - **Sin base de datos propia y sin NATS KV** (la capa HTTP de `core` no tiene schema; usa los módulos).
@@ -358,7 +359,7 @@ Los empleados inician sesión como todos los demás, con correo y contraseña. S
 
 ### Torre de Control
 
-1. El navegador abre un WebSocket (Socket.IO) hacia `telemetry` (`/ws`) y envía el token de acceso.
+1. El navegador pide un token de socket de 60 segundos a `core` (`POST /api/v1/auth/socket-token`), abre un WebSocket (Socket.IO) hacia `telemetry` (`/ws`) y lo envía en el handshake (`auth.token`).
 2. `telemetry` lo valida con `auth.token.verify` (la Torre de Control es una funcionalidad Pro) y une el socket a una sala por cada sede permitida: los `siteIds` del supervisor, o todas las sedes del tenant para `owner` y `admin`.
 3. `telemetry` obtiene la instantánea inicial con `attendance.tower.snapshot` (interna de `telemetry`) y la envía al socket.
 4. `telemetry` se suscribe del lado del servidor a `t.<tenant>.attendance.site_summary_updated` y reenvía cada mensaje a la sala de su `siteId`. El navegador nunca habla con NATS.
