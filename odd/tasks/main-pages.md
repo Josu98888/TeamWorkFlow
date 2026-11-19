@@ -90,3 +90,20 @@ Se apoya en las otras ramas de diseño. Hacerlas antes, o reutilizar sus tokens 
 - [ ] M6 Facturación (plan actual, comparación, medio de pago, facturas).
 - [ ] M7 Mi jornada (botón de fichar, GPS, fichadas y jornadas).
 - [ ] M8 Revisar cada página en 1280 y 390 px, en claro y oscuro, contra las capturas; `pnpm lint` y `pnpm build`.
+
+## Adjustments (decided 2026-11-19)
+The user asked to use the prototype as a guide, not to the letter, and to pick what works better. Changes against the spec above:
+
+- **Site detail joins this feature.** `odd/tasks/site-detail.md` (D1-D4) is done here first, because Torre and Sedes reuse its map style. Its D5 visual check merges into M8.
+- **Real maps instead of the drawn one.** Torre and the Sedes overview use the existing Leaflet map with each site at its real coordinates; the prototype's dotted circle with `presentes/esperados` becomes the marker (`divIcon`), with the same muted tiles as the site detail. Reason: a drawn map lies about where the sites are, and Leaflet is already in the app.
+- **Mini maps in the Sedes cards** are one static OSM tile image per card (no Leaflet instance per card), lazy-loaded, with the geofence ring drawn in CSS on top. One OSM attribution line on the page.
+- **No invented numbers.** Deltas such as "+4 % respecto de ayer" or "Esperan respuesta" appear only when the data exists; otherwise the tile shows the hint only.
+- **Greeting without a name.** The session carries no user name (see `sidebar-glass`), so the welcome says "Buenas tardes" plus the company name when available.
+- **Mi jornada on the phone:** the clock-in card, then today's punches (they confirm what the employee just did), then the shift tasks, then the history.
+- **QR:** text plus "Copiar" and "Imprimir", no QR library (needs team approval).
+
+## Delivery
+Branch `feat/frontend/main-pages`, stacked on `feat/frontend/list-pages`; the design commits of `design/frontend/site-detail` and `design/frontend/main-pages` were cherry-picked. Route: delegated, one writer at a time in this order: (1) M1 + site detail D1-D4 + M5 Sedes, (2) M3 Torre + M2 Panel, (3) M7 Mi jornada + M4 Asistencia, (4) M6 Facturación. One commit per page. Forecast ~2,000+ lines: PRs sliced per page later. TDD off (no frontend unit runner); checks `pnpm lint`, `npx tsc --noEmit`, `pnpm build`.
+
+## Progress
+- Designs received and adjustments recorded. Next: writer 1.
