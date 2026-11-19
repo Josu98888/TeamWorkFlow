@@ -48,7 +48,12 @@ describe('envs', () => {
       graceDays: 7,
       dataRetentionDays: 90,
       appUrl: 'http://localhost:3002',
+      webOrigin: 'http://localhost:3002',
       cookieSecure: true,
+      rateLimitPublicTtlMs: 60000,
+      rateLimitPublicLimit: 30,
+      rateLimitAuthTtlMs: 60000,
+      rateLimitAuthLimit: 300,
       jwtSecret: validEnv.JWT_SECRET,
       accessTokenTtl: '15m',
       refreshTokenTtl: '7d',
@@ -348,5 +353,29 @@ describe('envs', () => {
     expect(
       validateEnvs({ ...validEnv, DB_SSL_CA: '' }).dbSslCa,
     ).toBeUndefined();
+  });
+
+  it('accepts custom WEB_ORIGIN and rate limit settings and rejects invalid values', () => {
+    const envs = validateEnvs({
+      ...validEnv,
+      WEB_ORIGIN: 'https://app.teamworkflow.com',
+      RATE_LIMIT_PUBLIC_TTL_MS: '30000',
+      RATE_LIMIT_PUBLIC_LIMIT: '15',
+      RATE_LIMIT_AUTH_TTL_MS: '120000',
+      RATE_LIMIT_AUTH_LIMIT: '600',
+    });
+
+    expect(envs.webOrigin).toBe('https://app.teamworkflow.com');
+    expect(envs.rateLimitPublicTtlMs).toBe(30000);
+    expect(envs.rateLimitPublicLimit).toBe(15);
+    expect(envs.rateLimitAuthTtlMs).toBe(120000);
+    expect(envs.rateLimitAuthLimit).toBe(600);
+
+    expect(() =>
+      validateEnvs({ ...validEnv, WEB_ORIGIN: 'not-a-uri' }),
+    ).toThrow('WEB_ORIGIN');
+    expect(() =>
+      validateEnvs({ ...validEnv, RATE_LIMIT_PUBLIC_LIMIT: '0' }),
+    ).toThrow('RATE_LIMIT_PUBLIC_LIMIT');
   });
 });
