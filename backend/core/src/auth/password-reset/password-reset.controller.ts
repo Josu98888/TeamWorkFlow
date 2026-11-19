@@ -1,6 +1,8 @@
 import { Body, Controller, Param, Post } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CurrentActor } from '../../http/decorators/current-actor.decorator';
 import { Public } from '../../http/decorators/public.decorator';
+import { AUTH_STRICT_THROTTLE } from '../../http/guards/throttler.guard';
 import { toServiceActor } from '../service-actor';
 import { UserIdParamDto } from '../users/dto/user-id-param.dto';
 import type { VerifiedActor } from '../verified-actor';
@@ -31,6 +33,7 @@ export class PasswordResetController {
 
   // Public: the reset token in the body is the credential.
   @Public()
+  @Throttle(AUTH_STRICT_THROTTLE)
   @Post('password-reset/confirm')
   confirm(@Body() body: ConfirmPasswordResetDto): Promise<{ ok: true }> {
     return this.confirmService.confirm(body);
