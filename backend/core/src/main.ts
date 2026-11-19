@@ -17,6 +17,17 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule);
   configureApp(app);
+  app.enableCors({
+    origin: envs.webOrigin,
+    credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-CSRF-Token',
+      'X-Client',
+    ],
+  });
 
   // Hybrid app: HTTP for clients plus the NATS responders `telemetry` needs
   // (`auth.token.verify`). The app config is not inherited on purpose: the
