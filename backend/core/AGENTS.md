@@ -111,8 +111,7 @@ Rules inherited from the former gateway design. They apply to every route of eve
 
 ### CORS
 
-- Not enabled in `core`, and `core` has no `WEB_ORIGIN` variable: the web reaches `core` from the same origin through the reverse proxy, so no CORS is needed. (`WEB_ORIGIN` belongs to `telemetry`, which uses it for CORS and the Socket.IO origin.)
-- If `core` ever serves a cross-origin web client: add the allowed origin to `src/config/envs.ts`, allow only that origin with `credentials: true` and explicit methods and headers (including `X-CSRF-Token`). Never use `*` together with credentials. Mobile apps are not subject to browser CORS.
+- Enabled in `core` (`src/app.config.ts` and `src/main.ts`) for `WEB_ORIGIN` (`src/config/env.schema.ts`, default `http://localhost:3002`) with `credentials: true` and explicit methods and headers (including `X-CSRF-Token` and `X-Client`). Never use `*` together with credentials. Mobile apps are not subject to browser CORS.
 
 ### Role checks
 
@@ -271,8 +270,9 @@ Shared by `core` (each module adds its own, listed in its `AGENTS.md`; final nam
 |----------|-------------|
 | `PORT` | HTTP port |
 | `NATS_SERVER` | Comma-separated NATS URLs |
+| `WEB_ORIGIN` | Allowed web origin for CORS (credentials enabled; default `http://localhost:3002`) |
 | `COOKIE_SECURE` | Boolean, default `true` in every environment (not derived from `NODE_ENV`). Set `false` only for an HTTP-only test deployment; core logs a warning at startup when it is `false` with `NODE_ENV=production` |
-| `RATE_LIMIT_PUBLIC_TTL_MS` / `RATE_LIMIT_PUBLIC_LIMIT` | Public routes per IP. Initial values: `60000` / `30` |
+| `RATE_LIMIT_PUBLIC_TTL_MS` / `RATE_LIMIT_PUBLIC_LIMIT` | Public routes per IP. Initial values: `60000` / `30` (brute-force-sensitive public auth routes use a stricter limit of `10` per minute) |
 | `RATE_LIMIT_AUTH_TTL_MS` / `RATE_LIMIT_AUTH_LIMIT` | Authenticated routes per user. Initial values: `60000` / `300` |
 
 All defaults are initial values to tune with real traffic. Validate every variable in `src/config/envs.ts` and list them in `.env.example`. Never commit `.env`.
