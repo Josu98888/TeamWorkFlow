@@ -66,6 +66,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:?set JWT_SECRET in backend/.env}
       - ACCESS_TOKEN_TTL=${ACCESS_TOKEN_TTL:-15m}
       - REFRESH_TOKEN_TTL=${REFRESH_TOKEN_TTL:-7d}
+      - WEB_ORIGIN=${WEB_ORIGIN:-http://localhost:3002}
       # Bind mounts on Windows do not emit file events; polling makes --watch reload work
       - CHOKIDAR_USEPOLLING=true
     depends_on:
