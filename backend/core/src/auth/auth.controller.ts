@@ -9,11 +9,13 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { envs } from '../config';
 import { CurrentActor } from '../http/decorators/current-actor.decorator';
 import { Public } from '../http/decorators/public.decorator';
 import { RequiresFeature } from '../http/decorators/requires-feature.decorator';
+import { AUTH_STRICT_THROTTLE } from '../http/guards/throttler.guard';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -90,6 +92,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
+  @Throttle(AUTH_STRICT_THROTTLE)
   @Post('register')
   async register(
     @Body() body: RegisterDto,
@@ -101,6 +104,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(AUTH_STRICT_THROTTLE)
   @Post('login')
   async login(
     @Body() body: LoginDto,
@@ -112,6 +116,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(AUTH_STRICT_THROTTLE)
   @UseGuards(CookieRefreshHydratorGuard)
   @Post('refresh')
   async refresh(
