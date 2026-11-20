@@ -6,7 +6,6 @@ import { useResource } from '@/shared/hooks/useResource';
 import { Button } from '@/shared/components/Button';
 import { Card, SectionLabel } from '@/shared/components/Card';
 import { KpiIcon } from '@/shared/components/KpiIcon';
-import { KpiTile } from '@/shared/components/KpiTile';
 import { PageHeader } from '@/shared/components/PageHeader';
 import { Segmented } from '@/shared/components/Segmented';
 import { EmptyState, ErrorState, LoadingState } from '@/shared/components/States';
@@ -17,6 +16,7 @@ import { useTowerLive } from '../useTowerLive';
 import type { Alert } from '../types';
 import { AlertItem } from './AlertItem';
 import { SiteStatusRow } from './SiteStatusRow';
+import { TowerKpiStrip } from './TowerKpiStrip';
 import { TowerMap, type TowerMapSite, type TowerSiteState } from './TowerMap';
 import './tower.css';
 
@@ -182,38 +182,44 @@ export function TowerView() {
     <>
       {header}
 
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <KpiTile
-          label="Presentes ahora"
-          value={present}
-          secondary={`/${expected}`}
-          icon={<KpiIcon name="users" />}
-          delta={present < expected ? `${expected - present} sin fichar` : 'Completo'}
-          hint="Personal que fichó entrada"
-          tone={present < expected ? 'warning' : 'success'}
-        />
-        <KpiTile
-          label="Cobertura"
-          value={formatPercent(expected === 0 ? 1 : present / expected)}
-          icon={<KpiIcon name="coverage" />}
-          hint="Presentes sobre esperados"
-          tone={present < expected ? 'warning' : 'success'}
-        />
-        <KpiTile
-          label="Alertas abiertas"
-          value={countByStatus('OPEN')}
-          icon={<KpiIcon name="bell" />}
-          hint="Esperan reconocimiento"
-          tone={countByStatus('OPEN') > 0 ? 'danger' : 'success'}
-        />
-        <KpiTile
-          label="Reconocidas"
-          value={countByStatus('ACKNOWLEDGED')}
-          icon={<KpiIcon name="eye" />}
-          hint="En seguimiento"
-          tone="process"
-        />
-      </div>
+      <TowerKpiStrip
+        items={[
+          {
+            id: 'present',
+            label: 'Presentes ahora',
+            value: present,
+            secondary: `/ ${expected}`,
+            badge: present < expected ? `${expected - present} sin fichar` : 'Completo',
+            hint: 'Personal que fichó entrada',
+            tone: present < expected ? 'warning' : 'success',
+            icon: <KpiIcon name="users" />,
+          },
+          {
+            id: 'coverage',
+            label: 'Cobertura',
+            value: formatPercent(expected === 0 ? 1 : present / expected),
+            hint: 'Presentes sobre esperados',
+            tone: present < expected ? 'warning' : 'success',
+            icon: <KpiIcon name="coverage" />,
+          },
+          {
+            id: 'open-alerts',
+            label: 'Alertas abiertas',
+            value: countByStatus('OPEN'),
+            hint: 'Esperan reconocimiento',
+            tone: countByStatus('OPEN') > 0 ? 'danger' : 'success',
+            icon: <KpiIcon name="bell" />,
+          },
+          {
+            id: 'ack-alerts',
+            label: 'Reconocidas',
+            value: countByStatus('ACKNOWLEDGED'),
+            hint: 'En seguimiento',
+            tone: 'process',
+            icon: <KpiIcon name="eye" />,
+          },
+        ]}
+      />
 
       {/* Phones stack alerts, map, then per-site state; on desktop the alerts take the right column. */}
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-5">
