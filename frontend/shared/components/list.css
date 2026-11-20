@@ -37,6 +37,24 @@
   background: color-mix(in srgb, var(--chip-bg) 55%, transparent);
 }
 
+/* Flat variant: thin separators instead of boxed rows (RowList variant="lines"). */
+.list-rows[data-variant='lines'] {
+  gap: 0;
+  padding: 0 20px 8px;
+}
+
+.list-rows[data-variant='lines'] .list-row {
+  padding: 12px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-main);
+  border-radius: 0;
+  background: transparent;
+}
+
+.list-rows[data-variant='lines'] .list-row:last-child {
+  border-bottom: 0;
+}
+
 /* Icon chip used as the leading element of a row. */
 .list-chip {
   display: grid;

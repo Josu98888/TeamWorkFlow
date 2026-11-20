@@ -17,4 +17,5 @@ export type {
 } from './types';
 export { AttendanceView } from './components/AttendanceView';
 export { MyShiftView } from './components/MyShiftView';
+export { QrScanner, canScanQr } from './components/QrScanner';
 export { TowerView } from './components/TowerView';

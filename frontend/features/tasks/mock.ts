@@ -2,7 +2,9 @@ import { minutesFromNow, mockResponse } from '@/shared/lib/mock';
 import { TENANT_ID, employeeId, mockId, postId, shiftId, siteId } from '@/shared/mocks/world';
 import type { TasksApi } from './api';
 import { buildTaskReport } from './report';
-import type { Task, TaskStatus } from './types';
+import { ApiError } from '@/shared/lib/http';
+import { formsMock, mockFormVersions } from './mock-forms';
+import type { MediaUpload, Task, TaskStatus } from './types';
 
 type Seed = {
   title: string;
@@ -35,6 +37,8 @@ const SEEDS: readonly Seed[] = [
   { title: 'Auditoría de libro de actas', site: 3, post: 1, employee: null, status: 'CANCELLED', deadline: -400 },
 ];
 
+const VERSIONS = mockFormVersions();
+
 const TASKS: Task[] = SEEDS.map((seed, index) => ({
   id: mockId(8, index + 1),
   tenantId: TENANT_ID,
@@ -48,9 +52,24 @@ const TASKS: Task[] = SEEDS.map((seed, index) => ({
   postId: postId(seed.site, seed.post),
   shiftId: seed.perShift ? shiftId(seed.site, seed.post, 'current') : null,
   createdAt: minutesFromNow(-600),
+  formVersionId: VERSIONS[index % VERSIONS.length].id,
+  formVersion: VERSIONS[index % VERSIONS.length],
+  expectedQr: null,
+  answer: null,
 }));
 
+/** The demo employee: owns the pending seeded task of employee 2 and can claim the unclaimed ones. */
+const MY_EMPLOYEE_ID = employeeId(2);
+
+function findOpenTask(taskId: string): Task {
+  const task = TASKS.find((item) => item.id === taskId);
+  if (!task) throw new ApiError(404, 'task_not_found', 'Task not found');
+  if (task.status !== 'PENDING') throw new ApiError(409, 'task_not_open', 'Task is not open');
+  return task;
+}
+
 export const tasksMockApi: TasksApi = {
+  ...formsMock,
   listTasks: (query = {}) =>
     mockResponse(
       TASKS.filter(
@@ -61,4 +80,71 @@ export const tasksMockApi: TasksApi = {
       ).sort((a, b) => a.deadline.localeCompare(b.deadline)),
     ),
   getTaskReport: () => mockResponse(buildTaskReport(TASKS)),
+  listMyTasks: () =>
+    mockResponse(
+      TASKS.filter((task) => task.status === 'PENDING' && (task.employeeId === null || task.employeeId === MY_EMPLOYEE_ID)).sort(
+        (a, b) => a.deadline.localeCompare(b.deadline),
+      ),
+    ),
+  claimTask: (taskId) => {
+    try {
+      const task = findOpenTask(taskId);
+      if (task.employeeId !== null && task.employeeId !== MY_EMPLOYEE_ID) throw new ApiError(409, 'task_already_claimed', 'Task already claimed');
+      task.employeeId = MY_EMPLOYEE_ID;
+      task.claimedAt = task.claimedAt ?? new Date().toISOString();
+      return mockResponse({ ...task });
+    } catch (cause) {
+      return Promise.reject(cause);
+    }
+  },
+  answerTask: (taskId, input) => {
+    try {
+      const task = findOpenTask(taskId);
+      const qrField = task.formVersion?.fields.find((field) => field.type === 'qr');
+      if (task.expectedQr && qrField && input.answers[qrField.key] !== task.expectedQr) {
+        throw new ApiError(422, 'qr_mismatch', 'Scanned QR code does not match expected QR');
+      }
+      task.employeeId = MY_EMPLOYEE_ID;
+      task.status = 'COMPLETED';
+      task.answer = {
+        id: mockId(11, TASKS.length),
+        taskId,
+        answers: input.answers,
+        deviceTime: input.deviceTime,
+        receivedAt: new Date().toISOString(),
+        reviewResult: 'NONE',
+        reviewNote: null,
+      };
+      return mockResponse({ ...task });
+    } catch (cause) {
+      return Promise.reject(cause);
+    }
+  },
+  requestUpload: (): Promise<MediaUpload> =>
+    mockResponse({ mediaId: crypto.randomUUID(), uploadUrl: 'mock://storage/upload', expiresAt: minutesFromNow(5) }),
+  uploadFile: () => mockResponse(undefined),
+  createTask: (input) => {
+    const version = mockFormVersions().find((item) => item.id === input.formVersionId);
+    if (!version) return Promise.reject(new ApiError(409, 'form_not_published', 'Form version is not published'));
+    const task: Task = {
+      id: mockId(8, TASKS.length + 1),
+      tenantId: TENANT_ID,
+      kind: 'SINGLE',
+      status: 'PENDING',
+      title: input.title?.trim() || version.name,
+      deadline: input.deadline,
+      employeeId: input.employeeId ?? null,
+      claimedAt: null,
+      siteId: input.siteId,
+      postId: input.postId,
+      shiftId: null,
+      createdAt: new Date().toISOString(),
+      formVersionId: version.id,
+      formVersion: version,
+      expectedQr: input.expectedQr ?? null,
+      answer: null,
+    };
+    TASKS.push(task);
+    return mockResponse(task);
+  },
 };

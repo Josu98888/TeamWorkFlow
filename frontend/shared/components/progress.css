@@ -1,0 +1,8 @@
+/* Gradient fills of ProgressBar. Tokens only. */
+.progress-fill[data-tone='brand'] {
+  background: linear-gradient(90deg, var(--brand-medium), var(--brand-lavender));
+}
+
+.progress-fill[data-tone='done'] {
+  background: linear-gradient(90deg, var(--brand-teal), var(--brand-mint));
+}

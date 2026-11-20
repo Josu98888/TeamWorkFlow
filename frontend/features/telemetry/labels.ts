@@ -65,3 +65,11 @@ export const CLOCK_ERROR_MESSAGES: Record<string, string> = {
   upstream_timeout: 'El servidor tardó demasiado en responder. Probá de nuevo.',
   upstream_unavailable: 'El servicio no está disponible por el momento. Probá de nuevo en unos minutos.',
 };
+
+/** Severity of an alert type: drives the color bar of its card. A resolved alert is shown as done. */
+export const ALERT_TYPE_SEVERITY = {
+  LATE: 'warning',
+  UNCOVERED_POST: 'danger',
+  OUT_OF_GEOFENCE: 'danger',
+  MISSING_CLOCK_OUT: 'warning',
+} as const satisfies Record<AlertType, 'warning' | 'danger'>;

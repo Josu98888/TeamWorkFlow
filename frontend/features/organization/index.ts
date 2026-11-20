@@ -5,6 +5,19 @@ export { EmployeesView } from './components/EmployeesView';
 export { ShiftsView } from './components/ShiftsView';
 export { SiteDetailView } from './components/SiteDetailView';
 export { SitesView } from './components/SitesView';
+// Shared map style (muted tiles, geofence, markers, controls) for other domains such as the Torre de Control.
+export { MapPill, MapPills, MapZoomControls } from './components/map/MapControls';
+export {
+  OSM_ATTRIBUTION,
+  OSM_TILES,
+  geofenceCircle,
+  osmTileLayer,
+  personIcon,
+  siteInitialIcon,
+  sitePinIcon,
+  zoomForRadius,
+} from './components/map/markers';
+export type { SiteMarkerState } from './components/map/markers';
 export type {
   Employee,
   InvitableRole,

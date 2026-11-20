@@ -1,4 +1,5 @@
-import type { ButtonHTMLAttributes } from 'react';
+import Link from 'next/link';
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
 type Variant = 'primary' | 'secondary' | 'ghost';
 
@@ -47,5 +48,19 @@ export function FilterChip({ label, count, active, onSelect }: FilterChipProps) 
         </span>
       )}
     </button>
+  );
+}
+
+type ButtonLinkProps = { href: string; variant?: Variant; className?: string; children: ReactNode };
+
+/** Navigation link with the look of `Button` (page header and card actions). */
+export function ButtonLink({ href, variant = 'secondary', className = '', children }: ButtonLinkProps) {
+  return (
+    <Link
+      href={href}
+      className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold tracking-wide transition-colors ${FOCUS} ${VARIANTS[variant]} ${className}`}
+    >
+      {children}
+    </Link>
   );
 }

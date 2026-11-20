@@ -1,0 +1,203 @@
+/* Torre de Control: presence markers on the map, map legend, alert cards. Tokens only. */
+
+/* Site marker: dashed circle with presentes/esperados and the name underneath. data-state: ok | warn | danger. */
+.tw-tower-site {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px dashed var(--brand-lavender);
+  background: linear-gradient(135deg, var(--brand-medium), var(--brand-primary));
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--brand-dark) 40%, transparent);
+  color: var(--sidebar-strong);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tw-tower-site[data-state='warn'] {
+  border-color: var(--status-warning);
+  background: var(--status-warning);
+}
+
+.tw-tower-site[data-state='danger'] {
+  border-color: var(--status-danger);
+  background: var(--status-danger);
+}
+
+.tw-tower-site[data-selected='true'] {
+  outline: 3px solid var(--brand-medium);
+  outline-offset: 3px;
+}
+
+.tw-tower-site[data-state='danger']::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--status-danger);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tw-tower-site[data-state='danger']::after {
+    animation: tw-tower-pulse 1.8s ease-out infinite;
+  }
+}
+
+@keyframes tw-tower-pulse {
+  from {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+.tw-tower-label {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 1px 7px;
+  border: 1px solid var(--border-main);
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--text-title);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: var(--tile-shadow);
+}
+
+/* Legend over the bottom-left corner of the map. */
+.tw-tower-legend {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 400;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.tw-tower-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border: 1px solid var(--border-main);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-card) 78%, transparent);
+  color: var(--text-body);
+  font-size: 11px;
+  font-weight: 600;
+  backdrop-filter: blur(10px);
+}
+
+.tw-tower-legend span::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--brand-medium);
+}
+
+.tw-tower-legend span[data-state='warn']::before {
+  background: var(--status-warning);
+}
+
+.tw-tower-legend span[data-state='danger']::before {
+  background: var(--status-danger);
+}
+
+/* Live indicator: pulsing dot. */
+.tw-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--status-success) 14%, transparent);
+  color: var(--text-body);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tw-live::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--status-success);
+}
+
+.tw-live[data-live='false'] {
+  background: var(--bg-alt);
+}
+
+.tw-live[data-live='false']::before {
+  background: var(--text-disabled);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tw-live[data-live='true']::before {
+    animation: tw-live-beat 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes tw-live-beat {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Alert card: severity bar on the left; a soft red border while the alert is new. */
+.tw-alert {
+  position: relative;
+  padding: 14px 16px 14px 20px;
+  border: 1px solid var(--border-main);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-card) 86%, transparent);
+  transition: border-color 0.6s ease, box-shadow 0.6s ease;
+}
+
+.tw-alert::before {
+  content: '';
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 6px;
+  width: 4px;
+  border-radius: 4px;
+  background: var(--text-disabled);
+}
+
+.tw-alert[data-severity='danger']::before {
+  background: var(--status-danger);
+}
+
+.tw-alert[data-severity='warning']::before {
+  background: var(--status-warning);
+}
+
+.tw-alert[data-severity='done']::before {
+  background: var(--status-success);
+}
+
+.tw-alert[data-fresh='true'] {
+  border-color: color-mix(in srgb, var(--status-danger) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-danger) 14%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tw-alert {
+    transition: none;
+  }
+}

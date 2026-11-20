@@ -1,5 +1,5 @@
 import type { Tone } from '@/shared/components/Badge';
-import type { TaskKind, TaskStatus } from './types';
+import type { FormFieldType, TaskKind, TaskStatus } from './types';
 
 export const TASK_STATUS_LABELS = {
   PENDING: 'Pendiente',
@@ -19,3 +19,13 @@ export const TASK_KIND_LABELS = {
   SINGLE: 'Única',
   PER_SHIFT: 'Por turno',
 } as const satisfies Record<TaskKind, string>;
+
+export const FORM_FIELD_TYPE_LABELS = {
+  text: 'Texto',
+  number: 'Número',
+  yes_no: 'Sí / No',
+  select: 'Selección única',
+  checklist: 'Lista de verificación',
+  photo: 'Foto',
+  qr: 'Código QR',
+} as const satisfies Record<FormFieldType, string>;

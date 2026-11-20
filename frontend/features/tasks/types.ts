@@ -1,6 +1,5 @@
-// Mirrors `GET /api/v1/tasks` of core (`backend/core/src/tasks`, DTOs in `http/dto/tasks.dto.ts`).
-// Enum values are the Prisma enums (uppercase). The backend also embeds `formVersion` and `answer` in
-// each item; the Tasks screen does not use them, so they are not typed here.
+// Mirrors the `tasks` module of core (`backend/core/src/tasks`, DTOs in `http/dto/tasks.dto.ts`).
+// Enum values are the Prisma enums (uppercase).
 
 export const TASK_KINDS = ['SINGLE', 'PER_SHIFT'] as const;
 export type TaskKind = (typeof TASK_KINDS)[number];
@@ -23,6 +22,22 @@ export type Task = {
   postId: string;
   shiftId: string | null;
   createdAt: string;
+  formVersionId?: string;
+  /** The answer to a `qr` field must match it when set. */
+  expectedQr?: string | null;
+  /** Embedded by `GET /tasks` and `GET /tasks/:taskId`. */
+  formVersion?: FormVersion;
+  answer?: TaskAnswer | null;
+};
+
+export type TaskAnswer = {
+  id: string;
+  taskId: string;
+  answers: Record<string, unknown>;
+  deviceTime: string;
+  receivedAt: string;
+  reviewResult: 'NONE' | 'APPROVED' | 'OBSERVED';
+  reviewNote: string | null;
 };
 
 /** Lists return `{ items, total }` (query: `page`, `pageSize` up to 100). */
@@ -52,4 +67,92 @@ export type TaskReport = {
   /** completed / (completed + expired), 0 when nothing closed yet. */
   complianceRate: number;
   bySite: TaskReportBySite[];
+};
+
+// ---------------------------------------------------------------------------------------------
+// Forms (`/api/v1/forms`, owner/admin write). Field rules: `domain/form-validator.ts`.
+// ---------------------------------------------------------------------------------------------
+
+export const FORM_FIELD_TYPES = ['text', 'number', 'yes_no', 'select', 'checklist', 'photo', 'qr'] as const;
+export type FormFieldType = (typeof FORM_FIELD_TYPES)[number];
+
+export type FormField = {
+  /** Stable identifier of the answer; unique inside the form. */
+  key: string;
+  label: string;
+  type: FormFieldType;
+  required: boolean;
+  /** Only for `select` and `checklist` (non-empty). */
+  options?: string[];
+  /** Only for `number`. */
+  min?: number;
+  max?: number;
+};
+
+/** Immutable snapshot created by `POST /forms/:formId/publish`. */
+export type FormVersion = {
+  id: string;
+  tenantId: string;
+  formId: string;
+  version: number;
+  name: string;
+  fields: FormField[];
+  publishedAt: string;
+  publishedBy: string;
+};
+
+/** `GET /forms` (without `versions`) and `GET /forms/:formId` (with `versions`, newest first). */
+export type Form = {
+  id: string;
+  tenantId: string;
+  name: string;
+  draftFields: FormField[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  versions?: FormVersion[];
+};
+
+export type FormsPage = { items: Form[]; total: number };
+
+/** Body of `POST /forms` and `PATCH /forms/:formId` (the PATCH accepts partial bodies; the builder always sends both). */
+export type FormInput = { name: string; fields: FormField[] };
+
+/** Body of `POST /tasks` (owner/admin/supervisor). Without `employeeId` any employee on shift at the post can claim it. */
+export type CreateTaskInput = {
+  formVersionId: string;
+  /** ISO instant. */
+  deadline: string;
+  siteId: string;
+  postId: string;
+  employeeId?: string;
+  /** The answer to a `qr` field must match it. */
+  expectedQr?: string;
+  /** Defaults to the form name in core. */
+  title?: string;
+};
+
+/** Body of `POST /tasks/:taskId/answer` (employee). `answers` maps each field `key` to its value (`photo`: media id). */
+export type AnswerTaskInput = {
+  /** Client generated; core ignores a duplicate and returns the stored answer. */
+  clientAnswerId: string;
+  /** ISO instant; core rejects answers older than 24 hours (`answer_too_old`). */
+  deviceTime: string;
+  answers: Record<string, unknown>;
+};
+
+/** Body of `POST /media/uploads` (employee): photos only, `image/jpeg|png|webp`, up to 10 MB. */
+export type RequestUploadInput = {
+  mime: string;
+  sizeBytes: number;
+  /** Hex digest of the file. */
+  sha256: string;
+  takenAt: string;
+};
+
+export type MediaUpload = {
+  mediaId: string;
+  /** Presigned PUT URL (storage origin). */
+  uploadUrl: string;
+  expiresAt: string;
 };
