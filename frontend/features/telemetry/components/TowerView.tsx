@@ -5,19 +5,18 @@ import { organizationApi } from '@/features/organization';
 import { useResource } from '@/shared/hooks/useResource';
 import { Button } from '@/shared/components/Button';
 import { Card, SectionLabel } from '@/shared/components/Card';
-import { KpiIcon } from '@/shared/components/KpiIcon';
 import { PageHeader } from '@/shared/components/PageHeader';
 import { Segmented } from '@/shared/components/Segmented';
 import { EmptyState, ErrorState, LoadingState } from '@/shared/components/States';
-import { fullName, formatPercent } from '@/shared/lib/format';
+import { fullName } from '@/shared/lib/format';
 import { telemetryApi } from '../api';
 import { useFreshAlertIds } from '../useFreshAlertIds';
 import { useTowerLive } from '../useTowerLive';
 import type { Alert } from '../types';
 import { AlertItem } from './AlertItem';
 import { SiteStatusRow } from './SiteStatusRow';
-import { TowerKpiStrip } from './TowerKpiStrip';
 import { TowerMap, type TowerMapSite, type TowerSiteState } from './TowerMap';
+import { TowerTelemetryBar } from './TowerTelemetryBar';
 import './tower.css';
 
 const ALERT_FILTERS = ['active', 'OPEN', 'ACKNOWLEDGED', 'RESOLVED'] as const;
@@ -182,49 +181,22 @@ export function TowerView() {
     <>
       {header}
 
-      <TowerKpiStrip
-        items={[
-          {
-            id: 'present',
-            label: 'Presentes ahora',
-            value: present,
-            secondary: `/ ${expected}`,
-            badge: present < expected ? `${expected - present} sin fichar` : 'Completo',
-            hint: 'Personal que fichó entrada',
-            tone: present < expected ? 'warning' : 'success',
-            icon: <KpiIcon name="users" />,
-          },
-          {
-            id: 'coverage',
-            label: 'Cobertura',
-            value: formatPercent(expected === 0 ? 1 : present / expected),
-            hint: 'Presentes sobre esperados',
-            tone: present < expected ? 'warning' : 'success',
-            icon: <KpiIcon name="coverage" />,
-          },
-          {
-            id: 'open-alerts',
-            label: 'Alertas abiertas',
-            value: countByStatus('OPEN'),
-            hint: 'Esperan reconocimiento',
-            tone: countByStatus('OPEN') > 0 ? 'danger' : 'success',
-            icon: <KpiIcon name="bell" />,
-          },
-          {
-            id: 'ack-alerts',
-            label: 'Reconocidas',
-            value: countByStatus('ACKNOWLEDGED'),
-            hint: 'En seguimiento',
-            tone: 'process',
-            icon: <KpiIcon name="eye" />,
-          },
-        ]}
+      <TowerTelemetryBar
+        present={present}
+        expected={expected}
+        openAlerts={countByStatus('OPEN')}
+        acknowledgedAlerts={countByStatus('ACKNOWLEDGED')}
+        issuesCount={issueCount}
+        activeFilter={filter}
+        onlyIssues={siteView === 'issues'}
+        onFilterAlerts={setFilter}
+        onToggleIssues={() => setSiteView((current) => (current === 'issues' ? 'all' : 'issues'))}
       />
 
       {/* Phones stack alerts, map, then per-site state; on desktop the alerts take the right column. */}
-      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-5">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-5">
         <section aria-label="Alertas" className="lg:col-span-2 lg:col-start-4 lg:row-span-2 lg:row-start-1">
-          <Card flush glow="bottom" className="h-full">
+          <Card flush glow="none" className="h-full">
             <div className="px-5 pt-5">
               <SectionLabel
                 action={
@@ -291,7 +263,7 @@ export function TowerView() {
         </section>
 
         <section aria-label="Estado del personal por sede" className="lg:col-span-3 lg:col-start-1 lg:row-start-2">
-          <Card flush glow="bottom">
+          <Card flush glow="none">
             <div className="px-5 pt-5">
               <SectionLabel
                 action={
