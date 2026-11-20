@@ -58,14 +58,14 @@ export function TowerMap({ sites, selectedId, focus, onSelect, onResetView }: To
   useEffect(() => {
     onSelectRef.current = onSelect;
   }, [onSelect]);
-
-  const fitAllSites = useCallback(() => {
+const fitAllSites = useCallback(() => {
     const L = leafletRef.current;
     const map = mapRef.current;
     if (!L || !map || sites.length === 0) return;
-    map.fitBounds(L.latLngBounds(sites.map((site): Leaflet.LatLngTuple => [site.latitude, site.longitude])), {
+    map.flyToBounds(L.latLngBounds(sites.map((site): Leaflet.LatLngTuple => [site.latitude, site.longitude])), {
       padding: [60, 60],
       maxZoom: 16,
+      duration: 0.6,
     });
     setIsZoomedIn(false);
     onResetView?.();
