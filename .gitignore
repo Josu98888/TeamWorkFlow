@@ -1,2 +1,6 @@
 # Local AI runtime state
 .atl/
+
+# Production deploy secrets (only the *.example files are tracked)
+deploy/.env
+deploy/env/*.env

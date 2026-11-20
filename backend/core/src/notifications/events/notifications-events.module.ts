@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { envs } from '../../config';
+import { buildNatsOptions } from '../../config/nats-options';
 import {
   NOTIFICATIONS_EVENTS_OPTIONS,
   NotificationsEventsService,
@@ -9,7 +10,7 @@ import {
   providers: [
     {
       provide: NOTIFICATIONS_EVENTS_OPTIONS,
-      useFactory: () => ({ servers: envs.natsServers }),
+      useFactory: () => buildNatsOptions(envs.natsServers, envs.natsCreds),
     },
     NotificationsEventsService,
   ],

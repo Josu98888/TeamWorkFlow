@@ -22,7 +22,7 @@ import type {
   JsMsg,
 } from '@nats-io/jetstream';
 import { connect } from '@nats-io/transport-node';
-import type { NatsConnection } from '@nats-io/transport-node';
+import type { Authenticator, NatsConnection } from '@nats-io/transport-node';
 import {
   NOTIFICATIONS_STREAM,
   NOTIFICATIONS_STREAM_SUBJECTS,
@@ -45,6 +45,7 @@ export const NOTIFICATIONS_EVENTS_OPTIONS = Symbol(
 
 export interface NotificationsEventsOptions {
   servers: string[];
+  authenticator?: Authenticator;
   retryInitialMs?: number;
   retryMaxMs?: number;
 }
@@ -90,6 +91,7 @@ export class NotificationsEventsService
   async onModuleInit() {
     this.connection = await connect({
       servers: this.options.servers,
+      authenticator: this.options.authenticator,
       name: 'notifications',
     });
     this.js = jetstream(this.connection);

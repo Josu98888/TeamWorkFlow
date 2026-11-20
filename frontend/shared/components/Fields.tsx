@@ -1,8 +1,8 @@
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
+import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
 import { Button } from './Button';
 
 const CONTROL =
-  'w-full rounded-lg border border-line bg-page px-3 py-2 text-sm text-body outline-none focus-visible:outline-2 focus-visible:outline-brand-medium';
+  'w-full rounded-xl border border-line bg-page/60 px-3 py-2 text-sm text-body outline-none focus-visible:outline-2 focus-visible:outline-brand-medium';
 
 function Label({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
@@ -83,3 +83,18 @@ export function FormFooter({ error, pending, submitLabel, onCancel }: { error: s
 
 /** Parses a comma separated list into trimmed non-empty unique items. */
 export const parseList = (text: string): string[] => [...new Set(text.split(',').map((item) => item.trim()).filter(Boolean))];
+
+type TextAreaFieldProps = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'onChange' | 'value'> & {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (value: string) => void;
+};
+
+export function TextAreaField({ label, hint, onChange, className = '', rows = 3, ...rest }: TextAreaFieldProps) {
+  return (
+    <Label label={label} hint={hint}>
+      <textarea rows={rows} className={`${CONTROL} ${className}`} onChange={(event) => onChange(event.target.value)} {...rest} />
+    </Label>
+  );
+}

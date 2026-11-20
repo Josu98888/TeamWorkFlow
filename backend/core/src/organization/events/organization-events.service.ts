@@ -22,7 +22,7 @@ import type {
   JsMsg,
 } from '@nats-io/jetstream';
 import { connect } from '@nats-io/transport-node';
-import type { NatsConnection } from '@nats-io/transport-node';
+import type { Authenticator, NatsConnection } from '@nats-io/transport-node';
 import {
   InMemoryOutboxStore,
   OutboxRelay,
@@ -50,6 +50,7 @@ export const ORGANIZATION_EVENTS_OPTIONS = Symbol(
 
 export interface OrganizationEventsOptions {
   servers: string[];
+  authenticator?: Authenticator;
   // Backoff while a producer's stream does not exist yet (durable creation).
   retryInitialMs?: number;
   retryMaxMs?: number;
@@ -113,6 +114,7 @@ export class OrganizationEventsService
   async onModuleInit() {
     this.connection = await connect({
       servers: this.options.servers,
+      authenticator: this.options.authenticator,
       name: 'organization',
     });
     this.js = jetstream(this.connection);

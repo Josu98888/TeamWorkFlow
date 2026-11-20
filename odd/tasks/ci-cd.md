@@ -46,9 +46,22 @@ There is no `.github/workflows`, no production Dockerfile for `core` or the fron
   - `telemetry` runs `pnpm test:e2e` after the unit tests (mocked NATS and database);
   - the core filter also watches `backend/docker-compose.test.yml` and `backend/postgres/**`.
 
-  Status: not yet run on GitHub Actions; marked done once a PR run is green.
-- [ ] **T3** Production Dockerfiles for `core` and the frontend; review the telemetry one (Node version).
-- [ ] **T4** Production compose and nginx for the EC2 host (TLS, env files, a migrations step before start).
+  Status: the PR #26 CI run 44103138853 was green (all jobs, including `core-e2e`).
+- [x] **T3** Production Dockerfiles for `core` and the frontend; review the telemetry one (Node version).
+  - `backend/core/Dockerfile.prod`: stages `deps`, `prod-deps`, `builder` (five Prisma clients + `nest build`), `migrate` (builder plus the prisma CLI, configs and migrations; runs the five `migrate deploy` scripts) and `runner` (default target: prod deps only, `NODE_ENV=production`, user `node`, `node dist/main`, port 3000). The dev `dockerfile` used by `backend/docker-compose.yml` is untouched.
+  - `frontend/Dockerfile.prod` plus `output: "standalone"` in `next.config.ts`: build args `NEXT_PUBLIC_USE_MOCKS` (default `false`), `NEXT_PUBLIC_WS_URL` (default empty, same origin) and `BACKEND_URL`; runner is user `node`, `node server.js`, port 3000. The dev `dockerfile` is untouched.
+  - `backend/telemetry/Dockerfile`: Node 24 and prod-only runner were already right; added a `migrate` target (the runner has no prisma CLI) and `USER node`.
+  - `.dockerignore` of the three apps now also excludes `.env.*`, `coverage/` and `test-results/`.
+
+  Route: delegated (writer trigger: 3+ Dockerfiles). Evidence: frontend `pnpm lint` and `pnpm build` (standalone output present); the images are verified by the CI `docker` job (builds the five targets, runs both migrate images against `postgres-test`, smoke-tests the frontend), pending its first green run.
+- [x] **T4** Production compose and nginx for the EC2 host (TLS, env files, a migrations step before start).
+  - `deploy/docker-compose.prod.yml`: `nats` (JetStream, volume, not published), one-shot `core-migrate` and `telemetry-migrate`, `core`, `telemetry` (start only after their migrate exits 0 and NATS is healthy), `frontend`, `nginx` (the only published service), `certbot` (profile `tls`) and `postgres` (profile `local-db`). Images `ghcr.io/${GHCR_OWNER}/teamworkflow-<app>[-migrate]:${IMAGE_TAG:-latest}`; env via `deploy/env/*.env`; json-file log rotation, memory limits (about 1.3 GB for the apps) and TCP healthchecks.
+  - `deploy/nginx/`: path routing (`/api/v1/telemetry/` and `/ws` to telemetry, `/api/v1/` to core, `/` to the frontend), WebSocket upgrade, gzip, ACME webroot. HTTP on port 80 now; `docker-compose.tls.yml` plus `nginx/tls/https.conf` and the `certbot` service enable TLS once a domain exists (fixed `--cert-name teamworkflow`, no file edits).
+  - `deploy/README.md`: runbook (RDS role init, env files, run, migrations, TLS, local try-out). `.gitignore` covers `deploy/.env` and `deploy/env/*.env`.
+  - CI: `docker` job validates `docker compose config -q` (base and TLS) and `nginx -t` (HTTP and HTTPS with a throwaway certificate); `deploy/**` joined its path filter.
+  - Findings: core now has `COOKIE_SECURE` (secure by default, independent of `NODE_ENV`); decision: `NODE_ENV=production` always, and the HTTP test phase opts out explicitly with `COOKIE_SECURE=false` (startup warning), removed when TLS is enabled; `WEB_ORIGIN` must match the browser origin; S3 works with no endpoint and no static keys (IAM role).
+
+  Route: delegated (writer trigger: 2+ non-trivial files). Evidence: `@action-validator/cli` passes on `ci.yml`; compose YAML parses; the compose and nginx checks run in the CI `docker` job (docker was not run locally), pending its first green run.
 - [ ] **T5** CD workflow: build and push images to GHCR on `main`, then deploy to EC2 (needs user authorization and secrets).
 - [ ] **T6** AWS setup guide:
   - EC2, RDS, S3, an IAM role for S3 access;
@@ -67,5 +80,8 @@ TDD: off (no project or session setting; workflow and config work). Checks per t
 
 - Branch `feat/ci/github-actions` from `origin/develop` (54d4f4d).
 - T1 done: `.github/workflows/ci.yml` (changes, core, telemetry, frontend) and a CI section in `AGENTS.md`. Node 24, pnpm 11.5.2, dummy env in the core and telemetry jobs. Commit: `ci(core)` on `feat/ci/github-actions` (see `git log`).
-- T2: e2e jobs added on `fix/ci/e2e-suites` (pending a green PR run).
-- Next step: push after user confirmation, check the run is green (including the e2e jobs), then T3.
+- T2: e2e jobs added on `fix/ci/e2e-suites`; PR #26 CI run 44103138853 green.
+- T3 done on `feat/ci/production-dockerfiles` (see Tasks for the design).
+- T3 CI: `docker` job added to `ci.yml` (validator passes); awaiting its first green run on the PR.
+- T4 done on `feat/ci/production-dockerfiles`: `deploy/` (compose, nginx, env examples, README) and CI validation in the `docker` job.
+- Next step: T5 (CD: push the five images, including both `-migrate` targets, to GHCR on `main` with `--build-arg BACKEND_URL=http://nginx`, then deploy to EC2; needs user authorization and secrets).

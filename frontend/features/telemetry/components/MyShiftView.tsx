@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, type FormEvent } from 'react';
+import { useCallback, useState, type FormEvent, type ReactNode } from 'react';
 import { organizationApi } from '@/features/organization';
 import { SHIFT_STATUS_LABELS } from '@/features/organization/labels';
 import type { Shift } from '@/features/organization/types';
@@ -56,8 +56,8 @@ function getPosition(): Promise<GeolocationPosition> {
 
 const isOpen = (shift: Shift) => shift.status === 'IN_PROGRESS' || shift.status === 'SCHEDULED';
 
-/** Employee landing page: clock in/out and own workdays. Employees read no sites, so the site comes from the shift. */
-export function MyShiftView() {
+/** Employee landing page: clock in/out, own workdays and (injected by the route, to keep domains apart) the tasks section. Employees read no sites, so the site comes from the shift. */
+export function MyShiftView({ tasksSection }: { tasksSection?: ReactNode }) {
   const shifts = useResource(organizationApi.listShifts, { pageSize: 100 });
   const events = useResource(telemetryApi.listClockEvents, { pageSize: 10 });
   const workdays = useResource(telemetryApi.listWorkdays, { pageSize: 10 });
@@ -85,7 +85,9 @@ export function MyShiftView() {
           <ClockCard shifts={openShifts} onDone={reloadAll} />
         )}
 
-        <Card flush>
+        {tasksSection}
+
+        <Card flush glow="none">
           <div className="px-5 pt-5">
             <SectionLabel>Mis fichadas</SectionLabel>
           </div>
@@ -119,7 +121,7 @@ export function MyShiftView() {
           )}
         </Card>
 
-        <Card flush>
+        <Card flush glow="none">
           <div className="px-5 pt-5">
             <SectionLabel>Mis jornadas</SectionLabel>
           </div>

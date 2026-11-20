@@ -1,0 +1,77 @@
+/* Card surface with a violet glow. Colors come only from the tokens in globals.css. */
+.glow-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid var(--tile-border);
+  background: var(--tile-bg);
+  box-shadow: var(--tile-shadow);
+  transition:
+    transform 0.25s ease,
+    background-color 0.25s ease,
+    border-color 0.25s ease;
+}
+
+/* Glow layer, behind the content. */
+.glow-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(85% 105% at 100% 118%, var(--glow-1) 0%, var(--glow-2) 32%, transparent 68%);
+  transform-origin: 100% 100%;
+  transition: transform 0.35s ease;
+}
+
+.glow-card[data-glow='bottom']::before {
+  background: radial-gradient(85% 70% at 65% 118%, var(--glow-1) 0%, var(--glow-2) 32%, transparent 68%);
+  transform-origin: 65% 100%;
+}
+
+.glow-card[data-glow='none']::before {
+  display: none;
+}
+
+/* Subtle light border along the bottom edge (1px mask). */
+.glow-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(180deg, transparent 55%, color-mix(in srgb, white 18%, transparent));
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.glow-card[data-glow='none']::after {
+  display: none;
+}
+
+/* Linked cards (inside a Link or group) lift and grow the glow. */
+.glow-card[data-interactive='true']:hover {
+  transform: translateY(-3px);
+}
+
+.glow-card[data-interactive='true']:hover::before {
+  transform: scale(1.15);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glow-card,
+  .glow-card::before {
+    transition: none;
+  }
+
+  .glow-card[data-interactive='true']:hover,
+  .glow-card[data-interactive='true']:hover::before {
+    transform: none;
+  }
+}

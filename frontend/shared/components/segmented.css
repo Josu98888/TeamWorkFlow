@@ -1,0 +1,52 @@
+/* Segmented selector: --bg-alt track, active option as a --bg-card pill. Tokens only. */
+.segmented {
+  display: inline-flex;
+  max-width: 100%;
+  gap: 2px;
+  padding: 3px;
+  overflow-x: auto;
+  border-radius: 12px;
+  background: var(--bg-alt);
+}
+
+.segmented-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.segmented-option:hover {
+  color: var(--text-title);
+}
+
+.segmented-option[data-active='true'] {
+  background: var(--bg-card);
+  color: var(--text-title);
+  box-shadow: var(--tile-shadow);
+}
+
+.segmented-option:focus-visible {
+  outline: 2px solid var(--brand-medium);
+  outline-offset: 2px;
+}
+
+.segmented-count {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 16%, transparent);
+  font-size: 10px;
+}

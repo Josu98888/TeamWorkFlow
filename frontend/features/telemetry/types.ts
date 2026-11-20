@@ -131,3 +131,6 @@ export type Workday = {
 
 export type WorkdaysPage = { items: Workday[]; total: number };
 export type ListWorkdaysQuery = { employeeId?: string; siteId?: string; status?: Lowercase<WorkdayStatus>; page?: number; pageSize?: number };
+
+/** Body of `POST /api/v1/auth/socket-token` (core): short-lived token for the Tower socket handshake. */
+export type SocketTokenResponse = { token: string; expiresIn: number };

@@ -1,7 +1,7 @@
 import { apiFetch } from '@/shared/lib/http';
 import type { TasksApi } from './api';
 import { buildTaskReport } from './report';
-import type { ListTasksQuery, Task, TasksPage } from './types';
+import type { AnswerTaskInput, CreateTaskInput, Form, FormInput, FormVersion, FormsPage, ListTasksQuery, MediaUpload, RequestUploadInput, Task, TasksPage } from './types';
 
 /** Backend maximum for `pageSize` (`ListTasksQueryDto`). */
 const PAGE_SIZE = 100;
@@ -34,4 +34,22 @@ async function listAll(query: ListTasksQuery): Promise<Task[]> {
 export const tasksHttpApi: TasksApi = {
   listTasks: (query = {}) => listAll(query),
   getTaskReport: async () => buildTaskReport(await listAll({})),
+  listForms: () => apiFetch<FormsPage>('/forms?page=1&pageSize=100'),
+  getForm: (formId) => apiFetch<Form>(`/forms/${formId}`),
+  createForm: (input: FormInput) => apiFetch<Form>('/forms', { method: 'POST', body: JSON.stringify(input) }),
+  updateForm: (formId, input) => apiFetch<Form>(`/forms/${formId}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  publishForm: (formId) => apiFetch<FormVersion>(`/forms/${formId}/publish`, { method: 'POST', body: '{}' }),
+  createTask: (input: CreateTaskInput) => apiFetch<Task>('/tasks', { method: 'POST', body: JSON.stringify(input) }),
+  listMyTasks: () => listAll({ status: 'PENDING' }),
+  claimTask: (taskId) => apiFetch<Task>(`/tasks/${taskId}/claim`, { method: 'POST', body: '{}' }),
+  answerTask: (taskId, input: AnswerTaskInput) =>
+    apiFetch<Task>(`/tasks/${taskId}/answer`, { method: 'POST', body: JSON.stringify(input) }),
+  requestUpload: (input: RequestUploadInput) =>
+    apiFetch<MediaUpload>('/media/uploads', { method: 'POST', body: JSON.stringify(input) }),
+  uploadFile: async (uploadUrl, file) => {
+    // Plain fetch: the presigned URL points at the storage origin (no session cookies or CSRF header).
+    // The URL signs the content type, so it must match what was declared in `requestUpload`.
+    const response = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
+    if (!response.ok) throw new Error('No se pudo subir la foto. Revisá tu conexión e intentá de nuevo.');
+  },
 };

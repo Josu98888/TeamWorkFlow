@@ -14,32 +14,22 @@ import type { SiteSummary } from './dto';
 const MAX_RECENT_EVENT_IDS = 1_000;
 const TOWER_BROADCAST_SUBJECT = 't.*.attendance.site_summary_updated';
 
-function extractToken(client: Socket): string | null {
-  const authHeader = client.handshake.headers?.authorization;
-  if (
-    authHeader &&
-    typeof authHeader === 'string' &&
-    authHeader.startsWith('Bearer ')
-  ) {
-    return authHeader.slice(7).trim();
-  }
+// A socket session lasts at most this long, counted from the connection. The
+// socket token itself lives 60 s (it is only a ticket for the handshake), so the
+// session limit is a separate constant; when it fires the client reconnects with
+// a freshly issued socket token, which runs verification again (role, plan and
+// tenant status are re-read from `core`).
+export const MAX_SOCKET_SESSION_MS = 15 * 60_000;
 
-  const authToken = client.handshake.auth?.token;
-  if (authToken && typeof authToken === 'string') {
-    return authToken.trim();
-  }
-
-  const cookieHeader = client.handshake.headers?.cookie;
-  if (cookieHeader && typeof cookieHeader === 'string') {
-    const cookies = cookieHeader.split(';').map((c) => c.trim());
-    for (const c of cookies) {
-      if (c.startsWith('access_token=')) {
-        return decodeURIComponent(c.slice('access_token='.length));
-      }
-    }
-  }
-
-  return null;
+// The socket authenticates ONLY with the short-lived socket token sent in the
+// Socket.IO `auth` payload. The `Authorization` header and the `access_token`
+// cookie are deliberately ignored: the cookie is not available cross-origin and
+// an access token must never open a socket.
+function extractSocketToken(client: Socket): string | null {
+  const authToken: unknown = client.handshake.auth?.token;
+  if (typeof authToken !== 'string') return null;
+  const token = authToken.trim();
+  return token.length > 0 ? token : null;
 }
 
 @WebSocketGateway({
@@ -67,7 +57,11 @@ export class TowerGateway
     this.jetstream?.registerBroadcastHandler(
       TOWER_BROADCAST_SUBJECT,
       async (message) => {
-        if (!message.tenantId || !message.payload || typeof message.payload !== 'object') {
+        if (
+          !message.tenantId ||
+          !message.payload ||
+          typeof message.payload !== 'object'
+        ) {
           return;
         }
         const payload = message.payload as Record<string, unknown>;
@@ -114,7 +108,7 @@ export class TowerGateway
   }
 
   async handleConnection(client: Socket): Promise<void> {
-    const token = extractToken(client);
+    const token = extractSocketToken(client);
     if (!token) {
       this.logger.debug(
         `WS connection rejected for client ${client.id}: missing token`,
@@ -124,7 +118,12 @@ export class TowerGateway
     }
 
     try {
-      const actor = await this.natsClient.verifyToken(token);
+      const actor = await this.natsClient.verifyToken(token, {
+        purpose: 'socket',
+      });
+
+      // The client left while the verification was in flight.
+      if (client.disconnected) return;
 
       // Only supervisors, admins, and owners can access the Control Tower
       const allowedRoles = ['supervisor', 'admin', 'owner'];
@@ -171,22 +170,20 @@ export class TowerGateway
         await client.join(tenantRoom);
       }
 
-      // Schedule disconnection upon token expiration
-      if (actor.exp) {
-        const expiresInMs = actor.exp * 1000 - Date.now();
-        if (expiresInMs > 0) {
-          const timer = setTimeout(() => {
-            this.logger.debug(
-              `Disconnecting WS client ${client.id}: JWT expired`,
-            );
-            client.disconnect(true);
-          }, expiresInMs);
-          client.data.expiryTimer = timer;
-        } else {
-          client.disconnect(true);
-          return;
-        }
-      }
+      // The client may have left while joining: handleDisconnect already ran,
+      // so a timer set now would never be cleared.
+      if (client.disconnected) return;
+
+      // Fixed session limit; the socket token's own `exp` is not used (it is
+      // 60 s and was only needed for the handshake).
+      const timer = setTimeout(() => {
+        this.logger.debug(
+          `Disconnecting WS client ${client.id}: session limit reached`,
+        );
+        client.disconnect(true);
+      }, MAX_SOCKET_SESSION_MS);
+      timer.unref?.();
+      client.data.expiryTimer = timer;
 
       this.logger.debug(
         `WS client ${client.id} connected for user ${actor.userId} (tenant: ${actor.tenantId})`,

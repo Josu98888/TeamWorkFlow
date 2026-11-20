@@ -119,3 +119,9 @@ export type UpdateShiftInput = { version: number; startsAt?: string; endsAt?: st
 export type ShiftWarningCode = 'rest_under_12h' | 'weekly_hours_exceeded' | 'missing_skill' | 'site_not_enabled';
 export type ShiftWarning = { code: ShiftWarningCode; message: string };
 export type ShiftWithWarnings = { shift: Shift; warnings: ShiftWarning[] };
+
+/** Roles an employee profile can be invited with at creation time. */
+export type InvitableRole = 'employee' | 'supervisor';
+export type InviteRoleOption = { value: InvitableRole; label: string };
+/** Injected by the route: sends the access invitation (the organization domain does not know the auth domain). */
+export type InviteEmployee = (input: { email: string; role: InvitableRole }) => Promise<unknown>;

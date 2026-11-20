@@ -14,6 +14,13 @@ async function bootstrap() {
   app.enableCors({
     origin: envs.webOrigin,
     credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-CSRF-Token',
+      'X-Client',
+    ],
   });
 
   await app.listen(envs.port);

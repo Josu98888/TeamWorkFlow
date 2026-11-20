@@ -6,6 +6,8 @@ import { NotificationBell } from '@/features/notifications';
 import { useLogout, useSession } from '@/shared/hooks/useSession';
 import { USE_MOCKS } from '@/shared/lib/config';
 import { isDemoSimulating, setDemoRole } from '@/shared/lib/session';
+import { useSidebar } from '@/shared/providers/SidebarProvider';
+import { SIDEBAR_ID } from './Sidebar';
 
 const emptySubscribe = () => () => {};
 
@@ -22,6 +24,7 @@ export function Topbar() {
   const session = useSession();
   const logout = useLogout();
   const router = useRouter();
+  const { isOpen, toggle } = useSidebar();
 
   useEffect(() => {
     if (isDark) {
@@ -48,7 +51,7 @@ export function Topbar() {
       <header
         className="h-16 px-6 flex items-center justify-between border-b"
         style={{
-          backgroundColor: 'var(--bg-card)',
+          backgroundColor: 'var(--bg-main)',
           borderColor: 'var(--border-main)',
         }}
       >
@@ -70,11 +73,28 @@ export function Topbar() {
     <header
       className="h-16 px-6 flex items-center justify-between border-b"
       style={{
-        backgroundColor: 'var(--bg-card)',
+        backgroundColor: 'var(--bg-main)',
         borderColor: 'var(--border-main)',
       }}
     >
       <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label="Mostrar u ocultar el menú lateral"
+          aria-expanded={isOpen}
+          aria-controls={SIDEBAR_ID}
+          className="inline-flex items-center justify-center h-8 w-8 rounded-lg border transition-colors cursor-pointer"
+          style={{
+            borderColor: 'var(--border-main)',
+            backgroundColor: 'var(--bg-main)',
+            color: 'var(--text-body)',
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+            <path d="M2 4h12M2 8h12M2 12h12" />
+          </svg>
+        </button>
         <span
           className="text-xs font-semibold px-2.5 py-1 rounded-md"
           style={{

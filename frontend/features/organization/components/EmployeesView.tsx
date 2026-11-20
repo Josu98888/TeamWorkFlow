@@ -7,12 +7,13 @@ import { Badge } from '@/shared/components/Badge';
 import { Button } from '@/shared/components/Button';
 import { Card } from '@/shared/components/Card';
 import { SelectField, TextField } from '@/shared/components/Fields';
+import { ListRow, RowList, Toolbar } from '@/shared/components/List';
 import { PageHeader } from '@/shared/components/PageHeader';
 import { EmptyState, ErrorState, LoadingState } from '@/shared/components/States';
 import { useResource } from '@/shared/hooks/useResource';
 import { fullName, initials } from '@/shared/lib/format';
 import { organizationApi } from '../api';
-import type { Employee, ListEmployeesQuery } from '../types';
+import type { Employee, InviteEmployee, InviteRoleOption, ListEmployeesQuery } from '../types';
 import { EmployeeFormModal } from './EmployeeFormModal';
 
 const ACTIVE_OPTIONS = [
@@ -21,7 +22,7 @@ const ACTIVE_OPTIONS = [
   { value: 'false', label: 'Inactivos' },
 ] as const;
 
-export function EmployeesView() {
+export function EmployeesView({ onInvite, inviteRoles }: { onInvite?: InviteEmployee; inviteRoles?: readonly InviteRoleOption[] } = {}) {
   const [search, setSearch] = useState('');
   const [siteId, setSiteId] = useState('');
   const [active, setActive] = useState('');
@@ -59,6 +60,8 @@ export function EmployeesView() {
         <EmployeeFormModal
           employee={form === 'new' ? undefined : form}
           sites={sites.data.items}
+          onInvite={onInvite}
+          inviteRoles={inviteRoles}
           onClose={() => setForm(null)}
           onSaved={() => {
             setForm(null);
@@ -67,7 +70,7 @@ export function EmployeesView() {
         />
       )}
 
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <Toolbar>
         <TextField label="Buscar" placeholder="Nombre, apellido o correo" value={search} onChange={setSearch} />
         <SelectField
           label="Sede"
@@ -76,7 +79,7 @@ export function EmployeesView() {
           options={[{ value: '', label: 'Todas' }, ...(sites.data?.items ?? []).map((site) => ({ value: site.id, label: site.name }))]}
         />
         <SelectField label="Estado" value={active} onChange={setActive} options={ACTIVE_OPTIONS} />
-      </div>
+      </Toolbar>
 
       {employees.error ? (
         <ErrorState message="No pudimos cargar los empleados." onRetry={employees.reload} />
@@ -85,12 +88,24 @@ export function EmployeesView() {
       ) : employees.data.items.length === 0 ? (
         <EmptyState title="No encontramos empleados" description="Probá con otros filtros o creá uno nuevo." />
       ) : (
-        <Card flush>
-          <ul className="divide-y divide-line">
+        <Card flush glow="none">
+          <RowList>
             {employees.data.items.map((employee) => (
-              <li key={employee.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
-                <Avatar initials={initials(employee)} label={fullName(employee)} />
-                <div className="min-w-0 flex-1">
+              <ListRow
+                key={employee.id}
+                leading={<Avatar initials={initials(employee)} label={fullName(employee)} />}
+                trailing={
+                  <>
+                    {!employee.isActive && <Badge>Inactivo</Badge>}
+                    <Can capability="employees.manage">
+                      <Button variant="ghost" onClick={() => setForm(employee)}>
+                        Editar
+                      </Button>
+                    </Can>
+                  </>
+                }
+              >
+                <div>
                   <p className="truncate text-sm font-semibold text-title">{fullName(employee)}</p>
                   <p className="truncate text-xs text-muted">
                     {employee.email}
@@ -100,15 +115,9 @@ export function EmployeesView() {
                     {employee.siteIds.map((id) => siteName.get(id) ?? 'Sede').join(' · ') || 'Sin sedes habilitadas'}
                   </p>
                 </div>
-                {!employee.isActive && <Badge>Inactivo</Badge>}
-                <Can capability="employees.manage">
-                  <Button variant="ghost" onClick={() => setForm(employee)}>
-                    Editar
-                  </Button>
-                </Can>
-              </li>
+              </ListRow>
             ))}
-          </ul>
+          </RowList>
         </Card>
       )}
     </>

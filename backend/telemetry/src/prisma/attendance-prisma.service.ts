@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { envs } from '../config';
+import { buildPgPoolConfig } from './pg-pool-config';
 import { PrismaClient } from './generated/client';
 
 const DEFAULT_SCHEMA = 'attendance';
@@ -28,7 +29,11 @@ export class AttendancePrismaService
   constructor() {
     super({
       adapter: new PrismaPg(
-        { connectionString: envs.attendanceDatabaseUrl },
+        buildPgPoolConfig(envs.attendanceDatabaseUrl, {
+          max: envs.dbPoolMax,
+          ssl: envs.dbSsl,
+          sslCa: envs.dbSslCa,
+        }),
         { schema: schemaFromUrl(envs.attendanceDatabaseUrl) },
       ),
     });

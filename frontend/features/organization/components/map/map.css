@@ -1,0 +1,219 @@
+/* Shared map style (site detail, Sedes overview, Torre). Tokens only: nothing here depends on a color literal. */
+
+/* Muted tiles: soft in light, inverted in dark. */
+.tw-map .leaflet-tile-pane {
+  filter: saturate(0.35) brightness(1.05);
+}
+
+[data-theme='dark'] .tw-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.85) saturate(0.4);
+}
+
+.tw-map.leaflet-container {
+  background: var(--bg-alt);
+  font-family: inherit;
+}
+
+.tw-map .leaflet-control-attribution {
+  background: color-mix(in srgb, var(--bg-card) 80%, transparent);
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.tw-map .leaflet-control-attribution a {
+  color: var(--text-link);
+}
+
+.tw-map .leaflet-tooltip {
+  border: 1px solid var(--border-main);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-title);
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: var(--tile-shadow);
+}
+
+.tw-map .leaflet-tooltip-top::before {
+  border-top-color: var(--bg-card);
+}
+
+/* Geofence: dashed medium violet border, lavender fill. */
+path.tw-geofence {
+  stroke: var(--brand-medium);
+  stroke-width: 2px;
+  stroke-dasharray: 6 5;
+  fill: var(--brand-lavender);
+  fill-opacity: 0.28;
+}
+
+path.tw-geofence[data-inactive='true'] {
+  stroke: var(--text-disabled);
+  fill: var(--text-disabled);
+  fill-opacity: 0.12;
+}
+
+/* Markers (Leaflet divIcon contents). */
+.tw-marker {
+  background: transparent;
+  border: 0;
+}
+
+/* Site pin: gradient teardrop with a white building glyph. */
+.tw-site-pin {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: linear-gradient(135deg, var(--brand-medium), var(--brand-primary));
+  box-shadow: 0 6px 12px color-mix(in srgb, var(--brand-dark) 45%, transparent);
+  color: var(--sidebar-strong);
+}
+
+.tw-site-pin[data-inactive='true'] {
+  background: linear-gradient(135deg, var(--text-disabled), var(--text-muted));
+}
+
+.tw-site-pin svg {
+  width: 16px;
+  height: 16px;
+  transform: rotate(45deg);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Initial badge for overview maps: one per site. data-state: ok | warn | danger | off. */
+.tw-site-dot {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px dashed var(--brand-lavender);
+  background: linear-gradient(135deg, var(--brand-medium), var(--brand-primary));
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--brand-dark) 40%, transparent);
+  color: var(--sidebar-strong);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tw-site-dot[data-state='warn'] {
+  border-color: var(--status-warning);
+  background: var(--status-warning);
+}
+
+.tw-site-dot[data-state='danger'] {
+  border-color: var(--status-danger);
+  background: var(--status-danger);
+}
+
+.tw-site-dot[data-state='off'] {
+  border-color: var(--text-disabled);
+  background: var(--text-disabled);
+}
+
+/* Person avatar: red ring when outside the geofence. */
+.tw-person {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-card);
+  background: var(--brand-lavender);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--brand-dark) 35%, transparent);
+  color: var(--brand-dark);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.tw-person[data-outside='true'] {
+  border-color: var(--status-danger);
+}
+
+/* Overlay controls (zoom buttons, glass pills) positioned over the map. */
+.tw-map-zoom {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 400;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tw-map-zoom button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-main);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-card) 90%, transparent);
+  color: var(--text-title);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+
+.tw-map-zoom button:hover {
+  background: var(--bg-alt);
+}
+
+.tw-map-zoom button:focus-visible {
+  outline: 2px solid var(--brand-medium);
+  outline-offset: 2px;
+}
+
+.tw-map-pills {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 400;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.tw-map-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border: 1px solid var(--border-main);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-card) 78%, transparent);
+  color: var(--text-body);
+  font-size: 11px;
+  font-weight: 600;
+  backdrop-filter: blur(10px);
+}
+
+.tw-map-pill::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-disabled);
+}
+
+.tw-map-pill[data-tone='success']::before {
+  background: var(--status-success);
+}
+
+.tw-map-pill[data-tone='danger']::before {
+  background: var(--status-danger);
+}
+
+.tw-map-pill[data-tone='plain']::before {
+  display: none;
+}

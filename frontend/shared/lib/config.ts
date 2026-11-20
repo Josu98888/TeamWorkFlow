@@ -11,8 +11,14 @@ export const USE_MOCKS = process.env.NEXT_PUBLIC_USE_MOCKS !== 'false';
 export const API_PREFIX = '/api/v1';
 export const TELEMETRY_API_PREFIX = `${API_PREFIX}/telemetry`;
 
-/** Origin of the Socket.IO gateway of telemetry (the reverse proxy, path `/ws`). */
-export const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? 'http://localhost:8080';
+/**
+ * Origin of the Socket.IO gateway of telemetry (the reverse proxy, path `/ws`).
+ * Unset: the local proxy. Empty: `undefined`, so Socket.IO uses the page origin
+ * (an empty string would make it build the URL `http://`).
+ */
+const RAW_WS_URL = process.env.NEXT_PUBLIC_WS_URL;
+export const WS_URL: string | undefined =
+  RAW_WS_URL === undefined ? 'http://localhost:8080' : RAW_WS_URL || undefined;
 
 /** Fake network latency so loading states are visible in the demo. */
 export const MOCK_LATENCY_MS = 350;

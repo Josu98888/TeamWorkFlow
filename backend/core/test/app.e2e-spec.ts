@@ -1,17 +1,20 @@
 import { INestApplication } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
+import { ThrottlerModule } from '@nestjs/throttler';
 import request from 'supertest';
 import { AuthController } from '../src/auth/auth.controller';
 import { AuthService } from '../src/auth/auth.service';
 import { InvalidTokenException } from '../src/common/exceptions/app.exceptions';
 import { configureApp } from '../src/app.config';
+import type { AuthenticatedRequest } from '../src/http/authenticated-request';
 import { AuthGuard } from '../src/http/guards/auth.guard';
+import { AppThrottlerGuard } from '../src/http/guards/throttler.guard';
+import { HealthController } from '../src/http/health/health.controller';
 
 // Smoke test without DB or NATS: the real HTTP stack (prefix, pipe, filter,
-// global guard, auth controller) over a mocked AuthService facade. `AppModule`
-// is not imported because it opens Prisma and NATS connections on boot; the
-// full flow against real infrastructure is T6.6.
+// helmet, cors, trust proxy, global auth + throttler guards, auth controller)
+// over a mocked AuthService facade.
 describe('App (e2e)', () => {
   let app: INestApplication;
   const auth = {
@@ -22,10 +25,25 @@ describe('App (e2e)', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      controllers: [AuthController],
+      imports: [
+        ThrottlerModule.forRoot([
+          {
+            name: 'default',
+            ttl: 60_000,
+            limit: (context) => {
+              const req = context
+                .switchToHttp()
+                .getRequest<Partial<AuthenticatedRequest>>();
+              return req.actor?.userId ? 3 : 30;
+            },
+          },
+        ]),
+      ],
+      controllers: [AuthController, HealthController],
       providers: [
         { provide: AuthService, useValue: auth },
         { provide: APP_GUARD, useClass: AuthGuard },
+        { provide: APP_GUARD, useClass: AppThrottlerGuard },
       ],
     }).compile();
 
@@ -125,5 +143,90 @@ describe('App (e2e)', () => {
 
     expect(response.body).toEqual({ ok: true });
     expect(auth.verify).toHaveBeenCalledWith({ accessToken: 'good' });
+  });
+
+  it('sets Helmet security headers (CSP, nosniff, frameguard) and removes X-Powered-By', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/health')
+      .expect(200);
+
+    expect(response.headers['content-security-policy']).toBeDefined();
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
+    expect(response.headers['x-frame-options']).toBe('SAMEORIGIN');
+    expect(response.headers['x-powered-by']).toBeUndefined();
+  });
+
+  it('enables CORS for WEB_ORIGIN with credentials and X-CSRF-Token preflight', async () => {
+    const preflight = await request(app.getHttpServer())
+      .options('/api/v1/auth/login')
+      .set('Origin', 'http://localhost:3002')
+      .set('Access-Control-Request-Method', 'POST')
+      .set('Access-Control-Request-Headers', 'Content-Type,X-CSRF-Token')
+      .expect(204);
+
+    expect(preflight.headers['access-control-allow-origin']).toBe(
+      'http://localhost:3002',
+    );
+    expect(preflight.headers['access-control-allow-credentials']).toBe('true');
+    expect(preflight.headers['access-control-allow-headers']).toContain(
+      'X-CSRF-Token',
+    );
+  });
+
+  it('rate limits brute-force login attempts per client IP using trust proxy (X-Forwarded-For)', async () => {
+    const pair = { accessToken: 'a', refreshToken: 'r', expiresIn: 900 };
+    auth.login.mockResolvedValue(pair);
+
+    for (let i = 0; i < 10; i++) {
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/login')
+        .set('X-Forwarded-For', '198.51.100.42')
+        .send({ email: 'ana@acme.test', password: 'secret' })
+        .expect(201);
+    }
+
+    const throttled = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('X-Forwarded-For', '198.51.100.42')
+      .send({ email: 'ana@acme.test', password: 'secret' })
+      .expect(429);
+
+    expect(throttled.body).toEqual({
+      detail: 'Too many requests, please try again later',
+      code: 'rate_limited',
+    });
+
+    // A different client IP behind the proxy is not blocked
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('X-Forwarded-For', '198.51.100.99')
+      .send({ email: 'ana@acme.test', password: 'secret' })
+      .expect(201);
+  });
+
+  it('rate limits authenticated routes per userId across different client IPs', async () => {
+    auth.verify.mockResolvedValue({ userId: 'throttled-user-1' });
+    auth.logout.mockResolvedValue({ ok: true });
+
+    for (let i = 0; i < 3; i++) {
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/logout')
+        .set('Authorization', 'Bearer good')
+        .set('X-Forwarded-For', `198.51.100.${10 + i}`)
+        .send({ refreshToken: 'r' })
+        .expect(201);
+    }
+
+    const throttled = await request(app.getHttpServer())
+      .post('/api/v1/auth/logout')
+      .set('Authorization', 'Bearer good')
+      .set('X-Forwarded-For', '198.51.100.50')
+      .send({ refreshToken: 'r' })
+      .expect(429);
+
+    expect(throttled.body).toEqual({
+      detail: 'Too many requests, please try again later',
+      code: 'rate_limited',
+    });
   });
 });

@@ -22,7 +22,7 @@ import type {
   JsMsg,
 } from '@nats-io/jetstream';
 import { connect } from '@nats-io/transport-node';
-import type { NatsConnection } from '@nats-io/transport-node';
+import type { Authenticator, NatsConnection } from '@nats-io/transport-node';
 import {
   InMemoryOutboxStore,
   OutboxRelay,
@@ -54,6 +54,7 @@ export const BILLING_EVENTS_OPTIONS = Symbol('BILLING_EVENTS_OPTIONS');
 
 export interface BillingEventsOptions {
   servers: string[];
+  authenticator?: Authenticator;
   retryInitialMs?: number;
   retryMaxMs?: number;
 }
@@ -110,6 +111,7 @@ export class BillingEventsService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     this.connection = await connect({
       servers: this.options.servers,
+      authenticator: this.options.authenticator,
       name: 'billing',
     });
     this.js = jetstream(this.connection);

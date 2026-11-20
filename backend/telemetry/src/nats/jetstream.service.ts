@@ -20,6 +20,7 @@ import {
 } from '@nats-io/jetstream';
 import { connect, type NatsConnection } from '@nats-io/transport-node';
 import { envs } from '../config';
+import { buildNatsOptions } from '../config/nats-options';
 import { JETSTREAM_STREAMS, buildAttendanceSubject } from './nats.constants';
 import {
   TELEMETRY_DURABLE_CONSUMERS,
@@ -87,7 +88,7 @@ export class JetStreamService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     try {
       this.connection = await connect({
-        servers: envs.natsServers,
+        ...buildNatsOptions(envs.natsServers, envs.natsCreds),
         name: 'telemetry-jetstream',
       });
       this.js = jetstream(this.connection);
@@ -361,7 +362,7 @@ export class JetStreamService implements OnModuleInit, OnModuleDestroy {
         if (!this.js) {
           if (!this.connection) {
             this.connection = await connect({
-              servers: envs.natsServers,
+              ...buildNatsOptions(envs.natsServers, envs.natsCreds),
               name: 'telemetry-jetstream',
             });
           }
@@ -413,7 +414,7 @@ export class JetStreamService implements OnModuleInit, OnModuleDestroy {
       if (!this.js) {
         if (!this.connection) {
           this.connection = await connect({
-            servers: envs.natsServers,
+            ...buildNatsOptions(envs.natsServers, envs.natsCreds),
             name: 'telemetry-jetstream',
           });
         }

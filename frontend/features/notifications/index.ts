@@ -3,3 +3,4 @@ export { notificationsApi } from './api';
 export { NotificationBell } from './components/NotificationBell';
 export { NotificationsView } from './components/NotificationsView';
 export type { AppNotification } from './types';
+export { useUnreadCount } from './useUnreadCount';

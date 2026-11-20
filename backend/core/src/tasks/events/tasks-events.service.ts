@@ -22,7 +22,7 @@ import type {
   JsMsg,
 } from '@nats-io/jetstream';
 import { connect } from '@nats-io/transport-node';
-import type { NatsConnection } from '@nats-io/transport-node';
+import type { Authenticator, NatsConnection } from '@nats-io/transport-node';
 import {
   InMemoryOutboxStore,
   OutboxRelay,
@@ -52,6 +52,7 @@ export const TASKS_EVENTS_OPTIONS = Symbol('TASKS_EVENTS_OPTIONS');
 
 export interface TasksEventsOptions {
   servers: string[];
+  authenticator?: Authenticator;
   retryInitialMs?: number;
   retryMaxMs?: number;
 }
@@ -97,6 +98,7 @@ export class TasksEventsService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     this.connection = await connect({
       servers: this.options.servers,
+      authenticator: this.options.authenticator,
       name: 'tasks',
     });
     this.js = jetstream(this.connection);

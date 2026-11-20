@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Button } from './Button';
 import { Card } from './Card';
+import './list.css';
 
 /** Pulsing placeholder blocks while a resource loads. */
 export function LoadingState({ rows = 3 }: { rows?: number }) {
@@ -8,11 +9,11 @@ export function LoadingState({ rows = 3 }: { rows?: number }) {
     <div role="status" aria-label="Cargando" className="space-y-4">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {Array.from({ length: 4 }, (_, index) => (
-          <div key={index} className="h-28 animate-pulse rounded-xl border border-line bg-card" />
+          <div key={index} className="state-skeleton h-28" />
         ))}
       </div>
       {Array.from({ length: rows }, (_, index) => (
-        <div key={index} className="h-24 animate-pulse rounded-xl border border-line bg-card" />
+        <div key={index} className="state-skeleton h-24" />
       ))}
     </div>
   );
@@ -35,7 +36,7 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
 
 export function EmptyState({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-line px-6 py-10 text-center">
+    <div className="state-empty">
       <p className="text-sm font-semibold text-title">{title}</p>
       {description && <p className="mt-1 text-xs text-muted">{description}</p>}
       {action}

@@ -38,7 +38,8 @@ Out of scope (do NOT implement here):
 This service has no gateway in front of it, so it applies the same HTTP rules as the HTTP layer of `core` (see `backend/core/AGENTS.md`, section HTTP layer) to its own routes. The code is NOT shared with `core` (separate service); keep behavior equivalent and record any intentional difference here.
 
 - **Actor (non-negotiable):** `{ userId, tenantId, role, siteIds, tenantStatus, plan, features }` is built ONLY from the `auth.token.verify` NATS request answered by `core`. Never read tenant, role, sites, plan or features from the body, query, path or headers. `platform_admin` is refused on every telemetry route (403 `forbidden`).
-- **Auth guard:** a global guard runs on every route and on every WebSocket connection, extracts the access token (cookie for web, `Authorization: Bearer` for mobile; same rules as `core`), calls `auth.token.verify` and attaches the actor. Missing token or `invalid_token` answers 401. Never cache the verify result across requests. Telemetry has no public routes.
+- **Auth guard:** a global guard runs on every route, extracts the access token (cookie for web, `Authorization: Bearer` for mobile; same rules as `core`), calls `auth.token.verify` and attaches the actor. Missing token or `invalid_token` answers 401. Never cache the verify result across requests. Telemetry has no public routes except `GET /health` (deliberate exception for platform health checks and uptime pingers: shallow `{ status: 'ok' }`, no database or NATS call; marked `@Public()`, `src/http/health/health.controller.ts`; the guard honours `@Public()` like `core`'s).
+- **Local verification fallback:** `verifyHs256JwtLocally` (used for HTTP only, when `core` is unreachable and `JWT_SECRET` is set) rejects any token with a `typ` claim, so a socket token never authenticates an HTTP route; it is never used for the WebSocket.
 - **Verify unavailable:** if the NATS request times out or has no responder, answer 504 `upstream_timeout` or 503 `upstream_unavailable`; never let a request through unverified.
 - **Cookies, CSRF, CORS:** the access cookie is set by `core`; telemetry only reads it. Cookie-authenticated `POST`, `PUT`, `PATCH` and `DELETE` require the double-submit CSRF header (`X-CSRF-Token`) compared in constant time; bearer requests skip CSRF. CORS and the Socket.IO origin policy allow only `WEB_ORIGIN` with credentials, never `*`.
 - **Role checks:** route decorators declare coarse roles (route map below); fine-grained rules (employee only for themselves, supervisor limited to `siteIds`) are enforced in the domain.
@@ -54,6 +55,7 @@ The operation names are the stable contract; the paths are proposed and move fro
 
 | Method + path | Operation | Auth | Feature |
 |---|---|---|---|
+| `GET /health` | (none, shallow liveness) | public | - |
 | `POST /clock-events` | `attendance.clock-event.create` | employee | - |
 | `POST /clock-events/manual` | `attendance.clock-event.create-manual` | supervisor, admin | - |
 | `PATCH /clock-events/:clockEventId` | `attendance.clock-event.correct` | supervisor, admin | - |
@@ -66,12 +68,14 @@ The operation names are the stable contract; the paths are proposed and move fro
 
 ### Control Tower WebSocket
 
-- Socket.IO through `@nestjs/websockets`, same origin/credentials policy as HTTP, path `/ws`.
-- On connection: take the access token, call `auth.token.verify`, require feature `tower` and role `owner`, `admin` or `supervisor`. Otherwise disconnect with a typed error (`invalid_token`, `feature_not_in_plan`, `forbidden`, `tenant_suspended`, `tenant_cancelled`).
+- Socket.IO through `@nestjs/websockets`, path `/ws`. The Socket.IO CORS origin is the single `WEB_ORIGIN`. `credentials: true` is kept but is no longer needed: the socket does not use cookies, so the web client may leave `withCredentials` off.
+- Authentication (deliberate change for the free-tier deploy, where `telemetry` is on another origin than the web): the handshake accepts ONLY `handshake.auth.token`, a 60 second socket token issued by `core` (`POST /api/v1/auth/socket-token`, see `backend/core/src/auth/AGENTS.md`). The `Authorization` header and the `access_token` cookie are ignored, and an access token is rejected (`typ` check in `auth.token.verify`). The token is verified with `auth.token.verify` and `purpose: 'socket'`; socket verification is never cached, never served stale and never done locally with `JWT_SECRET` (a `core` outage closes the door). Never log the token.
+- Session length: the 60 second token only opens the handshake. The server disconnects the socket after a fixed `MAX_SOCKET_SESSION_MS` (15 minutes) counted from the connection, and `actor.exp` is not used. The client reconnects with a freshly issued socket token (Socket.IO `auth` callback), which runs verification again, so role, plan, tenant status and site changes apply at most 15 minutes late.
+- On connection: take the socket token, call `auth.token.verify`, require feature `tower` and role `owner`, `admin` or `supervisor`. Otherwise disconnect with a typed error (`invalid_token`, `feature_not_in_plan`, `forbidden`, `tenant_suspended`, `tenant_cancelled`).
 - Rooms: one room per allowed site, named `{tenantId}:{siteId}`. Supervisor: the `siteIds` from verify. Owner/admin: every site of the tenant. Never accept room names or site ids from the client. OPEN: the list of all sites of a tenant must come from `core` (a NATS request such as `organization.site.list` is NOT among the responders listed in `docs/architecture.md`; decide whether to add it or derive the sites from local data).
 - Initial state: compute `attendance.tower.snapshot` for the actor and send it to the socket (in-process, no hop).
 - Live updates: subscribe server-side (once per process, not per socket) to `t.*.attendance.site_summary_updated` and emit each message to the room `{tenantId}:{siteId}` built from the event subject tenant and the payload `siteId`. The browser never talks to NATS. Check that the subject tenant matches the payload `tenantId` before emitting.
-- Token expiry: disconnect the socket when the access token expires (use `exp`; do not verify again on a timer); the client reconnects with its refreshed token, which runs verify again.
+- Session expiry: see Session length above (fixed 15 minute limit, then the client reconnects with a new socket token).
 - Known limitation: a supervisor's site assignment change applies on reconnect, not live.
 
 ## Business Rules
@@ -205,7 +209,7 @@ Operation names follow `attendance.<resource>.<action>` and carry NO tenant: the
 
 In `telemetry` the operations below are served by the modules' HTTP controllers (route map above); they are NOT NATS responders. Telemetry answers no NATS requests. Keep the names in constants files (to create: `src/<module>/<module>.patterns.ts`).
 
-Requests this service MAKES to `core` over NATS request-reply (answered by `core`, see `backend/core/AGENTS.md`): `auth.token.verify`, `organization.employee.get`, `organization.site.get`, `organization.shift.get`. These are the only synchronous dependencies on `core`.
+Requests this service MAKES to `core` over NATS request-reply (answered by `core`, see `backend/core/AGENTS.md`): `auth.token.verify` (payload `{ accessToken, purpose }`: `access` for the HTTP guard, `socket` for the Tower handshake; `core` must be deployed before `telemetry`, because an older `core` rejects the `purpose` field), `organization.employee.get`, `organization.site.get`, `organization.shift.get`. These are the only synchronous dependencies on `core`.
 
 ### Operations (served over HTTP)
 
@@ -313,7 +317,7 @@ Validate all variables in `src/config/envs.ts` and list them in `.env.example`. 
 - Unit tests for every use case with Prisma and the NATS client (requests to `core`) mocked (`pnpm test`).
 - Always covered: tenant isolation; supervisor limited to `siteIds` (404 outside); clock-in matching window (accepted at 60 minutes before start and until shift end, `no_matching_shift` before it and after it, manual event added by a supervisor); `out` attached to the shift with an open `in`; missing clock-out (workday marked after shift end + 2 hours with 0 counted minutes, one alert only, manual clock-out recalculates, closes the workday and resolves the alert); inside geofence valid, outside accepted with the flag and an alert, QR valid with failed GPS, wrong QR rejected; duplicate `clientEventId` ignored; `clock_too_old` after 24 hours; correction keeps before/after and requires a reason; workday arithmetic (worked, overtime, late, with breaks); alert thresholds at 10 and 15 minutes, no duplicate alerts, auto-resolve on clock-in, acknowledge/resolve transitions; late employee `out` after `MISSING_CLOCK_OUT` (closes the workday, recalculates and resolves the alert; still `clock_too_old` after 24 hours); site summary emitted on clock events and alert changes; snapshot filtered by actor sites; shift copy only updated by newer versions; suspended and cancelled tenants skipped by the check; plan gating (basic tenant: no alert detection and no `site_summary_updated`; pro tenant: both; `subscription_created`/`plan_changed` idempotent and stale events ignored; downgrade keeps existing alerts); tenant data purge (`data_retention_expired` deletes every row of the tenant, leaves other tenants untouched and is idempotent); idempotent handling of every consumed event.
 - HTTP layer (same coverage as the former gateway design, for these routes): guard (no token, invalid token, actor only from the verify result), cookie vs bearer, CSRF, CORS, role decorators, plan gating (`alerts`, `tower`), tenant status, `platform_admin` refused, error mapping (verify timeout 504, no responder 503, validation 422), throttling.
-- WebSocket: supervisor joins only its `siteIds`; owner/admin join all sites; a basic-plan tenant or an employee is disconnected; an event for another tenant or site never reaches the room; the socket is disconnected when the access token expires.
+- WebSocket: supervisor joins only its `siteIds`; owner/admin join all sites; a basic-plan tenant or an employee is disconnected; an event for another tenant or site never reaches the room; only `handshake.auth.token` is read and it is verified with purpose `socket` (header and cookie ignored); a missing or invalid token is disconnected; the socket is disconnected at the fixed session limit.
 - E2E tests (to create in `test/`) once the transport and the database are set up, against a dedicated test database.
 
 ## Before Finishing a Task

@@ -431,6 +431,169 @@ describe('AuthService.verify', () => {
     });
   });
 
+  describe('token purpose', () => {
+    function socketToken(
+      claims: { tenantId?: string | null; role?: string; typ?: string } = {},
+      options: { expiresIn?: number; algorithm?: 'HS256' | 'HS512' } = {},
+    ) {
+      return jwt.signAsync(
+        {
+          tenantId: claims.tenantId === undefined ? TENANT_ID : claims.tenantId,
+          role: claims.role ?? 'owner',
+          typ: claims.typ ?? 'socket',
+        },
+        {
+          subject: USER_ID,
+          jwtid: 'jti-socket',
+          expiresIn: options.expiresIn ?? 60,
+          ...(options.algorithm ? { algorithm: options.algorithm } : {}),
+        },
+      );
+    }
+
+    it('accepts an access token for the access purpose, explicit or default', async () => {
+      const token = await accessToken();
+
+      await expect(
+        service.verify({ accessToken: token, purpose: 'access' }),
+      ).resolves.toMatchObject({ userId: USER_ID, role: 'owner' });
+      await expect(
+        service.verify({ accessToken: token }),
+      ).resolves.toMatchObject({ userId: USER_ID });
+    });
+
+    it('rejects a socket token for the access purpose (HTTP routes)', async () => {
+      const token = await socketToken();
+
+      expectInvalidToken(await errorOf(service.verify({ accessToken: token })));
+      expectInvalidToken(
+        await errorOf(
+          service.verify({ accessToken: token, purpose: 'access' }),
+        ),
+      );
+      expect(findUnique).not.toHaveBeenCalled();
+    });
+
+    it('rejects an access token that carries any typ claim', async () => {
+      const token = await socketToken({ typ: 'refresh' });
+
+      expectInvalidToken(await errorOf(service.verify({ accessToken: token })));
+    });
+
+    it('accepts a socket token for the socket purpose and re-reads the database', async () => {
+      findUnique.mockResolvedValue(
+        user({ role: 'SUPERVISOR', siteIds: ['site-a'] }),
+      );
+
+      const actor = await service.verify({
+        accessToken: await socketToken({ role: 'supervisor' }),
+        purpose: 'socket',
+      });
+
+      expect(actor).toMatchObject({
+        userId: USER_ID,
+        tenantId: TENANT_ID,
+        role: 'supervisor',
+        siteIds: ['site-a'],
+        features: FEATURES,
+      });
+      expect(findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: USER_ID } }),
+      );
+    });
+
+    it('rejects an access token for the socket purpose', async () => {
+      expectInvalidToken(
+        await errorOf(
+          service.verify({
+            accessToken: await accessToken(),
+            purpose: 'socket',
+          }),
+        ),
+      );
+      expect(findUnique).not.toHaveBeenCalled();
+    });
+
+    it('rejects a token whose typ is not socket for the socket purpose', async () => {
+      expectInvalidToken(
+        await errorOf(
+          service.verify({
+            accessToken: await socketToken({ typ: 'access' }),
+            purpose: 'socket',
+          }),
+        ),
+      );
+    });
+
+    it('rejects an expired socket token', async () => {
+      const token = await socketToken();
+
+      jest.setSystemTime(new Date(NOW.getTime() + 61_000));
+
+      expectInvalidToken(
+        await errorOf(
+          service.verify({ accessToken: token, purpose: 'socket' }),
+        ),
+      );
+      expect(findUnique).not.toHaveBeenCalled();
+    });
+
+    it('rejects a socket token with a wrong signature or algorithm', async () => {
+      const forged = await new JwtService({ secret: 'y'.repeat(40) }).signAsync(
+        { tenantId: TENANT_ID, role: 'owner', typ: 'socket' },
+        { subject: USER_ID, expiresIn: 60 },
+      );
+
+      expectInvalidToken(
+        await errorOf(
+          service.verify({ accessToken: forged, purpose: 'socket' }),
+        ),
+      );
+      expectInvalidToken(
+        await errorOf(
+          service.verify({
+            accessToken: await socketToken({}, { algorithm: 'HS512' }),
+            purpose: 'socket',
+          }),
+        ),
+      );
+    });
+
+    it('never issues a socket actor for platform_admin or a tenantless token', async () => {
+      findUnique.mockResolvedValue(
+        user({ role: 'PLATFORM_ADMIN', tenantId: null, tenant: null }),
+      );
+
+      expectInvalidToken(
+        await errorOf(
+          service.verify({
+            accessToken: await socketToken({
+              role: 'platform_admin',
+              tenantId: null,
+            }),
+            purpose: 'socket',
+          }),
+        ),
+      );
+      expect(findUnique).not.toHaveBeenCalled();
+    });
+
+    it('still applies the tenant rules to a socket token', async () => {
+      findUnique.mockResolvedValue(
+        user({ role: 'SUPERVISOR', tenant: tenantWith('SUSPENDED') }),
+      );
+
+      const error = await errorOf(
+        service.verify({
+          accessToken: await socketToken({ role: 'supervisor' }),
+          purpose: 'socket',
+        }),
+      );
+
+      expect(error).toBeInstanceOf(TenantSuspendedException);
+    });
+  });
+
   describe('stale claims', () => {
     it('returns the role stored in the database, not the one in the token', async () => {
       findUnique.mockResolvedValue(user({ role: 'EMPLOYEE' }));

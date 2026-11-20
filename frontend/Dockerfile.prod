@@ -1,0 +1,65 @@
+# Production image for the frontend (Next.js standalone output). The dev image (`dockerfile`) is untouched.
+#
+#   docker build -f Dockerfile.prod -t teamworkflow-frontend .
+#   docker run --rm -p 3000:3000 teamworkflow-frontend
+#
+# NEXT_PUBLIC_* values are inlined at build time, so they are build args (no secrets here):
+#   NEXT_PUBLIC_USE_MOCKS  "false" by default: the real HTTP API (mocks are ON only when the value is not "false")
+#   NEXT_PUBLIC_WS_URL     empty by default: Socket.IO connects to the same origin (the reverse proxy serves /ws)
+#   BACKEND_URL            destination of the /api/v1 rewrite in next.config.ts (also baked at build time); behind the
+#                          production proxy the browser never reaches it, so the default is only a fallback
+#   CORE_URL               optional, empty by default: destination of the core rewrite (/api/v1/*); falls back to BACKEND_URL
+#   TELEMETRY_URL          optional, empty by default: destination of the telemetry rewrite (/api/v1/telemetry/*, matched
+#                          first); falls back to BACKEND_URL. Set both when core and telemetry are separate hosts
+
+FROM node:24-alpine AS base
+
+WORKDIR /app
+
+RUN npm install -g pnpm@11.5.2
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+FROM base AS deps
+
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm install --frozen-lockfile --store-dir /pnpm/store
+
+FROM deps AS builder
+
+ARG NEXT_PUBLIC_USE_MOCKS=false
+ARG NEXT_PUBLIC_WS_URL=
+ARG BACKEND_URL=http://localhost:8080
+ARG CORE_URL=
+ARG TELEMETRY_URL=
+
+ENV NEXT_PUBLIC_USE_MOCKS=$NEXT_PUBLIC_USE_MOCKS \
+    NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL \
+    BACKEND_URL=$BACKEND_URL \
+    CORE_URL=$CORE_URL \
+    TELEMETRY_URL=$TELEMETRY_URL \
+    NEXT_TELEMETRY_DISABLED=1
+
+COPY . .
+
+RUN pnpm run build
+
+# Runtime: only the traced server and the static assets. There is no public/ folder today; when one is added,
+# copy it here too (COPY --from=builder --chown=node:node /app/public ./public).
+FROM node:24-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0
+
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+
+USER node
+
+EXPOSE 3000
+
+CMD ["node", "server.js"]

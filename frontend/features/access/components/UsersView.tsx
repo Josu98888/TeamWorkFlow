@@ -5,6 +5,7 @@ import { Badge } from '@/shared/components/Badge';
 import { Button } from '@/shared/components/Button';
 import { Card, SectionLabel } from '@/shared/components/Card';
 import { FormFooter, SelectField, TextField } from '@/shared/components/Fields';
+import { ListRow, RowList } from '@/shared/components/List';
 import { PageHeader } from '@/shared/components/PageHeader';
 import { EmptyState, ErrorState, LoadingState } from '@/shared/components/States';
 import { useAction } from '@/shared/hooks/useAction';
@@ -69,7 +70,7 @@ export function UsersView() {
           </form>
         </Card>
 
-        <Card flush className="lg:col-span-2">
+        <Card flush glow="none" className="lg:col-span-2">
           <div className="px-5 pt-5">
             <SectionLabel>Invitaciones pendientes</SectionLabel>
           </div>
@@ -80,32 +81,34 @@ export function UsersView() {
           ) : invitations.data.length === 0 ? (
             <div className="px-5 pb-5"><EmptyState title="No hay invitaciones pendientes" /></div>
           ) : (
-            <ul className="divide-y divide-line border-t border-line">
+            <RowList>
               {invitations.data.map((invitation) => (
-                <li key={invitation.invitationId} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-title">{invitation.email}</p>
-                    <p className="text-xs text-muted">Vence {formatDateTime(invitation.expiresAt)}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge tone="info">{ROLE_LABELS[invitation.role]}</Badge>
-                    <Button
-                      onClick={() => regenerateInvitation(invitation.invitationId)}
-                      disabled={regenerate.pending || !allowedRoles.includes(invitation.role)}
-                      title={allowedRoles.includes(invitation.role) ? undefined : 'Solo el propietario gestiona invitaciones de administradores.'}
-                    >
-                      Regenerar enlace
-                    </Button>
-                  </div>
-                </li>
+                <ListRow
+                  key={invitation.invitationId}
+                  trailing={
+                    <>
+                      <Badge tone="info">{ROLE_LABELS[invitation.role]}</Badge>
+                      <Button
+                        onClick={() => regenerateInvitation(invitation.invitationId)}
+                        disabled={regenerate.pending || !allowedRoles.includes(invitation.role)}
+                        title={allowedRoles.includes(invitation.role) ? undefined : 'Solo el propietario gestiona invitaciones de administradores.'}
+                      >
+                        Regenerar enlace
+                      </Button>
+                    </>
+                  }
+                >
+                  <p className="truncate text-sm font-semibold text-title">{invitation.email}</p>
+                  <p className="text-xs text-muted">Vence {formatDateTime(invitation.expiresAt)}</p>
+                </ListRow>
               ))}
-            </ul>
+            </RowList>
           )}
           {regenerate.error && <p role="alert" className="px-5 pb-4 text-xs text-danger">{regenerate.error}</p>}
         </Card>
       </div>
 
-      <Card flush className="mt-4">
+      <Card flush glow="none" className="mt-4">
         <div className="px-5 pt-5">
           <SectionLabel>Cuentas vinculadas a empleados</SectionLabel>
           <p className="-mt-2 mb-3 text-xs text-muted">
@@ -119,17 +122,14 @@ export function UsersView() {
         ) : withAccount.length === 0 ? (
           <div className="px-5 pb-5"><EmptyState title="Ningún empleado tiene cuenta todavía" description="Invitá a un usuario con el mismo correo del empleado." /></div>
         ) : (
-          <ul className="divide-y divide-line border-t border-line">
+          <RowList>
             {withAccount.map((employee) => (
-              <li key={employee.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-title">{fullName(employee)}</p>
-                  <p className="truncate text-xs text-muted">{employee.email}</p>
-                </div>
-                {employee.userId && <UserActions userId={employee.userId} />}
-              </li>
+              <ListRow key={employee.id} trailing={employee.userId ? <UserActions userId={employee.userId} /> : undefined}>
+                <p className="truncate text-sm font-semibold text-title">{fullName(employee)}</p>
+                <p className="truncate text-xs text-muted">{employee.email}</p>
+              </ListRow>
             ))}
-          </ul>
+          </RowList>
         )}
       </Card>
 

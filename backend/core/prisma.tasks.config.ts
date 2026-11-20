@@ -8,5 +8,12 @@ import { defineConfig } from 'prisma/config';
 export default defineConfig({
   schema: 'src/tasks/prisma/schema.prisma',
   migrations: { path: 'src/tasks/prisma/migrations' },
-  datasource: { url: process.env.TASKS_DATABASE_URL ?? '' },
+  datasource: {
+    // Migrations may need a session or direct connection (for example
+    // Supabase) while the app uses a pooled one.
+    url:
+      process.env.MIGRATE_TASKS_DATABASE_URL ??
+      process.env.TASKS_DATABASE_URL ??
+      '',
+  },
 });

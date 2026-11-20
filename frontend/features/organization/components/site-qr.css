@@ -1,0 +1,25 @@
+/* QR box: stays white in dark mode so a scanned print or screen keeps its contrast. */
+:root {
+  --qr-bg: #ffffff;
+  --qr-fg: #29272b;
+}
+
+.site-qr-box {
+  display: grid;
+  place-items: center;
+  min-height: 120px;
+  margin-inline: auto;
+  padding: 16px;
+  max-width: 100%;
+  border-radius: 16px;
+  border: 1px solid var(--border-main);
+  background: var(--qr-bg);
+  color: var(--qr-fg);
+  text-align: center;
+}
+
+.site-qr-box code {
+  font-size: 12px;
+  font-weight: 600;
+  word-break: break-all;
+}
