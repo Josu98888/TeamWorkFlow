@@ -109,7 +109,7 @@ export const ASSISTANT_GUIDES: AssistantGuide[] = [
       'Registrá una fichada de método "Manual" (Entrada o Salida) o editá el registro correspondiente para cerrar la jornada.',
     ],
     route: { label: 'Ir a Asistencia', href: '/asistencia' },
-    keywords: ['asistencia', 'corregir', 'manual', 'sin salida', 'fichada', '24 horas', 'jornada'],
+    keywords: ['asistencia', 'corregir', 'manual', 'sin salida', 'fichada', 'fichar', 'entrada', 'salida', '24 horas', 'jornada'],
   },
 ];
 

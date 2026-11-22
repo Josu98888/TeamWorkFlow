@@ -1,9 +1,12 @@
+import dns from 'node:dns';
 import { NextResponse } from 'next/server';
 import {
   TEAMWORKFLOW_SYSTEM_PROMPT,
   findLocalFallbackGuide,
   getGuidesForRole,
 } from '@/shared/lib/assistantGuides';
+
+dns.setDefaultResultOrder('ipv4first');
 
 type RequestPayload = {
   message?: string;
@@ -64,45 +67,71 @@ export async function POST(request: Request) {
 Consulta del usuario:
 ${message}`;
 
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [{ text: TEAMWORKFLOW_SYSTEM_PROMPT }],
-          },
-          contents: [
-            {
-              role: 'user',
-              parts: [{ text: contextualPrompt }],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.25,
-            maxOutputTokens: 380,
-          },
-        }),
-      },
-    );
+  const models = [
+    'gemini-flash-latest',
+    'gemini-2.5-flash',
+    'gemini-flash-lite-latest',
+    'gemini-3.8-flash',
+  ];
 
-    if (!response.ok) {
-      throw new Error(`Gemini API status ${response.status}`);
+  try {
+    let reply = '';
+
+    for (const model of models) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            signal: AbortSignal.timeout(12000),
+            body: JSON.stringify({
+              systemInstruction: {
+                parts: [{ text: TEAMWORKFLOW_SYSTEM_PROMPT }],
+              },
+              contents: [
+                {
+                  role: 'user',
+                  parts: [{ text: contextualPrompt }],
+                },
+              ],
+              generationConfig: {
+                temperature: 0.25,
+                maxOutputTokens: 380,
+              },
+            }),
+          },
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.warn(`[assistant] ${model} no disponible (${response.status}):`, errorText);
+          continue;
+        }
+
+        const data = (await response.json()) as {
+          candidates?: Array<{
+            content?: {
+              parts?: Array<{ text?: string }>;
+            };
+          }>;
+        };
+
+        const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (candidateText) {
+          reply = candidateText;
+          break;
+        }
+      } catch (modelErr) {
+        console.warn(`[assistant] ${model} error/timeout, probando siguiente:`, modelErr);
+        continue;
+      }
     }
 
-    const data = (await response.json()) as {
-      candidates?: Array<{
-        content?: {
-          parts?: Array<{ text?: string }>;
-        };
-      }>;
-    };
-
-    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
     if (!reply) {
-      throw new Error('Empty Gemini response');
+      throw new Error('All Gemini models unavailable');
     }
 
     const relatedGuide = findLocalFallbackGuide(message, role);
@@ -115,7 +144,8 @@ ${message}`;
           : null,
       source: 'gemini',
     });
-  } catch {
+  } catch (err) {
+    console.error('[assistant] Fallback triggered:', err);
     const roleGuides = getGuidesForRole(role);
     const matched = findLocalFallbackGuide(message, role) ?? roleGuides[0];
     return NextResponse.json({
