@@ -20,6 +20,30 @@ const INITIAL_MESSAGE: ChatMessage = {
   text: 'Hola, soy el asistente operativo de TeamWorkFlow. Elegí una guía rápida o escribime qué necesitás hacer en esta pantalla.',
 };
 
+function renderFormattedText(text: string) {
+  const parts = text.split(/(\*\*[^*]+\*\*|"[^"]+")/g);
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      return (
+        <strong key={index} className="font-semibold text-title">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    if (part.startsWith('"') && part.endsWith('"') && part.length > 2) {
+      return (
+        <span
+          key={index}
+          className="mx-0.5 inline-block rounded border border-brand-medium/30 bg-brand-medium/10 px-1.5 py-0.2 font-semibold text-brand-medium"
+        >
+          {part.slice(1, -1)}
+        </span>
+      );
+    }
+    return <span key={index}>{part}</span>;
+  });
+}
+
 export function HelpAssistantWidget() {
   const session = useSession();
   const pathname = usePathname();
@@ -245,7 +269,7 @@ export function HelpAssistantWidget() {
                       : 'border border-line bg-alt/60 text-body'
                   }`}
                 >
-                  {msg.text}
+                  {msg.sender === 'assistant' ? renderFormattedText(msg.text) : msg.text}
                 </div>
                 {msg.route && (
                   <Link
