@@ -39,6 +39,7 @@ export const organizationHttpApi: OrganizationApi = {
   createShift: (input) => send('/shifts', 'POST', input),
   updateShift: (shiftId, input) => send(`/shifts/${shiftId}`, 'PATCH', input),
   reassignShift: (shiftId, input) => send(`/shifts/${shiftId}/reassign`, 'POST', input),
+  assignShiftOvertime: (shiftId, input) => send(`/shifts/${shiftId}/overtime`, 'POST', input),
   cancelShift: (shiftId, input) => send(`/shifts/${shiftId}/cancel`, 'POST', input),
   createShiftTemplate: (input) => send('/shift-templates', 'POST', input),
   updateShiftTemplate: (templateId, input) => send(`/shift-templates/${templateId}`, 'PATCH', input),

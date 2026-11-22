@@ -74,6 +74,10 @@ export type Shift = {
   employeeId: string | null;
   startsAt: string;
   endsAt: string;
+  authorizedOvertimeMinutes?: number;
+  overtimeReason?: string | null;
+  overtimeAssignedByUserId?: string | null;
+  overtimeAssignedAt?: string | null;
   status: ShiftStatus;
   version: number;
   createdAt: string;
@@ -115,6 +119,11 @@ export type UpdateEmployeeInput = Partial<Omit<CreateEmployeeInput, 'email'>> & 
 export type CreateShiftInput = { siteId: string; postId: string; startsAt: string; endsAt: string; employeeId?: string | null };
 /** `version` is the one the caller read (optimistic concurrency). */
 export type UpdateShiftInput = { version: number; startsAt?: string; endsAt?: string; postId?: string };
+export type AssignShiftOvertimeInput = {
+  version: number;
+  authorizedOvertimeMinutes: number;
+  reason?: string | null;
+};
 
 export type ShiftWarningCode = 'rest_under_12h' | 'weekly_hours_exceeded' | 'missing_skill' | 'site_not_enabled';
 export type ShiftWarning = { code: ShiftWarningCode; message: string };
