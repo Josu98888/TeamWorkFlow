@@ -23,6 +23,7 @@ export type Capability =
   | 'employees.manage'
   | 'shifts.view'
   | 'shifts.manage'
+  | 'shiftTemplates.manage'
   | 'tasks.view'
   | 'forms.manage'
   | 'tasks.create'
@@ -60,6 +61,8 @@ const CAPABILITY_ROLES: Record<Capability, readonly Role[]> = {
   'shifts.view': MANAGERS,
   // core `shifts/shift-policy.ts` `requireShiftManager`: everyone but employee (supervisor inside `siteIds`).
   'shifts.manage': MANAGERS,
+  // core `shifts/shift-templates.service.ts` `requireSiteManager`: owner and admin only.
+  'shiftTemplates.manage': OWNER_ADMIN,
   // core `tasks/AGENTS.md` role table (task screens for employees are not built yet).
   'tasks.view': MANAGERS,
   // core `tasks/http/forms.controller.ts` assertManager: owner, admin.
