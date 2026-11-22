@@ -1,5 +1,5 @@
-import { ShiftsView } from '@/features/organization';
+import { ShiftsRootView } from '@/features/organization';
 
-export default function ShiftsPage() {
-  return <ShiftsView />;
+export default function TurnosPage() {
+  return <ShiftsRootView />;
 }
