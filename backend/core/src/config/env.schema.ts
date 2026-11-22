@@ -39,6 +39,7 @@ export interface Envs {
   dueDays: number;
   graceDays: number;
   dataRetentionDays: number;
+  shiftHorizonDays: number;
   appUrl: string;
   webOrigin: string;
   cookieSecure: boolean;
@@ -82,6 +83,7 @@ interface EnvVars {
   DUE_DAYS: number;
   GRACE_DAYS: number;
   DATA_RETENTION_DAYS: number;
+  SHIFT_HORIZON_DAYS: number;
   APP_URL: string;
   WEB_ORIGIN: string;
   COOKIE_SECURE: boolean;
@@ -169,6 +171,7 @@ const envsSchema = joi
     DUE_DAYS: joi.number().integer().positive().default(10),
     GRACE_DAYS: joi.number().integer().positive().default(7),
     DATA_RETENTION_DAYS: joi.number().integer().positive().default(90),
+    SHIFT_HORIZON_DAYS: joi.number().integer().min(1).max(90).default(14),
     APP_URL: joi.string().uri().default('http://localhost:3002'),
     WEB_ORIGIN: joi.string().uri().default('http://localhost:3002'),
     // Secure auth cookies by default. Set to false only for an HTTP-only test
@@ -245,6 +248,7 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
     dueDays: envVars.DUE_DAYS,
     graceDays: envVars.GRACE_DAYS,
     dataRetentionDays: envVars.DATA_RETENTION_DAYS,
+    shiftHorizonDays: envVars.SHIFT_HORIZON_DAYS,
     appUrl: envVars.APP_URL,
     webOrigin: envVars.WEB_ORIGIN,
     cookieSecure: envVars.COOKIE_SECURE,

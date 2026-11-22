@@ -125,3 +125,49 @@ export type InvitableRole = 'employee' | 'supervisor';
 export type InviteRoleOption = { value: InvitableRole; label: string };
 /** Injected by the route: sends the access invitation (the organization domain does not know the auth domain). */
 export type InviteEmployee = (input: { email: string; role: InvitableRole }) => Promise<unknown>;
+
+export type ShiftTemplate = {
+  id: string;
+  tenantId: string;
+  siteId: string;
+  postId: string;
+  employeeId: string | null;
+  weekdays: number[];
+  startTime: string;
+  durationMinutes: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ShiftTemplateWithGeneration = {
+  template: ShiftTemplate;
+  generatedCount: number;
+  skippedOverlapCount: number;
+};
+
+export type ListShiftTemplatesQuery = {
+  siteId?: string;
+  postId?: string;
+  employeeId?: string;
+  isActive?: boolean;
+  page?: number;
+  pageSize?: number;
+};
+
+export type CreateShiftTemplateInput = {
+  siteId: string;
+  postId: string;
+  weekdays: number[];
+  startTime: string;
+  durationMinutes: number;
+  employeeId?: string | null;
+};
+
+export type UpdateShiftTemplateInput = {
+  weekdays?: number[];
+  startTime?: string;
+  durationMinutes?: number;
+  employeeId?: string | null;
+  isActive?: boolean;
+};

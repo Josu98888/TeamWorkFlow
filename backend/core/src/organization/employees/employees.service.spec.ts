@@ -502,6 +502,28 @@ describe('EmployeesService', () => {
       expect(page.items.map((i) => i.id)).toEqual(['e-cat']);
     });
 
+    it('searches nationalId and employeeNumber for owner/admin but not supervisor', async () => {
+      const findMany = jest.fn().mockResolvedValue([]);
+      const count = jest.fn().mockResolvedValue(0);
+      const mockPrisma = { employee: { findMany, count } };
+      const svc = new EmployeesService(
+        mockPrisma as never,
+        { findExistingSiteIds: jest.fn() } as never,
+      );
+
+      await svc.list(actor('owner'), { search: '30111222' });
+      const ownerWhere = findMany.mock.calls[0][0].where;
+      expect(JSON.stringify(ownerWhere)).toContain('nationalId');
+      expect(JSON.stringify(ownerWhere)).toContain('employeeNumber');
+
+      await svc.list(actor('supervisor', { siteIds: [SITE_1] }), {
+        search: '30111222',
+      });
+      const supWhere = findMany.mock.calls[1][0].where;
+      expect(JSON.stringify(supWhere)).not.toContain('nationalId');
+      expect(JSON.stringify(supWhere)).not.toContain('employeeNumber');
+    });
+
     it('a supervisor lists only employees enabled in their sites, even when filtering by another site', async () => {
       const supervisor = actor('supervisor', { siteIds: [SITE_1] });
       expect(
