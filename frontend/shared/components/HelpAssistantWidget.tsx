@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from '@/shared/hooks/useSession';
-import { getGuidesForRole, type AssistantGuide } from '@/shared/lib/assistantGuides';
+import { getGuidesForContext, type AssistantGuide } from '@/shared/lib/assistantGuides';
 
 type ChatMessage = {
   id: string;
@@ -23,7 +23,10 @@ const INITIAL_MESSAGE: ChatMessage = {
 export function HelpAssistantWidget() {
   const session = useSession();
   const pathname = usePathname();
-  const guides = useMemo(() => getGuidesForRole(session?.role), [session?.role]);
+  const guides = useMemo(
+    () => getGuidesForContext(session?.role, pathname),
+    [session?.role, pathname],
+  );
 
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([INITIAL_MESSAGE]);
@@ -173,16 +176,26 @@ export function HelpAssistantWidget() {
               Preguntas frecuentes
             </p>
             <div className="flex flex-wrap gap-1.5">
-              {guides.map((guide) => (
-                <button
-                  key={guide.id}
-                  type="button"
-                  onClick={() => handleSelectGuide(guide)}
-                  className="rounded-lg border border-line bg-card px-2.5 py-1 text-left text-[11px] font-medium text-body transition-colors hover:border-brand-medium hover:text-title focus-visible:outline-2 focus-visible:outline-brand-medium"
-                >
-                  {guide.question}
-                </button>
-              ))}
+              {guides.map((guide) => {
+                const isCurrentView =
+                  Boolean(guide.route?.href) &&
+                  guide.route?.href !== '/' &&
+                  (pathname === guide.route?.href ||
+                    pathname.startsWith(`${guide.route?.href}/`));
+
+                return (
+                  <button
+                    key={guide.id}
+                    type="button"
+                    onClick={() => handleSelectGuide(guide)}
+                    className={`rounded-lg border bg-card px-2.5 py-1 text-left text-[11px] font-medium text-body transition-colors hover:border-brand-medium hover:text-title focus-visible:outline-2 focus-visible:outline-brand-medium ${
+                      isCurrentView ? 'border-brand-medium/60 font-semibold text-title' : 'border-line'
+                    }`}
+                  >
+                    {guide.question}
+                  </button>
+                );
+              })}
             </div>
           </div>
 

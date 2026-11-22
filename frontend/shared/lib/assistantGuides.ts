@@ -219,3 +219,21 @@ export function resolveAllowedRoute(href: string | null | undefined, role: strin
   );
   return match ? { href: match.href, label: match.label } : null;
 }
+
+export function getGuidesForContext(
+  role: string | null | undefined,
+  currentPath: string | null | undefined,
+): AssistantGuide[] {
+  const roleGuides = getGuidesForRole(role);
+  if (!currentPath || currentPath === '/') return roleGuides;
+
+  const isCurrentScreen = (guide: AssistantGuide) => {
+    const target = guide.route?.href;
+    if (!target || target === '/') return false;
+    return currentPath === target || currentPath.startsWith(`${target}/`);
+  };
+
+  const matching = roleGuides.filter(isCurrentScreen);
+  const rest = roleGuides.filter((guide) => !isCurrentScreen(guide));
+  return [...matching, ...rest];
+}
