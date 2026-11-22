@@ -32,12 +32,9 @@ function renderFormattedText(text: string) {
     }
     if (part.startsWith('"') && part.endsWith('"') && part.length > 2) {
       return (
-        <span
-          key={index}
-          className="mx-0.5 inline-block rounded border border-brand-medium/30 bg-brand-medium/10 px-1.5 py-0.2 font-semibold text-brand-medium"
-        >
+        <strong key={index} className="font-semibold text-title">
           {part.slice(1, -1)}
-        </span>
+        </strong>
       );
     }
     return <span key={index}>{part}</span>;
