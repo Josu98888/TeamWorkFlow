@@ -5,14 +5,24 @@ export const INITIAL_PLANS = [
     code: 'BASIC' as const,
     name: 'Plan Básico',
     monthlyPrice: 50000,
-    features: { tasks: false, alerts: false, tower: false },
+    features: {
+      tasks: false,
+      alerts: false,
+      tower: false,
+      payroll_reports: false,
+    },
     isActive: true,
   },
   {
     code: 'PRO' as const,
     name: 'Plan Profesional',
     monthlyPrice: 100000,
-    features: { tasks: true, alerts: true, tower: true },
+    features: {
+      tasks: true,
+      alerts: true,
+      tower: true,
+      payroll_reports: true,
+    },
     isActive: true,
   },
 ];

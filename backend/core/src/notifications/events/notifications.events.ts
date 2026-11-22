@@ -18,6 +18,9 @@ export const ATTENDANCE_STREAM = 'ATTENDANCE_EVENTS';
 export const CONSUMED_SUBJECTS = {
   notificationsSend: 't.*.notifications.send',
   attendanceAlertOpened: 't.*.attendance.alert_opened',
+  attendanceDailyReportReady: 't.*.attendance.daily_report_ready',
+  attendanceMonthlyReportReady: 't.*.attendance.monthly_report_ready',
+  attendancePayrollReportReady: 't.*.attendance.payroll_report_ready',
   tasksTaskAssigned: 't.*.tasks.task_assigned',
   authTenantSuspended: 't.*.auth.tenant_suspended',
   authTenantCancelled: 't.*.auth.tenant_cancelled',
@@ -46,7 +49,12 @@ export const NOTIFICATIONS_DURABLE_CONSUMERS: readonly DurableConsumerSpec[] =
     {
       durable: 'notifications-telemetry',
       stream: ATTENDANCE_STREAM,
-      filterSubjects: [CONSUMED_SUBJECTS.attendanceAlertOpened],
+      filterSubjects: [
+        CONSUMED_SUBJECTS.attendanceAlertOpened,
+        CONSUMED_SUBJECTS.attendanceDailyReportReady,
+        CONSUMED_SUBJECTS.attendanceMonthlyReportReady,
+        CONSUMED_SUBJECTS.attendancePayrollReportReady,
+      ],
     },
     {
       durable: 'notifications-tasks',
