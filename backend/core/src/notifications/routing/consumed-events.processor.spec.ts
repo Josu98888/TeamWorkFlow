@@ -96,9 +96,50 @@ describe('ConsumedEventsProcessor', () => {
     );
   });
 
-  it('registers all 9 JetStream handlers on module init', () => {
+  it('registers all 12 JetStream handlers on module init', () => {
     processor.onModuleInit();
-    expect(mockEvents.registerHandler).toHaveBeenCalledTimes(9);
+    expect(mockEvents.registerHandler).toHaveBeenCalledTimes(12);
+  });
+
+  it('delivers attendance report ready notifications to tenant owner and assigned recipientUserIds', async () => {
+    mockPrisma.tenantState.findUnique.mockResolvedValueOnce(null);
+    mockPrisma.tenantFeatures.findUnique.mockResolvedValueOnce({
+      features: { payroll_reports: true },
+    });
+    mockAuth.listRecipients.mockResolvedValueOnce({
+      userIds: ['owner-1'],
+    });
+
+    await processor.handleAttendanceReportReady(
+      {
+        subject: 't.tenant-1.attendance.daily_report_ready',
+        tenantId: 'tenant-1',
+        payload: {
+          eventId: 'evt-rep-1',
+          tenantId: 'tenant-1',
+          reportDate: '2026-11-22',
+          absentCount: 2,
+          outOfGeofenceCount: 1,
+          recipientUserIds: ['owner-1', 'hr-worker-1'],
+        },
+      },
+      'daily_attendance_report',
+      false,
+    );
+
+    expect(mockAuth.listRecipients).toHaveBeenCalledWith({
+      tenantId: 'tenant-1',
+      roles: ['owner'],
+    });
+    expect(mockDelivery.stageDeliveries).toHaveBeenCalledWith(
+      mockPrisma,
+      expect.objectContaining({
+        tenantId: 'tenant-1',
+        recipientUserIds: ['owner-1', 'hr-worker-1'],
+        templateCode: 'daily_attendance_report',
+        sourceEventId: 'evt-rep-1',
+      }),
+    );
   });
 
   it('delivers billing_* templates while suspended and resolves empty recipientUserIds to owners/admins', async () => {
