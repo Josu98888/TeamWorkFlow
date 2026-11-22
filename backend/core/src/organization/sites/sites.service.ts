@@ -188,6 +188,14 @@ export class SitesService {
     return site;
   }
 
+  // For the telemetry NATS catalog responder: all sites of `tenantId`.
+  async listForTenant(tenantId: string): Promise<SiteRow[]> {
+    return this.prisma.site.findMany({
+      where: { tenantId },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+    });
+  }
+
   // For the employees sub-module (enabled sites): which of `siteIds` exist in
   // the tenant. Returns only the matching ids; it does not check actor scope.
   async findExistingSiteIds(
@@ -226,6 +234,9 @@ export class SitesService {
     return this.events.publish(site.tenantId, ORGANIZATION_EVENTS.siteUpdated, {
       siteId: site.id,
       tenantId: site.tenantId,
+      name: site.name,
+      timezone: site.timezone,
+      isActive: site.isActive,
       latitude: site.latitude,
       longitude: site.longitude,
       geofenceRadiusMeters: site.geofenceRadiusMeters,

@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { PostNotFoundException } from '../../common/exceptions/app.exceptions';
+import { OrganizationEventsService } from '../events/organization-events.service';
 import type { OrganizationActor } from '../organization-actor';
+import { ORGANIZATION_EVENTS } from '../organization.patterns';
 import { OrganizationPrismaService } from '../prisma/prisma.service';
 import type {
   CreatePostBodyDto,
@@ -27,6 +29,7 @@ export class PostsService {
   constructor(
     private readonly prisma: OrganizationPrismaService,
     private readonly sites: SitesService,
+    @Optional() private readonly events?: OrganizationEventsService,
   ) {}
 
   // `organization.post.create` (owner/admin).
@@ -37,7 +40,7 @@ export class PostsService {
   ): Promise<PostView> {
     const manager = requireSiteManager(actor);
     await this.sites.requireAccessibleSite(manager, siteId);
-    return this.prisma.post.create({
+    const post = await this.prisma.post.create({
       data: {
         tenantId: manager.tenantId,
         siteId,
@@ -46,6 +49,14 @@ export class PostsService {
         minPeople: dto.minPeople ?? 1,
       },
     });
+    await this.events?.publish(post.tenantId, ORGANIZATION_EVENTS.postCreated, {
+      postId: post.id,
+      tenantId: post.tenantId,
+      siteId: post.siteId,
+      name: post.name,
+      isActive: post.isActive,
+    });
+    return post;
   }
 
   // `organization.post.update` (owner/admin).
@@ -72,6 +83,13 @@ export class PostsService {
     if (!post) {
       throw new PostNotFoundException();
     }
+    await this.events?.publish(post.tenantId, ORGANIZATION_EVENTS.postUpdated, {
+      postId: post.id,
+      tenantId: post.tenantId,
+      siteId: post.siteId,
+      name: post.name,
+      isActive: post.isActive,
+    });
     return post;
   }
 
@@ -106,5 +124,13 @@ export class PostsService {
       throw new PostNotFoundException();
     }
     return post;
+  }
+
+  // For the telemetry NATS catalog responder: all posts of `tenantId`.
+  async listForTenant(tenantId: string, siteId?: string): Promise<PostView[]> {
+    return this.prisma.post.findMany({
+      where: { tenantId, ...(siteId ? { siteId } : {}) },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
   }
 }
