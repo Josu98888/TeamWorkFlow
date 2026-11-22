@@ -189,3 +189,51 @@ export function findLocalFallbackGuide(query: string, role?: string | null): Ass
 
   return bestScore > 0 ? bestMatch : null;
 }
+
+export type AllowedRoute = {
+  href: string;
+  label: string;
+  roles: string[];
+};
+
+export const ALLOWED_ASSISTANT_ROUTES: AllowedRoute[] = [
+  { href: '/mi-jornada', label: 'Ir a Mi jornada', roles: ['employee'] },
+  { href: '/', label: 'Ir a Panel principal', roles: ['owner', 'admin', 'supervisor'] },
+  { href: '/torre-control', label: 'Ir a Torre de Control', roles: ['owner', 'admin', 'supervisor'] },
+  { href: '/sedes', label: 'Ir a Sedes y Geocercas', roles: ['owner', 'admin', 'supervisor'] },
+  { href: '/tareas', label: 'Ir a Tareas y Reportes', roles: ['owner', 'admin', 'supervisor', 'employee'] },
+  { href: '/tareas/formularios', label: 'Ir a Formularios', roles: ['owner', 'admin', 'supervisor'] },
+  { href: '/notificaciones', label: 'Ir a Notificaciones', roles: ['owner', 'admin', 'supervisor', 'employee'] },
+  { href: '/empleados', label: 'Ir a Empleados', roles: ['owner', 'admin', 'supervisor'] },
+  { href: '/turnos', label: 'Ir a Turnos', roles: ['owner', 'admin', 'supervisor'] },
+  { href: '/asistencia', label: 'Ir a Asistencia', roles: ['owner', 'admin', 'supervisor'] },
+  { href: '/usuarios', label: 'Ir a Usuarios', roles: ['owner', 'admin'] },
+  { href: '/facturacion', label: 'Ir a Facturación', roles: ['owner'] },
+];
+
+export function resolveAllowedRoute(href: string | null | undefined, role: string | null | undefined) {
+  if (!href) return null;
+  const normalizedRole = (role ?? 'employee').toLowerCase();
+  const match = ALLOWED_ASSISTANT_ROUTES.find(
+    (route) => route.href === href && route.roles.includes(normalizedRole),
+  );
+  return match ? { href: match.href, label: match.label } : null;
+}
+
+export function getGuidesForContext(
+  role: string | null | undefined,
+  currentPath: string | null | undefined,
+): AssistantGuide[] {
+  const roleGuides = getGuidesForRole(role);
+  if (!currentPath || currentPath === '/') return roleGuides;
+
+  const isCurrentScreen = (guide: AssistantGuide) => {
+    const target = guide.route?.href;
+    if (!target || target === '/') return false;
+    return currentPath === target || currentPath.startsWith(`${target}/`);
+  };
+
+  const matching = roleGuides.filter(isCurrentScreen);
+  const rest = roleGuides.filter((guide) => !isCurrentScreen(guide));
+  return [...matching, ...rest];
+}

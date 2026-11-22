@@ -4,14 +4,26 @@ import {
   TEAMWORKFLOW_SYSTEM_PROMPT,
   findLocalFallbackGuide,
   getGuidesForRole,
+  resolveAllowedRoute,
 } from '@/shared/lib/assistantGuides';
 
 dns.setDefaultResultOrder('ipv4first');
+
+type HistoryTurn = {
+  sender: 'user' | 'assistant';
+  text: string;
+};
 
 type RequestPayload = {
   message?: string;
   role?: string | null;
   currentPath?: string | null;
+  history?: HistoryTurn[];
+};
+
+type StructuredGeminiReply = {
+  reply?: string;
+  routeHref?: string | null;
 };
 
 function formatGuideText(steps: string[]): string {
@@ -60,12 +72,38 @@ export async function POST(request: Request) {
     });
   }
 
+  const recentHistory = Array.isArray(body.history)
+    ? body.history
+        .filter(
+          (item): item is HistoryTurn =>
+            (item?.sender === 'user' || item?.sender === 'assistant') &&
+            typeof item?.text === 'string' &&
+            item.text.trim().length > 0,
+        )
+        .slice(-6)
+    : [];
+
   const contextualPrompt = `Contexto de sesión actual:
 - Rol del usuario: ${role ?? 'desconocido'}
 - Pantalla actual donde está parado: ${currentPath}
 
 Consulta del usuario:
-${message}`;
+${message}
+
+Respondé en JSON con:
+- "reply": texto de la respuesta operativa siguiendo todas las reglas del sistema.
+- "routeHref": ruta exacta de la pantalla a la que debería ir el usuario si corresponde navegar (ej. "/asistencia", "/turnos", "/torre-control", "/sedes", "/tareas", "/empleados", "/usuarios", "/facturacion", "/mi-jornada") o null si ya está en esa pantalla o no hace falta navegar.`;
+
+  const contents = [
+    ...recentHistory.map((turn) => ({
+      role: turn.sender === 'assistant' ? 'model' : 'user',
+      parts: [{ text: turn.text.slice(0, 800) }],
+    })),
+    {
+      role: 'user',
+      parts: [{ text: contextualPrompt }],
+    },
+  ];
 
   const models = [
     'gemini-flash-latest',
@@ -75,7 +113,7 @@ ${message}`;
   ];
 
   try {
-    let reply = '';
+    let parsedReply: StructuredGeminiReply | null = null;
 
     for (const model of models) {
       try {
@@ -91,16 +129,20 @@ ${message}`;
               systemInstruction: {
                 parts: [{ text: TEAMWORKFLOW_SYSTEM_PROMPT }],
               },
-              contents: [
-                {
-                  role: 'user',
-                  parts: [{ text: contextualPrompt }],
-                },
-              ],
+              contents,
               generationConfig: {
-              temperature: 0.25,
-              maxOutputTokens: 700,
-            },
+                temperature: 0.25,
+                maxOutputTokens: 700,
+                responseMimeType: 'application/json',
+                responseSchema: {
+                  type: 'OBJECT',
+                  properties: {
+                    reply: { type: 'STRING' },
+                    routeHref: { type: 'STRING', nullable: true },
+                  },
+                  required: ['reply', 'routeHref'],
+                },
+              },
             }),
           },
         );
@@ -119,10 +161,12 @@ ${message}`;
           }>;
         };
 
-        const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-        if (candidateText) {
-          reply = candidateText;
-          break;
+        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (rawText) {
+          parsedReply = JSON.parse(rawText) as StructuredGeminiReply;
+          if (parsedReply?.reply?.trim()) {
+            break;
+          }
         }
       } catch (modelErr) {
         console.warn(`[assistant] ${model} error/timeout, probando siguiente:`, modelErr);
@@ -130,18 +174,19 @@ ${message}`;
       }
     }
 
-    if (!reply) {
+    if (!parsedReply?.reply?.trim()) {
       throw new Error('All Gemini models unavailable');
     }
 
-    const relatedGuide = findLocalFallbackGuide(message, role);
+    const aiRoute = resolveAllowedRoute(parsedReply.routeHref, role);
+    const fallbackGuide = findLocalFallbackGuide(message, role);
+    const resolvedRoute =
+      aiRoute ??
+      (fallbackGuide?.route ? resolveAllowedRoute(fallbackGuide.route.href, role) : null);
 
     return NextResponse.json({
-      reply,
-      route:
-        relatedGuide?.route && relatedGuide.route.href !== currentPath
-          ? relatedGuide.route
-          : null,
+      reply: parsedReply.reply.trim(),
+      route: resolvedRoute && resolvedRoute.href !== currentPath ? resolvedRoute : null,
       source: 'gemini',
     });
   } catch (err) {
