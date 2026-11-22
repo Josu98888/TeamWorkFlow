@@ -1,20 +1,21 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 
-import { getEnv } from '../config/envs';
-import { PrismaService } from '../prisma/prisma.service';
+import { envs } from '../config';
+import { AttendancePrismaService } from '../prisma/attendance-prisma.service';
 import { TenantStateService } from '../tenants/tenant-state.service';
-import { formatDateInTz, getPreviousMonthPeriod } from './domain/timezone-range';
+import {
+  previousDayInTz,
+  previousYearMonthInTz,
+} from './domain/timezone-range';
 import { ReportsService } from './reports.service';
-
-const DAY_MS = 24 * 60 * 60_000;
 
 @Injectable()
 export class DailyReportJob {
   private readonly logger = new Logger(DailyReportJob.name);
 
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly prisma: AttendancePrismaService,
     private readonly tenantState: TenantStateService,
     private readonly reportsService: ReportsService,
   ) {}
@@ -25,11 +26,7 @@ export class DailyReportJob {
   }
 
   async runOnce(now: Date = new Date()): Promise<number> {
-    const defaultTz = getEnv().DEFAULT_REPORT_TZ;
-    const yesterdayDate = formatDateInTz(
-      new Date(now.getTime() - DAY_MS),
-      defaultTz,
-    );
+    const yesterdayDate = previousDayInTz(now, envs.defaultReportTz);
 
     const tenants = await this.prisma.shiftSnapshot.findMany({
       distinct: ['tenantId'],
@@ -38,7 +35,7 @@ export class DailyReportJob {
 
     let generated = 0;
     for (const { tenantId } of tenants) {
-      if (this.tenantState.isSuspended(tenantId)) continue;
+      if (await this.tenantState.isSuspended(tenantId)) continue;
       try {
         await this.reportsService.generateAndSaveDailySnapshot(
           tenantId,
@@ -62,7 +59,7 @@ export class MonthlyReportJob {
   private readonly logger = new Logger(MonthlyReportJob.name);
 
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly prisma: AttendancePrismaService,
     private readonly tenantState: TenantStateService,
     private readonly reportsService: ReportsService,
   ) {}
@@ -73,8 +70,7 @@ export class MonthlyReportJob {
   }
 
   async runOnce(now: Date = new Date()): Promise<number> {
-    const defaultTz = getEnv().DEFAULT_REPORT_TZ;
-    const previousPeriod = getPreviousMonthPeriod(now, defaultTz);
+    const previousPeriod = previousYearMonthInTz(now, envs.defaultReportTz);
 
     const tenants = await this.prisma.shiftSnapshot.findMany({
       distinct: ['tenantId'],
@@ -83,7 +79,7 @@ export class MonthlyReportJob {
 
     let generated = 0;
     for (const { tenantId } of tenants) {
-      if (this.tenantState.isSuspended(tenantId)) continue;
+      if (await this.tenantState.isSuspended(tenantId)) continue;
       try {
         await this.reportsService.generateAndSaveMonthlySnapshot(
           tenantId,

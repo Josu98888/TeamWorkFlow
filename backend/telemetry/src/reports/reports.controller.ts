@@ -11,18 +11,13 @@ import {
   Query,
   Res,
   StreamableFile,
-  UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 
-import { CurrentUser } from '../http/decorators/current-user.decorator';
-import { RequireFeature } from '../http/decorators/require-feature.decorator';
+import { CurrentActor } from '../http/decorators/current-actor.decorator';
+import { RequireFeature } from '../http/decorators/features.decorator';
 import { Roles } from '../http/decorators/roles.decorator';
-import { AuthGuard } from '../http/guards/auth.guard';
-import { FeatureFlagGuard } from '../http/guards/feature-flag.guard';
-import { RolesGuard } from '../http/guards/roles.guard';
-import { TenantActiveGuard } from '../http/guards/tenant-active.guard';
-import type { AuthUser } from '../http/interfaces/auth-user.interface';
+import type { VerifiedActor } from '../nats/dto/nats-contracts';
 import {
   CloseMonthlyPayrollRunDto,
   DailyReportQueryDto,
@@ -36,7 +31,6 @@ import { ReportRecipientsService } from './report-recipients.service';
 import { ReportsService } from './reports.service';
 
 @Controller('reports')
-@UseGuards(AuthGuard, TenantActiveGuard, RolesGuard, FeatureFlagGuard)
 export class ReportsController {
   constructor(
     private readonly reportsService: ReportsService,
@@ -45,14 +39,14 @@ export class ReportsController {
 
   @Get('recipients')
   @Roles('owner')
-  listRecipients(@CurrentUser() actor: AuthUser) {
+  listRecipients(@CurrentActor() actor: VerifiedActor) {
     return this.recipientsService.listRecipients(actor);
   }
 
   @Put('recipients/:userId')
   @Roles('owner')
   upsertRecipient(
-    @CurrentUser() actor: AuthUser,
+    @CurrentActor() actor: VerifiedActor,
     @Param() params: RecipientUserIdParamDto,
     @Body() dto: UpsertReportRecipientDto,
   ) {
@@ -63,7 +57,7 @@ export class ReportsController {
   @Roles('owner')
   @HttpCode(HttpStatus.NO_CONTENT)
   async removeRecipient(
-    @CurrentUser() actor: AuthUser,
+    @CurrentActor() actor: VerifiedActor,
     @Param() params: RecipientUserIdParamDto,
   ): Promise<void> {
     await this.recipientsService.removeRecipient(actor, params.userId);
@@ -71,7 +65,7 @@ export class ReportsController {
 
   @Get('daily')
   getDailyReport(
-    @CurrentUser() actor: AuthUser,
+    @CurrentActor() actor: VerifiedActor,
     @Query() query: DailyReportQueryDto,
   ) {
     return this.reportsService.getDailyReport(actor, query);
@@ -79,7 +73,7 @@ export class ReportsController {
 
   @Get('daily/pdf')
   async exportDailyPdf(
-    @CurrentUser() actor: AuthUser,
+    @CurrentActor() actor: VerifiedActor,
     @Query() query: DailyReportQueryDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
@@ -97,7 +91,7 @@ export class ReportsController {
 
   @Get('daily/history')
   listDailyHistory(
-    @CurrentUser() actor: AuthUser,
+    @CurrentActor() actor: VerifiedActor,
     @Query() query: ReportHistoryQueryDto,
   ) {
     return this.reportsService.listDailyHistory(actor, query);
@@ -105,7 +99,7 @@ export class ReportsController {
 
   @Get('monthly')
   getMonthlyReport(
-    @CurrentUser() actor: AuthUser,
+    @CurrentActor() actor: VerifiedActor,
     @Query() query: MonthlyReportQueryDto,
   ) {
     return this.reportsService.getMonthlyReport(actor, query);
@@ -113,7 +107,7 @@ export class ReportsController {
 
   @Get('monthly/pdf')
   async exportMonthlyPdf(
-    @CurrentUser() actor: AuthUser,
+    @CurrentActor() actor: VerifiedActor,
     @Query() query: MonthlyReportQueryDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
@@ -131,7 +125,7 @@ export class ReportsController {
 
   @Get('monthly/history')
   listMonthlyHistory(
-    @CurrentUser() actor: AuthUser,
+    @CurrentActor() actor: VerifiedActor,
     @Query() query: ReportHistoryQueryDto,
   ) {
     return this.reportsService.listMonthlyHistory(actor, query);
@@ -140,7 +134,7 @@ export class ReportsController {
   @Get('monthly/payroll')
   @RequireFeature('payroll_reports')
   getMonthlyPayroll(
-    @CurrentUser() actor: AuthUser,
+    @CurrentActor() actor: VerifiedActor,
     @Query() query: MonthlyReportQueryDto,
   ) {
     return this.reportsService.getMonthlyPayrollPreview(actor, query);
@@ -149,7 +143,7 @@ export class ReportsController {
   @Get('monthly/export')
   @RequireFeature('payroll_reports')
   async exportMonthlyPayrollExcel(
-    @CurrentUser() actor: AuthUser,
+    @CurrentActor() actor: VerifiedActor,
     @Query() query: MonthlyReportQueryDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
@@ -167,7 +161,7 @@ export class ReportsController {
   @Post('monthly/payroll-runs')
   @RequireFeature('payroll_reports')
   closeMonthlyPayrollRun(
-    @CurrentUser() actor: AuthUser,
+    @CurrentActor() actor: VerifiedActor,
     @Body() dto: CloseMonthlyPayrollRunDto,
   ) {
     return this.reportsService.closeMonthlyPayrollRun(actor, dto);
@@ -176,7 +170,7 @@ export class ReportsController {
   @Get('monthly/payroll-runs')
   @RequireFeature('payroll_reports')
   listPayrollRuns(
-    @CurrentUser() actor: AuthUser,
+    @CurrentActor() actor: VerifiedActor,
     @Query() query: ReportHistoryQueryDto,
   ) {
     return this.reportsService.listPayrollRuns(actor, query);
@@ -184,7 +178,7 @@ export class ReportsController {
 
   @Get('monthly/:employeeId')
   getEmployeeMonthlyDetail(
-    @CurrentUser() actor: AuthUser,
+    @CurrentActor() actor: VerifiedActor,
     @Param() params: MonthlyEmployeeIdParamDto,
     @Query() query: MonthlyReportQueryDto,
   ) {
