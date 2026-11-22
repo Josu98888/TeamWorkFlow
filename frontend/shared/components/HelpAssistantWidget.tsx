@@ -20,6 +20,20 @@ const INITIAL_MESSAGE: ChatMessage = {
   text: 'Hola, soy el asistente operativo de TeamWorkFlow. Elegí una guía rápida o escribime qué necesitás hacer en esta pantalla.',
 };
 
+const STORAGE_KEY_PREFIX = 'twf_assistant_messages_';
+
+function loadStoredMessages(role: string | undefined): ChatMessage[] {
+  if (typeof window === 'undefined' || !role) return [INITIAL_MESSAGE];
+  try {
+    const raw = window.sessionStorage.getItem(`${STORAGE_KEY_PREFIX}${role}`);
+    if (!raw) return [INITIAL_MESSAGE];
+    const parsed = JSON.parse(raw) as ChatMessage[];
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : [INITIAL_MESSAGE];
+  } catch {
+    return [INITIAL_MESSAGE];
+  }
+}
+
 function renderFormattedText(text: string) {
   const parts = text.split(/(\*\*[^*]+\*\*|"[^"]+")/g);
   return parts.map((part, index) => {
@@ -56,6 +70,23 @@ export function HelpAssistantWidget() {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const launcherRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    setMessages(loadStoredMessages(session?.role));
+    setInput('');
+  }, [session?.role]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !session?.role) return;
+    try {
+      window.sessionStorage.setItem(
+        `${STORAGE_KEY_PREFIX}${session.role}`,
+        JSON.stringify(messages.slice(-20)),
+      );
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [messages, session?.role]);
 
   useEffect(() => {
     if (open) {
@@ -169,6 +200,9 @@ export function HelpAssistantWidget() {
   const handleReset = () => {
     setMessages([INITIAL_MESSAGE]);
     setInput('');
+    if (typeof window !== 'undefined' && session?.role) {
+      window.sessionStorage.removeItem(`${STORAGE_KEY_PREFIX}${session.role}`);
+    }
     inputRef.current?.focus();
   };
 
@@ -268,7 +302,7 @@ export function HelpAssistantWidget() {
                 >
                   {msg.sender === 'assistant' ? renderFormattedText(msg.text) : msg.text}
                 </div>
-                {msg.route && (
+                {msg.route && msg.route.href !== pathname && (
                   <Link
                     href={msg.route.href}
                     onClick={() => setOpen(false)}
