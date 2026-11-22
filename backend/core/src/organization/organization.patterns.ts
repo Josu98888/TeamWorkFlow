@@ -22,6 +22,7 @@ export const ORGANIZATION_PATTERNS = {
   shiftCreate: 'organization.shift.create',
   shiftUpdate: 'organization.shift.update',
   shiftReassign: 'organization.shift.reassign',
+  shiftAssignOvertime: 'organization.shift.assign-overtime',
   shiftCancel: 'organization.shift.cancel',
   shiftGet: 'organization.shift.get',
   shiftList: 'organization.shift.list',
@@ -33,7 +34,10 @@ export type OrganizationPattern =
 // Patterns answered over NATS request-reply for `telemetry`.
 export const ORGANIZATION_RESPONDER_PATTERNS = [
   ORGANIZATION_PATTERNS.siteGet,
+  ORGANIZATION_PATTERNS.siteList,
+  ORGANIZATION_PATTERNS.postList,
   ORGANIZATION_PATTERNS.employeeGet,
+  ORGANIZATION_PATTERNS.employeeList,
   ORGANIZATION_PATTERNS.shiftGet,
 ] as const;
 
@@ -45,7 +49,10 @@ export const ORGANIZATION_STREAM_SUBJECTS = `t.*.${ORGANIZATION_MODULE}.>`;
 
 export const ORGANIZATION_EVENTS = {
   employeeCreated: 'employee_created',
+  employeeUpdated: 'employee_updated',
   siteUpdated: 'site_updated',
+  postCreated: 'post_created',
+  postUpdated: 'post_updated',
   shiftCreated: 'shift_created',
   shiftUpdated: 'shift_updated',
   shiftCancelled: 'shift_cancelled',
