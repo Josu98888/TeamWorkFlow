@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { organizationApi } from '@/features/organization';
 import { SHIFT_STATUS_LABELS } from '@/features/organization/labels';
 import type { Shift } from '@/features/organization/types';
@@ -187,11 +187,17 @@ function ClockCard({
   const [qrCode, setQrCode] = useState('');
   const [scanning, setScanning] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const { run, pending, error, clearError } = useAction();
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const shift = shifts.find((item) => item.id === shiftId) ?? initial;
   const earliestInMs = new Date(shift.startsAt).getTime() - CLOCK_IN_EARLY_MINUTES * 60_000;
-  const isTooEarlyForClockIn = type === 'in' && Date.now() < earliestInMs;
+  const isTooEarlyForClockIn = type === 'in' && nowMs < earliestInMs;
   const formattedStartTime = formatTime(shift.startsAt);
 
   const handleDetected = useCallback((value: string) => {
