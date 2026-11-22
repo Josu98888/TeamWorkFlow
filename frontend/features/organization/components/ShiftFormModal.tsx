@@ -137,3 +137,73 @@ export function ReassignShiftModal({
     </Modal>
   );
 }
+
+/** Assign or clear authorized overtime minutes (`0..720`) on a shift (`POST /shifts/:shiftId/overtime`). */
+export function AssignOvertimeModal({
+  shift,
+  onClose,
+  onSaved,
+}: {
+  shift: Shift;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [minutesText, setMinutesText] = useState(String(shift.authorizedOvertimeMinutes ?? 0));
+  const [reason, setReason] = useState(shift.overtimeReason ?? '');
+  const { run, pending, error } = useAction();
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const parsedMinutes = Math.max(0, Math.min(720, Number.parseInt(minutesText || '0', 10) || 0));
+    const result = await run(() =>
+      organizationApi.assignShiftOvertime(shift.id, {
+        version: shift.version,
+        authorizedOvertimeMinutes: parsedMinutes,
+        reason: reason.trim() ? reason.trim() : null,
+      }),
+    );
+    if (result) onSaved();
+  };
+
+  return (
+    <Modal title="Asignar horas extra al turno" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-3">
+        <div className="flex flex-wrap gap-1.5">
+          {[0, 30, 60, 120, 180, 240].map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              onClick={() => setMinutesText(String(preset))}
+              className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                Number(minutesText) === preset
+                  ? 'border-brand bg-brand text-white'
+                  : 'border-line bg-alt text-body hover:text-title'
+              }`}
+            >
+              {preset === 0 ? 'Sin extra (0m)' : `+${preset >= 60 ? `${preset / 60}h` : `${preset}m`}`}
+            </button>
+          ))}
+        </div>
+        <TextField
+          label="Minutos de horas extra autorizadas (0 a 720)"
+          type="number"
+          min={0}
+          max={720}
+          step={15}
+          value={minutesText}
+          onChange={setMinutesText}
+          hint="Permite que el trabajador fiche salida después del horario de fin del turno y liquida hasta este tope al precio de hora extra del puesto."
+          required
+        />
+        <TextField
+          label="Motivo (opcional)"
+          value={reason}
+          onChange={setReason}
+          maxLength={300}
+          placeholder="Ej. Extensión de jornada por evento / relevo demorado"
+        />
+        <FormFooter error={error} pending={pending} submitLabel="Guardar horas extra" onCancel={onClose} />
+      </form>
+    </Modal>
+  );
+}
