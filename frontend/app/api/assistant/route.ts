@@ -8,10 +8,16 @@ import {
 
 dns.setDefaultResultOrder('ipv4first');
 
+type HistoryTurn = {
+  sender: 'user' | 'assistant';
+  text: string;
+};
+
 type RequestPayload = {
   message?: string;
   role?: string | null;
   currentPath?: string | null;
+  history?: HistoryTurn[];
 };
 
 function formatGuideText(steps: string[]): string {
@@ -60,12 +66,34 @@ export async function POST(request: Request) {
     });
   }
 
+  const recentHistory = Array.isArray(body.history)
+    ? body.history
+        .filter(
+          (item): item is HistoryTurn =>
+            (item?.sender === 'user' || item?.sender === 'assistant') &&
+            typeof item?.text === 'string' &&
+            item.text.trim().length > 0,
+        )
+        .slice(-6)
+    : [];
+
   const contextualPrompt = `Contexto de sesión actual:
 - Rol del usuario: ${role ?? 'desconocido'}
 - Pantalla actual donde está parado: ${currentPath}
 
 Consulta del usuario:
 ${message}`;
+
+  const contents = [
+    ...recentHistory.map((turn) => ({
+      role: turn.sender === 'assistant' ? 'model' : 'user',
+      parts: [{ text: turn.text.slice(0, 800) }],
+    })),
+    {
+      role: 'user',
+      parts: [{ text: contextualPrompt }],
+    },
+  ];
 
   const models = [
     'gemini-flash-latest',
@@ -91,16 +119,11 @@ ${message}`;
               systemInstruction: {
                 parts: [{ text: TEAMWORKFLOW_SYSTEM_PROMPT }],
               },
-              contents: [
-                {
-                  role: 'user',
-                  parts: [{ text: contextualPrompt }],
-                },
-              ],
+              contents,
               generationConfig: {
-              temperature: 0.25,
-              maxOutputTokens: 700,
-            },
+                temperature: 0.25,
+                maxOutputTokens: 700,
+              },
             }),
           },
         );

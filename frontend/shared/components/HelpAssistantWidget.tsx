@@ -67,6 +67,12 @@ export function HelpAssistantWidget() {
       text: trimmed,
     };
 
+
+    const history = messages
+      .filter((msg) => msg.id !== 'welcome')
+      .slice(-6)
+      .map((msg) => ({ sender: msg.sender, text: msg.text }));
+
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
     setLoading(true);
@@ -79,6 +85,7 @@ export function HelpAssistantWidget() {
           message: trimmed,
           role: session?.role ?? null,
           currentPath: pathname,
+          history,
         }),
       });
 
