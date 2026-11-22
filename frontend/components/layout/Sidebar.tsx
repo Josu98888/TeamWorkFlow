@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useUnreadCount } from '@/features/notifications';
@@ -39,6 +39,8 @@ export function Sidebar() {
   const { mode, isOpen, isOverlay, toggle, close } = useSidebar();
   const { count: unread } = useUnreadCount();
   const [query, setQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingFocusRef = useRef(false);
 
   // Rail: icons only. Tablet is always a rail until the overlay expands it; mobile has no rail.
   const rail = mode !== 'mobile' && !isOpen;
@@ -46,6 +48,35 @@ export function Sidebar() {
   const merged = mode === 'desktop' && isOpen;
   const hidden = mode === 'mobile' && !isOpen;
   const term = normalize(isOpen ? query.trim() : '');
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        if (!isOpen) {
+          pendingFocusRef.current = true;
+          toggle();
+        } else {
+          searchInputRef.current?.focus();
+          searchInputRef.current?.select();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [isOpen, toggle]);
+
+  useEffect(() => {
+    if (isOpen && pendingFocusRef.current) {
+      pendingFocusRef.current = false;
+      const timer = window.setTimeout(() => {
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }, 60);
+      return () => window.clearTimeout(timer);
+    }
+  }, [isOpen]);
 
   const sections = NAV_SECTIONS.map((section) => ({
     ...section,
@@ -82,17 +113,33 @@ export function Sidebar() {
           </div>
 
           {rail ? (
-            <button type="button" className="sb-search" onClick={toggle} aria-label="Buscar en el menú" title="Buscar en el menú">
+            <button
+              type="button"
+              className="sb-search"
+              onClick={() => {
+                pendingFocusRef.current = true;
+                toggle();
+              }}
+              aria-label="Buscar en el menú (Ctrl+K)"
+              title="Buscar en el menú (Ctrl+K)"
+            >
               <SidebarIcon name="search" />
             </button>
           ) : (
             <label className="sb-search">
               <SidebarIcon name="search" />
               <input
+                ref={searchInputRef}
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Buscar en el menú"
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape' && query) {
+                    event.stopPropagation();
+                    setQuery('');
+                  }
+                }}
+                placeholder="Buscar en el menú (Ctrl+K)"
                 aria-label="Buscar en el menú"
                 autoComplete="off"
               />
