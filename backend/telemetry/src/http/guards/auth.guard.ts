@@ -141,7 +141,9 @@ export class AuthGuard implements CanActivate {
       if (
         this.tenantState &&
         actor.tenantId &&
-        (requiredFeature === 'alerts' || requiredFeature === 'tower')
+        (requiredFeature === 'alerts' ||
+          requiredFeature === 'tower' ||
+          requiredFeature === 'payroll_reports')
       ) {
         const hasLocalFeature = await this.tenantState.hasFeature(
           actor.tenantId,
