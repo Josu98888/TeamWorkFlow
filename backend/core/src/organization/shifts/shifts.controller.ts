@@ -14,6 +14,7 @@ import {
 } from '../organization-actor';
 import type { PageResult } from '../sites/sites.service';
 import {
+  AssignShiftOvertimeBodyDto,
   CancelShiftBodyDto,
   CreateShiftBodyDto,
   ListShiftsQueryDto,
@@ -73,6 +74,19 @@ export class ShiftsController {
     @Body() body: ReassignShiftBodyDto,
   ): Promise<ShiftWithWarnings> {
     return this.shifts.reassign(
+      toOrganizationActor(actor),
+      params.shiftId,
+      body,
+    );
+  }
+
+  @Post(':shiftId/overtime')
+  assignOvertime(
+    @CurrentActor() actor: OrganizationActor,
+    @Param() params: ShiftIdParamDto,
+    @Body() body: AssignShiftOvertimeBodyDto,
+  ): Promise<ShiftWithWarnings> {
+    return this.shifts.assignOvertime(
       toOrganizationActor(actor),
       params.shiftId,
       body,

@@ -20,6 +20,7 @@ import { PostsService } from '../sites/posts.service';
 import { pageWindow, SitesService } from '../sites/sites.service';
 import type { PageResult } from '../sites/sites.service';
 import type {
+  AssignShiftOvertimeBodyDto,
   CreateShiftBodyDto,
   ListShiftsQueryDto,
   UpdateShiftBodyDto,
@@ -39,6 +40,10 @@ interface ShiftRow {
   startsAt: Date;
   endsAt: Date;
   status: ShiftStatus;
+  authorizedOvertimeMinutes?: number;
+  overtimeReason?: string | null;
+  overtimeAssignedByUserId?: string | null;
+  overtimeAssignedAt?: Date | null;
   version: number;
   startingEmittedAt: Date | null;
   createdAt: Date;
@@ -233,6 +238,62 @@ export class ShiftsService {
       employeeId: dto.employeeId,
       requiredSkills: post.requiredSkills,
     });
+  }
+
+  // `organization.shift.assign-overtime`: assigns or updates authorized overtime
+  // minutes on a specific shift of a post. Emits `shift_updated`.
+  async assignOvertime(
+    actor: OrganizationActor,
+    shiftId: string,
+    dto: AssignShiftOvertimeBodyDto,
+  ): Promise<ShiftWithWarnings> {
+    const manager = requireShiftManager(actor);
+    const current = await this.findManageable(manager, shiftId);
+    if (current.status === 'CANCELLED') {
+      throw new ShiftNotEditableException();
+    }
+    if (current.version !== dto.version) {
+      throw new VersionConflictException();
+    }
+
+    const effectiveEnd = new Date(
+      current.endsAt.getTime() + dto.authorizedOvertimeMinutes * 60_000,
+    );
+
+    const row = await this.prisma.$transaction(async (tx) => {
+      if (current.employeeId) {
+        await this.lockEmployee(tx, manager.tenantId, current.employeeId);
+        await this.assertNoOverlap(tx, {
+          tenantId: manager.tenantId,
+          employeeId: current.employeeId,
+          startsAt: current.startsAt,
+          endsAt: effectiveEnd,
+          excludeShiftId: current.id,
+        });
+      }
+      const { count } = await tx.shift.updateMany({
+        where: {
+          id: current.id,
+          tenantId: current.tenantId,
+          version: current.version,
+          status: { not: 'CANCELLED' },
+        },
+        data: {
+          authorizedOvertimeMinutes: dto.authorizedOvertimeMinutes,
+          overtimeReason: dto.reason ?? null,
+          overtimeAssignedByUserId: manager.userId,
+          overtimeAssignedAt: new Date(),
+          version: { increment: 1 },
+        },
+      });
+      if (count !== 1) throw new VersionConflictException();
+      return tx.shift.findFirstOrThrow({
+        where: { id: current.id, tenantId: manager.tenantId },
+      });
+    });
+
+    await this.emit(ORGANIZATION_EVENTS.shiftUpdated, row);
+    return { shift: toView(row), warnings: [] };
   }
 
   // `organization.shift.cancel`. Emits `shift_cancelled`.
@@ -600,6 +661,7 @@ export class ShiftsService {
       employeeId: row.employeeId,
       startsAt: row.startsAt.toISOString(),
       endsAt: row.endsAt.toISOString(),
+      authorizedOvertimeMinutes: row.authorizedOvertimeMinutes ?? 0,
       status: row.status,
       version: row.version,
     });

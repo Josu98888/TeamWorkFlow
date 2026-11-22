@@ -15,6 +15,7 @@ import type {
 } from './sites/dto/site.dto';
 import { PostsService } from './sites/posts.service';
 import type {
+  AssignShiftOvertimeBodyDto,
   CancelShiftBodyDto,
   CreateShiftBodyDto,
   ListShiftsQueryDto,
@@ -148,6 +149,15 @@ export class OrganizationService {
     dto: ReassignShiftBodyDto,
   ) {
     return this.shifts.reassign(actor, shiftId, dto);
+  }
+
+  // organization.shift.assign-overtime
+  assignShiftOvertime(
+    actor: OrganizationActor,
+    shiftId: string,
+    dto: AssignShiftOvertimeBodyDto,
+  ) {
+    return this.shifts.assignOvertime(actor, shiftId, dto);
   }
 
   // organization.shift.cancel
