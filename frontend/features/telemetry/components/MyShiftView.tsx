@@ -54,21 +54,27 @@ function getPosition(): Promise<GeolocationPosition> {
   });
 }
 
+const CLOCK_IN_EARLY_MINUTES = 15;
 const isOpen = (shift: Shift) => shift.status === 'IN_PROGRESS' || shift.status === 'SCHEDULED';
 
 /** Employee landing page: clock in/out, own workdays and (injected by the route, to keep domains apart) the tasks section. Employees read no sites, so the site comes from the shift. */
 export function MyShiftView({ tasksSection }: { tasksSection?: ReactNode }) {
   const shifts = useResource(organizationApi.listShifts, { pageSize: 100 });
-  const events = useResource(telemetryApi.listClockEvents, { pageSize: 10 });
+  const events = useResource(telemetryApi.listClockEvents, { pageSize: 20 });
   const workdays = useResource(telemetryApi.listWorkdays, { pageSize: 10 });
+  const activeStatus = useResource(telemetryApi.getActiveClockStatus);
 
   const reloadAll = () => {
     events.reload();
     workdays.reload();
     shifts.reload();
+    activeStatus.reload();
   };
 
-  const openShifts = (shifts.data?.items ?? []).filter(isOpen).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const activeShiftId = activeStatus.data?.activeShift?.shiftId ?? null;
+  const openShifts = (shifts.data?.items ?? [])
+    .filter((shift) => isOpen(shift) || shift.id === activeShiftId)
+    .toSorted((a, b) => a.startsAt.localeCompare(b.startsAt));
   const shiftById = new Map((shifts.data?.items ?? []).map((shift) => [shift.id, shift]));
 
   return (
@@ -82,7 +88,7 @@ export function MyShiftView({ tasksSection }: { tasksSection?: ReactNode }) {
         ) : openShifts.length === 0 ? (
           <EmptyState title="No tenés turnos próximos" description="Cuando te asignen un turno vas a poder fichar desde acá." />
         ) : (
-          <ClockCard shifts={openShifts} onDone={reloadAll} />
+          <ClockCard shifts={openShifts} activeShiftId={activeShiftId} onDone={reloadAll} />
         )}
 
         {tasksSection}
@@ -163,16 +169,30 @@ export function MyShiftView({ tasksSection }: { tasksSection?: ReactNode }) {
   );
 }
 
-function ClockCard({ shifts, onDone }: { shifts: Shift[]; onDone: () => void }) {
-  const initial = shifts.find((shift) => shift.status === 'IN_PROGRESS') ?? shifts[0];
+function ClockCard({
+  shifts,
+  activeShiftId,
+  onDone,
+}: {
+  shifts: Shift[];
+  activeShiftId: string | null;
+  onDone: () => void;
+}) {
+  const initial =
+    (activeShiftId ? shifts.find((item) => item.id === activeShiftId) : undefined) ??
+    shifts.find((shift) => shift.status === 'IN_PROGRESS') ??
+    shifts[0];
   const [shiftId, setShiftId] = useState(initial.id);
-  const [type, setType] = useState<ClockEventTypeInput>('in');
+  const [type, setType] = useState<ClockEventTypeInput>(activeShiftId === initial.id ? 'out' : 'in');
   const [qrCode, setQrCode] = useState('');
   const [scanning, setScanning] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const { run, pending, error, clearError } = useAction();
 
   const shift = shifts.find((item) => item.id === shiftId) ?? initial;
+  const earliestInMs = new Date(shift.startsAt).getTime() - CLOCK_IN_EARLY_MINUTES * 60_000;
+  const isTooEarlyForClockIn = type === 'in' && Date.now() < earliestInMs;
+  const formattedStartTime = formatTime(shift.startsAt);
 
   const handleDetected = useCallback((value: string) => {
     setQrCode(value);
@@ -232,6 +252,21 @@ function ClockCard({ shifts, onDone }: { shifts: Shift[]; onDone: () => void }) 
           onChange={(value) => setType(value as ClockEventTypeInput)}
           options={CLOCK_EVENT_TYPES.map((value) => ({ value: value.toLowerCase(), label: CLOCK_EVENT_TYPE_LABELS[value] }))}
         />
+
+        {isTooEarlyForClockIn && (
+          <div role="status" className="rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-xs text-title">
+            <p className="text-sm font-bold text-title">Hora de entrada a las {formattedStartTime}</p>
+            <p className="mt-0.5 text-muted">
+              Podés fichar la entrada hasta {CLOCK_IN_EARLY_MINUTES} minutos antes del inicio del turno.
+            </p>
+          </div>
+        )}
+
+        {(shift.authorizedOvertimeMinutes ?? 0) > 0 && (
+          <div className="rounded-lg border border-line bg-alt px-3.5 py-2 text-xs text-body">
+            Este turno tiene <span className="font-semibold text-title">+{shift.authorizedOvertimeMinutes} min de horas extra autorizadas</span>. Recordá fichar tu salida al finalizar.
+          </div>
+        )}
 
         {scanning ? (
           <QrScanner onDetected={handleDetected} onClose={() => setScanning(false)} />
