@@ -67,6 +67,17 @@ export class BillingConsumer implements OnModuleInit {
     const tenantId = ctx.tenantId;
 
     // Delete in order to avoid FK constraint issues
+    await ctx.tx.monthlyPayrollLine?.deleteMany({ where: { tenantId } });
+    await ctx.tx.monthlyPayrollRun?.deleteMany({ where: { tenantId } });
+    await ctx.tx.monthlyAttendanceReport?.deleteMany({ where: { tenantId } });
+    await ctx.tx.dailyAttendanceReport?.deleteMany({ where: { tenantId } });
+    await ctx.tx.reportRecipient?.deleteMany({ where: { tenantId } });
+    await ctx.tx.compensationChangeLog?.deleteMany({ where: { tenantId } });
+    await ctx.tx.postOvertimeRate?.deleteMany({ where: { tenantId } });
+    await ctx.tx.employeeCompensation?.deleteMany({ where: { tenantId } });
+    await ctx.tx.employeeSnapshot?.deleteMany({ where: { tenantId } });
+    await ctx.tx.postSnapshot?.deleteMany({ where: { tenantId } });
+    await ctx.tx.siteSnapshot?.deleteMany({ where: { tenantId } });
     await ctx.tx.alert.deleteMany({ where: { tenantId } });
     await ctx.tx.clockEventCorrection.deleteMany({ where: { tenantId } });
     await ctx.tx.clockEvent.deleteMany({ where: { tenantId } });
