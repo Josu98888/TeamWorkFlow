@@ -98,9 +98,9 @@ ${message}`;
                 },
               ],
               generationConfig: {
-                temperature: 0.25,
-                maxOutputTokens: 380,
-              },
+              temperature: 0.25,
+              maxOutputTokens: 700,
+            },
             }),
           },
         );
