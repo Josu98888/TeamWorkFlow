@@ -1,37 +1,37 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/attendance-client';
 
 import {
   EmployeeNotFoundException,
   SiteNotFoundException,
   ValidationException,
-} from '../common/exceptions/app.exceptions';
-import { getEnv } from '../config/envs';
-import { AuthUser } from '../http/interfaces/auth-user.interface';
-import { JetstreamPublisherService } from '../nats/jetstream-publisher.service';
-import { PrismaService } from '../prisma/prisma.service';
+} from '../common/exceptions';
+import { envs } from '../config';
+import type { VerifiedActor } from '../nats/dto/nats-contracts';
+import { JetStreamService } from '../nats/jetstream.service';
+import { AttendancePrismaService } from '../prisma/attendance-prisma.service';
+import { Prisma } from '../prisma/generated/client';
 import { OrgSnapshotsService } from '../snapshots/org-snapshots.service';
 import {
   buildDailyReportPayload,
-  DailyReportPayload,
+  type DailyAttendanceReportPayload,
 } from './domain/daily-report-builder';
 import {
   buildMonthlyAttendanceReport,
-  MonthlyAttendanceReportPayload,
+  type MonthlyAttendanceReportPayload,
 } from './domain/monthly-report-builder';
 import {
   calculateMonthlyPayroll,
-  MonthlyPayrollPreview,
+  type MonthlyPayrollCalculation,
 } from './domain/payroll-calculator';
 import {
+  dayRangeInTz,
   formatDateInTz,
   formatYearMonthInTz,
-  getDayUtcBoundsInTz,
-  getMonthUtcBoundsInTz,
   isCalendarDate,
   isYearMonth,
+  monthRangeInTz,
 } from './domain/timezone-range';
-import {
+import type {
   CloseMonthlyPayrollRunDto,
   DailyReportQueryDto,
   MonthlyReportQueryDto,
@@ -47,30 +47,32 @@ const DAY_MS = 24 * 60 * 60_000;
 @Injectable()
 export class ReportsService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly prisma: AttendancePrismaService,
     private readonly snapshots: OrgSnapshotsService,
     private readonly recipients: ReportRecipientsService,
     private readonly pdfExporter: PdfReportExporter,
     private readonly excelExporter: ExcelPayrollExporter,
-    private readonly jetstream: JetstreamPublisherService,
+    private readonly jetstream: JetStreamService,
   ) {}
 
   async getDailyReport(
-    actor: AuthUser,
+    actor: VerifiedActor,
     query: DailyReportQueryDto,
-  ): Promise<DailyReportPayload> {
+  ): Promise<DailyAttendanceReportPayload> {
     await this.recipients.authorizeReportAccess(actor, 'daily');
-    const defaultTz = getEnv().DEFAULT_REPORT_TZ;
-    const reportDate = query.date ?? formatDateInTz(new Date(), defaultTz);
+    const reportDate =
+      query.date ?? formatDateInTz(new Date(), envs.defaultReportTz);
     if (!isCalendarDate(reportDate)) {
-      throw new ValidationException('date must be in YYYY-MM-DD format');
+      throw new ValidationException([
+        { field: 'date', constraints: ['date must be in YYYY-MM-DD format'] },
+      ]);
     }
 
     return this.computeDailyReport(actor.tenantId, reportDate, query.siteId);
   }
 
   async exportDailyPdf(
-    actor: AuthUser,
+    actor: VerifiedActor,
     query: DailyReportQueryDto,
   ): Promise<{ buffer: Buffer; filename: string }> {
     const report = await this.getDailyReport(actor, query);
@@ -81,24 +83,25 @@ export class ReportsService {
     };
   }
 
-  async listDailyHistory(actor: AuthUser, query: ReportHistoryQueryDto) {
+  async listDailyHistory(actor: VerifiedActor, query: ReportHistoryQueryDto) {
     await this.recipients.authorizeReportAccess(actor, 'daily');
-    const limit = query.limit ?? 20;
-    const offset = query.offset ?? 0;
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const skip = (page - 1) * pageSize;
 
     const [items, total] = await Promise.all([
       this.prisma.dailyAttendanceReport.findMany({
         where: { tenantId: actor.tenantId },
         orderBy: { reportDate: 'desc' },
-        take: limit,
-        skip: offset,
+        take: pageSize,
+        skip,
       }),
       this.prisma.dailyAttendanceReport.count({
         where: { tenantId: actor.tenantId },
       }),
     ]);
 
-    return { items, total, limit, offset };
+    return { items, total, page, pageSize };
   }
 
   async generateAndSaveDailySnapshot(
@@ -112,31 +115,17 @@ export class ReportsService {
       undefined,
       now,
     );
-    const saved = await this.prisma.dailyAttendanceReport.upsert({
-      where: {
-        tenantId_reportDate_siteKey: {
-          tenantId,
-          reportDate,
-          siteKey: 'ALL',
-        },
-      },
-      create: {
+
+    const saved = await this.prisma.dailyAttendanceReport.create({
+      data: {
         tenantId,
         reportDate,
-        siteKey: 'ALL',
-        timezone: report.timezone,
-        scheduledShiftsCount: report.summary.scheduledShiftsCount,
-        presentCount: report.summary.presentCount,
+        siteId: null,
+        totalAssignedShifts: report.summary.totalAssignedShifts,
+        attendedShifts: report.summary.attendedShifts,
         absentCount: report.summary.absentCount,
         outOfGeofenceCount: report.summary.outOfGeofenceCount,
-        payload: report as unknown as Prisma.InputJsonValue,
-      },
-      update: {
-        timezone: report.timezone,
-        scheduledShiftsCount: report.summary.scheduledShiftsCount,
-        presentCount: report.summary.presentCount,
-        absentCount: report.summary.absentCount,
-        outOfGeofenceCount: report.summary.outOfGeofenceCount,
+        missingClockOutCount: report.summary.missingClockOutCount,
         payload: report as unknown as Prisma.InputJsonValue,
         generatedAt: now,
       },
@@ -147,31 +136,28 @@ export class ReportsService {
         tenantId,
         'daily',
       );
-    await this.jetstream.publish(
-      tenantId,
-      REPORTS_EVENTS.DAILY_REPORT_READY,
-      {
-        reportId: saved.id,
-        reportDate,
-        absentCount: report.summary.absentCount,
-        outOfGeofenceCount: report.summary.outOfGeofenceCount,
-        recipientUserIds,
-      },
-      { aggregateId: saved.id },
-    );
+    await this.jetstream.publish(tenantId, REPORTS_EVENTS.DAILY_REPORT_READY, {
+      reportId: saved.id,
+      reportDate,
+      absentCount: report.summary.absentCount,
+      outOfGeofenceCount: report.summary.outOfGeofenceCount,
+      recipientUserIds,
+    });
 
     return saved;
   }
 
   async getMonthlyReport(
-    actor: AuthUser,
+    actor: VerifiedActor,
     query: MonthlyReportQueryDto,
   ): Promise<MonthlyAttendanceReportPayload> {
     await this.recipients.authorizeReportAccess(actor, 'monthly');
-    const defaultTz = getEnv().DEFAULT_REPORT_TZ;
-    const period = query.period ?? formatYearMonthInTz(new Date(), defaultTz);
+    const period =
+      query.period ?? formatYearMonthInTz(new Date(), envs.defaultReportTz);
     if (!isYearMonth(period)) {
-      throw new ValidationException('period must be in YYYY-MM format');
+      throw new ValidationException([
+        { field: 'period', constraints: ['period must be in YYYY-MM format'] },
+      ]);
     }
 
     return this.computeMonthlyReport(
@@ -183,7 +169,7 @@ export class ReportsService {
   }
 
   async exportMonthlyPdf(
-    actor: AuthUser,
+    actor: VerifiedActor,
     query: MonthlyReportQueryDto,
   ): Promise<{ buffer: Buffer; filename: string }> {
     const report = await this.getMonthlyReport(actor, query);
@@ -195,41 +181,45 @@ export class ReportsService {
   }
 
   async getEmployeeMonthlyDetail(
-    actor: AuthUser,
+    actor: VerifiedActor,
     employeeId: string,
     query: MonthlyReportQueryDto,
   ) {
     const report = await this.getMonthlyReport(actor, {
-      ...query,
+      period: query.period,
+      siteId: query.siteId,
       employeeId,
     });
     return {
       period: report.period,
-      timezone: report.timezone,
       employee: report.employees[0] ?? null,
       shifts: report.shiftsByEmployee[employeeId] ?? [],
       outOfGeofenceEvents: report.outOfGeofenceEvents,
     };
   }
 
-  async listMonthlyHistory(actor: AuthUser, query: ReportHistoryQueryDto) {
+  async listMonthlyHistory(
+    actor: VerifiedActor,
+    query: ReportHistoryQueryDto,
+  ) {
     await this.recipients.authorizeReportAccess(actor, 'monthly');
-    const limit = query.limit ?? 20;
-    const offset = query.offset ?? 0;
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const skip = (page - 1) * pageSize;
 
     const [items, total] = await Promise.all([
       this.prisma.monthlyAttendanceReport.findMany({
         where: { tenantId: actor.tenantId },
         orderBy: { period: 'desc' },
-        take: limit,
-        skip: offset,
+        take: pageSize,
+        skip,
       }),
       this.prisma.monthlyAttendanceReport.count({
         where: { tenantId: actor.tenantId },
       }),
     ]);
 
-    return { items, total, limit, offset };
+    return { items, total, page, pageSize };
   }
 
   async generateAndSaveMonthlySnapshot(
@@ -244,35 +234,16 @@ export class ReportsService {
       undefined,
       now,
     );
-    const saved = await this.prisma.monthlyAttendanceReport.upsert({
-      where: {
-        tenantId_period_siteKey: {
-          tenantId,
-          period,
-          siteKey: 'ALL',
-        },
-      },
-      create: {
+    const saved = await this.prisma.monthlyAttendanceReport.create({
+      data: {
         tenantId,
         period,
-        siteKey: 'ALL',
-        timezone: report.timezone,
+        siteId: null,
         employeesCount: report.summary.employeesCount,
-        scheduledShiftsCount: report.summary.scheduledShiftsCount,
-        attendedShiftsCount: report.summary.attendedShiftsCount,
-        absentShiftsCount: report.summary.absentShiftsCount,
-        outOfGeofenceCount: report.summary.outOfGeofenceCount,
-        totalWorkedMinutes: report.summary.totalWorkedMinutes,
-        totalOvertimeMinutes: report.summary.totalOvertimeMinutes,
-        payload: report as unknown as Prisma.InputJsonValue,
-      },
-      update: {
-        timezone: report.timezone,
-        employeesCount: report.summary.employeesCount,
-        scheduledShiftsCount: report.summary.scheduledShiftsCount,
-        attendedShiftsCount: report.summary.attendedShiftsCount,
-        absentShiftsCount: report.summary.absentShiftsCount,
-        outOfGeofenceCount: report.summary.outOfGeofenceCount,
+        totalAttendedShifts: report.summary.totalAttendedShifts,
+        totalAbsentShifts: report.summary.totalAbsentShifts,
+        totalOutOfGeofence: report.summary.totalOutOfGeofence,
+        totalMissingClockOuts: report.summary.totalMissingClockOuts,
         totalWorkedMinutes: report.summary.totalWorkedMinutes,
         totalOvertimeMinutes: report.summary.totalOvertimeMinutes,
         payload: report as unknown as Prisma.InputJsonValue,
@@ -292,26 +263,27 @@ export class ReportsService {
         reportId: saved.id,
         period,
         employeesCount: report.summary.employeesCount,
-        attendedShiftsCount: report.summary.attendedShiftsCount,
-        absentShiftsCount: report.summary.absentShiftsCount,
-        outOfGeofenceCount: report.summary.outOfGeofenceCount,
+        attendedShiftsCount: report.summary.totalAttendedShifts,
+        absentShiftsCount: report.summary.totalAbsentShifts,
+        outOfGeofenceCount: report.summary.totalOutOfGeofence,
         recipientUserIds,
       },
-      { aggregateId: saved.id },
     );
 
     return saved;
   }
 
   async getMonthlyPayrollPreview(
-    actor: AuthUser,
+    actor: VerifiedActor,
     query: MonthlyReportQueryDto,
-  ): Promise<MonthlyPayrollPreview> {
+  ): Promise<MonthlyPayrollCalculation> {
     await this.recipients.authorizeReportAccess(actor, 'payroll_excel');
-    const defaultTz = getEnv().DEFAULT_REPORT_TZ;
-    const period = query.period ?? formatYearMonthInTz(new Date(), defaultTz);
+    const period =
+      query.period ?? formatYearMonthInTz(new Date(), envs.defaultReportTz);
     if (!isYearMonth(period)) {
-      throw new ValidationException('period must be in YYYY-MM format');
+      throw new ValidationException([
+        { field: 'period', constraints: ['period must be in YYYY-MM format'] },
+      ]);
     }
 
     const [attendanceReport, compensations, postRates] = await Promise.all([
@@ -331,16 +303,30 @@ export class ReportsService {
 
     return calculateMonthlyPayroll({
       attendanceReport,
-      compensationsByEmployeeId: new Map(
-        compensations.map((c) => [c.employeeId, c]),
+      employeeRates: new Map(
+        compensations.map((c) => [
+          c.employeeId,
+          {
+            payType: c.payType,
+            baseRate: c.baseRate,
+            currency: c.currency,
+          },
+        ]),
       ),
-      overtimeRatesByPostId: new Map(postRates.map((r) => [r.postId, r])),
-      currency: 'ARS',
+      postOvertimeRates: new Map(
+        postRates.map((r) => [
+          r.postId,
+          {
+            overtimeHourlyRate: r.overtimeHourlyRate,
+            currency: r.currency,
+          },
+        ]),
+      ),
     });
   }
 
   async exportMonthlyPayrollExcel(
-    actor: AuthUser,
+    actor: VerifiedActor,
     query: MonthlyReportQueryDto,
   ): Promise<{ buffer: Buffer; filename: string }> {
     const payroll = await this.getMonthlyPayrollPreview(actor, query);
@@ -352,108 +338,54 @@ export class ReportsService {
   }
 
   async closeMonthlyPayrollRun(
-    actor: AuthUser,
+    actor: VerifiedActor,
     dto: CloseMonthlyPayrollRunDto,
   ) {
-    const preview = await this.getMonthlyPayrollPreview(actor, dto);
-    const siteKey = dto.siteId ?? 'ALL';
+    const preview = await this.getMonthlyPayrollPreview(actor, {
+      period: dto.period,
+      siteId: dto.siteId,
+    });
 
     const saved = await this.prisma.$transaction(async (tx) => {
-      const existing = await tx.monthlyPayrollRun.findUnique({
-        where: {
-          tenantId_period_siteKey: {
-            tenantId: actor.tenantId,
-            period: preview.period,
-            siteKey,
-          },
-        },
-      });
-      if (existing) {
-        await tx.monthlyPayrollLine.deleteMany({
-          where: { payrollRunId: existing.id },
-        });
-      }
-
-      const run = await tx.monthlyPayrollRun.upsert({
-        where: {
-          tenantId_period_siteKey: {
-            tenantId: actor.tenantId,
-            period: preview.period,
-            siteKey,
-          },
-        },
-        create: {
+      const run = await tx.monthlyPayrollRun.create({
+        data: {
           tenantId: actor.tenantId,
           period: preview.period,
-          siteKey,
-          status: 'CLOSED',
+          siteId: dto.siteId ?? null,
           currency: preview.currency,
-          employeesCount: preview.summary.employeesCount,
-          unconfiguredEmployeesCount:
-            preview.summary.unconfiguredEmployeesCount,
-          totalRegularMinutes: preview.summary.totalRegularMinutes,
-          totalOvertimeMinutes: preview.summary.totalOvertimeMinutes,
-          totalBasePayAmount: new Prisma.Decimal(
-            preview.summary.totalBasePayAmount,
-          ),
-          totalOvertimePayAmount: new Prisma.Decimal(
-            preview.summary.totalOvertimePayAmount,
-          ),
-          totalPayAmount: new Prisma.Decimal(preview.summary.totalPayAmount),
-          closedByUserId: actor.userId,
-          closedAt: new Date(),
-        },
-        update: {
+          totalRegularPay: new Prisma.Decimal(preview.totals.totalRegularPay),
+          totalOvertimePay: new Prisma.Decimal(preview.totals.totalOvertimePay),
+          totalPay: new Prisma.Decimal(preview.totals.totalPay),
+          warningsCount: preview.totals.warningsCount,
+          generatedByUserId: actor.userId,
           status: 'CLOSED',
-          currency: preview.currency,
-          employeesCount: preview.summary.employeesCount,
-          unconfiguredEmployeesCount:
-            preview.summary.unconfiguredEmployeesCount,
-          totalRegularMinutes: preview.summary.totalRegularMinutes,
-          totalOvertimeMinutes: preview.summary.totalOvertimeMinutes,
-          totalBasePayAmount: new Prisma.Decimal(
-            preview.summary.totalBasePayAmount,
-          ),
-          totalOvertimePayAmount: new Prisma.Decimal(
-            preview.summary.totalOvertimePayAmount,
-          ),
-          totalPayAmount: new Prisma.Decimal(preview.summary.totalPayAmount),
-          closedByUserId: actor.userId,
-          closedAt: new Date(),
         },
       });
 
       if (preview.employees.length > 0) {
         await tx.monthlyPayrollLine.createMany({
           data: preview.employees.map((line) => ({
-            payrollRunId: run.id,
             tenantId: actor.tenantId,
+            runId: run.id,
             employeeId: line.employeeId,
-            employeeFullName: line.fullName,
-            employeeDni: line.dni,
-            scheduledShiftsCount: line.scheduledShiftsCount,
-            attendedShiftsCount: line.attendedShiftsCount,
-            absentShiftsCount: line.absentShiftsCount,
-            incompleteShiftsCount: line.incompleteShiftsCount,
-            outOfGeofenceCount: line.outOfGeofenceCount,
-            regularWorkedMinutes: line.regularWorkedMinutes,
-            overtimeWorkedMinutes: line.overtimeWorkedMinutes,
-            totalWorkedMinutes: line.totalWorkedMinutes,
-            payRateType: line.payRateType,
-            hourlyRate:
-              line.hourlyRate !== null
-                ? new Prisma.Decimal(line.hourlyRate)
+            employeeName: line.fullName,
+            employeeNumber: line.employeeNumber,
+            payType: line.payType,
+            baseRateApplied:
+              line.baseRateApplied !== null
+                ? new Prisma.Decimal(line.baseRateApplied)
                 : null,
-            shiftRate:
-              line.shiftRate !== null
-                ? new Prisma.Decimal(line.shiftRate)
-                : null,
-            basePayAmount: new Prisma.Decimal(line.basePayAmount),
-            overtimePayAmount: new Prisma.Decimal(line.overtimePayAmount),
-            totalPayAmount: new Prisma.Decimal(line.totalPayAmount),
-            isRateConfigured: line.isRateConfigured,
-            postBreakdown:
-              line.postBreakdown as unknown as Prisma.InputJsonValue,
+            assignedShifts: line.totalAssignedShifts,
+            attendedShifts: line.attendedShifts,
+            absentShifts: line.absentCount,
+            missingClockOutShifts: line.missingClockOutCount,
+            fraudulentClockIns: line.outOfGeofenceCount,
+            regularMinutes: line.totalRegularMinutes,
+            overtimeMinutes: line.totalOvertimeMinutes,
+            regularPay: new Prisma.Decimal(line.regularPay),
+            overtimePay: new Prisma.Decimal(line.overtimePay),
+            totalPay: new Prisma.Decimal(line.totalPay),
+            observations: line.observations || null,
           })),
         });
       }
@@ -476,34 +408,34 @@ export class ReportsService {
         payrollRunId: saved.id,
         period: saved.period,
         currency: saved.currency,
-        employeesCount: saved.employeesCount,
-        totalPayAmount: saved.totalPayAmount.toFixed(2),
+        employeesCount: preview.totals.employeesCount,
+        totalPayAmount: saved.totalPay.toFixed(2),
         recipientUserIds,
       },
-      { aggregateId: saved.id },
     );
 
     return saved;
   }
 
-  async listPayrollRuns(actor: AuthUser, query: ReportHistoryQueryDto) {
+  async listPayrollRuns(actor: VerifiedActor, query: ReportHistoryQueryDto) {
     await this.recipients.authorizeReportAccess(actor, 'payroll_excel');
-    const limit = query.limit ?? 20;
-    const offset = query.offset ?? 0;
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const skip = (page - 1) * pageSize;
 
     const [items, total] = await Promise.all([
       this.prisma.monthlyPayrollRun.findMany({
         where: { tenantId: actor.tenantId },
         orderBy: { period: 'desc' },
-        take: limit,
-        skip: offset,
+        take: pageSize,
+        skip,
       }),
       this.prisma.monthlyPayrollRun.count({
         where: { tenantId: actor.tenantId },
       }),
     ]);
 
-    return { items, total, limit, offset };
+    return { items, total, page, pageSize };
   }
 
   private async loadTenantCatalog(
@@ -518,15 +450,15 @@ export class ReportsService {
       this.prisma.employeeSnapshot.findMany({ where: { tenantId } }),
     ]);
 
-    const sitesById = new Map(sites.map((s) => [s.id, s]));
-    const postsById = new Map(posts.map((p) => [p.id, p]));
-    const employeesById = new Map(employees.map((e) => [e.id, e]));
+    const sitesById = new Map(sites.map((s) => [s.siteId, s]));
+    const postsById = new Map(posts.map((p) => [p.postId, p]));
+    const employeesById = new Map(employees.map((e) => [e.employeeId, e]));
 
     if (siteId && !sitesById.has(siteId)) {
-      throw new SiteNotFoundException(siteId);
+      throw new SiteNotFoundException();
     }
     if (employeeId && !employeesById.has(employeeId)) {
-      throw new EmployeeNotFoundException(employeeId);
+      throw new EmployeeNotFoundException();
     }
 
     return { sitesById, postsById, employeesById };
@@ -537,14 +469,14 @@ export class ReportsService {
     reportDate: string,
     siteId?: string,
     now: Date = new Date(),
-  ): Promise<DailyReportPayload> {
-    const defaultTimezone = getEnv().DEFAULT_REPORT_TZ;
+  ): Promise<DailyAttendanceReportPayload> {
+    const defaultTz = envs.defaultReportTz;
     const { sitesById, postsById, employeesById } =
       await this.loadTenantCatalog(tenantId, siteId);
 
-    const bounds = getDayUtcBoundsInTz(reportDate, defaultTimezone);
-    const paddedStart = new Date(bounds.startUtc.getTime() - DAY_MS);
-    const paddedEnd = new Date(bounds.endUtc.getTime() + DAY_MS);
+    const bounds = dayRangeInTz(reportDate, defaultTz);
+    const paddedStart = new Date(bounds.start.getTime() - DAY_MS);
+    const paddedEnd = new Date(bounds.end.getTime() + DAY_MS);
 
     const [shifts, clockEvents, workdays, alerts] = await Promise.all([
       this.prisma.shiftSnapshot.findMany({
@@ -559,29 +491,28 @@ export class ReportsService {
         where: {
           tenantId,
           ...(siteId ? { siteId } : {}),
-          occurredAt: { gte: paddedStart, lte: paddedEnd },
+          deviceTime: { gte: paddedStart, lte: paddedEnd },
         },
-        orderBy: { occurredAt: 'asc' },
+        orderBy: { deviceTime: 'asc' },
       }),
       this.prisma.workday.findMany({
         where: {
           tenantId,
           ...(siteId ? { siteId } : {}),
-          startsAt: { gte: paddedStart, lte: paddedEnd },
         },
       }),
       this.prisma.alert.findMany({
         where: {
           tenantId,
           ...(siteId ? { siteId } : {}),
-          triggeredAt: { gte: paddedStart, lte: paddedEnd },
+          createdAt: { gte: paddedStart, lte: paddedEnd },
         },
       }),
     ]);
 
     return buildDailyReportPayload({
       reportDate,
-      defaultTimezone,
+      defaultTz,
       siteId,
       now,
       shifts,
@@ -601,13 +532,13 @@ export class ReportsService {
     employeeId?: string,
     now: Date = new Date(),
   ): Promise<MonthlyAttendanceReportPayload> {
-    const defaultTimezone = getEnv().DEFAULT_REPORT_TZ;
+    const defaultTz = envs.defaultReportTz;
     const { sitesById, postsById, employeesById } =
       await this.loadTenantCatalog(tenantId, siteId, employeeId);
 
-    const bounds = getMonthUtcBoundsInTz(period, defaultTimezone);
-    const paddedStart = new Date(bounds.startUtc.getTime() - DAY_MS);
-    const paddedEnd = new Date(bounds.endUtc.getTime() + DAY_MS);
+    const bounds = monthRangeInTz(period, defaultTz);
+    const paddedStart = new Date(bounds.start.getTime() - DAY_MS);
+    const paddedEnd = new Date(bounds.end.getTime() + DAY_MS);
 
     const [shifts, clockEvents, workdays, alerts] = await Promise.all([
       this.prisma.shiftSnapshot.findMany({
@@ -624,16 +555,15 @@ export class ReportsService {
           tenantId,
           ...(siteId ? { siteId } : {}),
           ...(employeeId ? { employeeId } : {}),
-          occurredAt: { gte: paddedStart, lte: paddedEnd },
+          deviceTime: { gte: paddedStart, lte: paddedEnd },
         },
-        orderBy: { occurredAt: 'asc' },
+        orderBy: { deviceTime: 'asc' },
       }),
       this.prisma.workday.findMany({
         where: {
           tenantId,
           ...(siteId ? { siteId } : {}),
           ...(employeeId ? { employeeId } : {}),
-          startsAt: { gte: paddedStart, lte: paddedEnd },
         },
       }),
       this.prisma.alert.findMany({
@@ -641,14 +571,14 @@ export class ReportsService {
           tenantId,
           ...(siteId ? { siteId } : {}),
           ...(employeeId ? { employeeId } : {}),
-          triggeredAt: { gte: paddedStart, lte: paddedEnd },
+          createdAt: { gte: paddedStart, lte: paddedEnd },
         },
       }),
     ]);
 
     return buildMonthlyAttendanceReport({
       period,
-      defaultTimezone,
+      defaultTz,
       siteId,
       employeeId,
       now,
