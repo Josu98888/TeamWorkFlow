@@ -70,6 +70,11 @@ export class OrganizationService {
     return this.sites.list(actor, query);
   }
 
+  // organization.site.list with an explicit tenant (telemetry catalog responder).
+  listSitesForTenant(tenantId: string): Promise<SiteView[]> {
+    return this.sites.listForTenant(tenantId);
+  }
+
   // organization.site.rotate-qr
   rotateSiteQr(actor: OrganizationActor, siteId: string) {
     return this.sites.rotateQr(actor, siteId);
@@ -88,6 +93,11 @@ export class OrganizationService {
   // organization.post.list
   listPosts(actor: OrganizationActor, siteId: string, query: PageQueryDto) {
     return this.posts.list(actor, siteId, query);
+  }
+
+  // organization.post.list with an explicit tenant (telemetry catalog responder).
+  listPostsForTenant(tenantId: string, siteId?: string) {
+    return this.posts.listForTenant(tenantId, siteId);
   }
 
   // organization.employee.create
@@ -126,6 +136,11 @@ export class OrganizationService {
   // organization.employee.list
   listEmployees(actor: OrganizationActor, query: ListEmployeesQueryDto) {
     return this.employees.list(actor, query);
+  }
+
+  // organization.employee.list with an explicit tenant (telemetry catalog responder).
+  listEmployeesForTenant(tenantId: string) {
+    return this.employees.listForTenant(tenantId);
   }
 
   // organization.shift.create
