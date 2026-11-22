@@ -260,7 +260,7 @@ export class ShiftTemplatesService {
   ): Promise<PageResult<ShiftTemplateView>> {
     const reader = requireTenantActor(actor);
     const page = query.page ?? 1;
-    const limit = query.limit ?? 20;
+    const pageSize = query.pageSize ?? 20;
 
     const filters: Record<string, unknown>[] = [{ tenantId: reader.tenantId }];
 
@@ -274,7 +274,7 @@ export class ShiftTemplatesService {
         filters.push({ employeeId: own.id });
       } catch (error) {
         if (error instanceof EmployeeNotFoundException) {
-          return { items: [], total: 0, page, limit };
+          return { items: [], total: 0 };
         }
         throw error;
       }
@@ -282,7 +282,7 @@ export class ShiftTemplatesService {
 
     if (query.siteId) {
       if (reader.role === 'supervisor' && !canAccessSite(reader, query.siteId)) {
-        return { items: [], total: 0, page, limit };
+        return { items: [], total: 0 };
       }
       filters.push({ siteId: query.siteId });
     }
@@ -295,13 +295,13 @@ export class ShiftTemplatesService {
       this.prisma.shiftTemplate.findMany({
         where,
         orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-        skip: (page - 1) * limit,
-        take: limit,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
       }) as Promise<ShiftTemplateRow[]>,
       this.prisma.shiftTemplate.count({ where }),
     ]);
 
-    return { items: rows.map(toView), total, page, limit };
+    return { items: rows.map(toView), total };
   }
 
   // Called daily by `ShiftGeneratorJob`. Skips suspended tenants and inactive

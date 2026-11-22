@@ -21,6 +21,12 @@ import type {
   ReassignShiftBodyDto,
   UpdateShiftBodyDto,
 } from './shifts/dto/shift.dto';
+import type {
+  CreateShiftTemplateBodyDto,
+  ListShiftTemplatesQueryDto,
+  UpdateShiftTemplateBodyDto,
+} from './shifts/dto/shift-template.dto';
+import { ShiftTemplatesService } from './shifts/shift-templates.service';
 import { ShiftsService } from './shifts/shifts.service';
 import { SitesService, type SiteView } from './sites/sites.service';
 
@@ -34,6 +40,7 @@ export class OrganizationService {
     private readonly posts: PostsService,
     private readonly employees: EmployeesService,
     private readonly shifts: ShiftsService,
+    private readonly shiftTemplates: ShiftTemplatesService,
   ) {}
 
   // organization.site.create
@@ -166,5 +173,35 @@ export class OrganizationService {
   // organization.shift.list
   listShifts(actor: OrganizationActor, query: ListShiftsQueryDto) {
     return this.shifts.list(actor, query);
+  }
+
+  // organization.shiftTemplate.create
+  createShiftTemplate(
+    actor: OrganizationActor,
+    dto: CreateShiftTemplateBodyDto,
+  ) {
+    return this.shiftTemplates.create(actor, dto);
+  }
+
+  // organization.shiftTemplate.update
+  updateShiftTemplate(
+    actor: OrganizationActor,
+    templateId: string,
+    dto: UpdateShiftTemplateBodyDto,
+  ) {
+    return this.shiftTemplates.update(actor, templateId, dto);
+  }
+
+  // organization.shiftTemplate.deactivate
+  deactivateShiftTemplate(actor: OrganizationActor, templateId: string) {
+    return this.shiftTemplates.deactivate(actor, templateId);
+  }
+
+  // organization.shiftTemplate.list
+  listShiftTemplates(
+    actor: OrganizationActor,
+    query: ListShiftTemplatesQueryDto,
+  ) {
+    return this.shiftTemplates.list(actor, query);
   }
 }
