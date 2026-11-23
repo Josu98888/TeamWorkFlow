@@ -1,8 +1,15 @@
 import { apiFetch } from '@/shared/lib/http';
 import type { OrganizationApi } from './api';
-import type { ListEmployeesQuery, ListShiftsQuery, ListSitesQuery } from './types';
+import type {
+  ListEmployeesQuery,
+  ListShiftTemplatesQuery,
+  ListShiftsQuery,
+  ListSitesQuery,
+} from './types';
 
-function toQueryString(query: ListSitesQuery | ListEmployeesQuery | ListShiftsQuery): string {
+function toQueryString(
+  query: ListSitesQuery | ListEmployeesQuery | ListShiftsQuery | ListShiftTemplatesQuery,
+): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined) params.set(key, String(value));
@@ -18,9 +25,10 @@ const send = <T>(path: string, method: 'POST' | 'PATCH', body: unknown) =>
 export const organizationHttpApi: OrganizationApi = {
   listSites: (query = {}) => apiFetch(`/sites${toQueryString(query)}`),
   getSite: (siteId) => apiFetch(`/sites/${siteId}`),
-  listPosts: (siteId) => apiFetch(`/sites/${siteId}/posts`),
+  listPosts: (siteId, query = {}) => apiFetch(`/sites/${siteId}/posts${toQueryString(query)}`),
   listEmployees: (query = {}) => apiFetch(`/employees${toQueryString(query)}`),
   listShifts: (query = {}) => apiFetch(`/shifts${toQueryString(query)}`),
+  listShiftTemplates: (query = {}) => apiFetch(`/shift-templates${toQueryString(query)}`),
   createSite: (input) => send('/sites', 'POST', input),
   updateSite: (siteId, input) => send(`/sites/${siteId}`, 'PATCH', input),
   rotateSiteQr: (siteId) => send(`/sites/${siteId}/rotate-qr`, 'POST', {}),
@@ -32,4 +40,7 @@ export const organizationHttpApi: OrganizationApi = {
   updateShift: (shiftId, input) => send(`/shifts/${shiftId}`, 'PATCH', input),
   reassignShift: (shiftId, input) => send(`/shifts/${shiftId}/reassign`, 'POST', input),
   cancelShift: (shiftId, input) => send(`/shifts/${shiftId}/cancel`, 'POST', input),
+  createShiftTemplate: (input) => send('/shift-templates', 'POST', input),
+  updateShiftTemplate: (templateId, input) => send(`/shift-templates/${templateId}`, 'PATCH', input),
+  deactivateShiftTemplate: (templateId) => send(`/shift-templates/${templateId}/deactivate`, 'POST', {}),
 };

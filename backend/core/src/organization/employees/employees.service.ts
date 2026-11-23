@@ -214,13 +214,15 @@ export class EmployeesService {
     }
     if (query.search) {
       const contains = { contains: query.search, mode: 'insensitive' };
-      filters.push({
-        OR: [
-          { firstName: contains },
-          { lastName: contains },
-          { email: contains },
-        ],
-      });
+      const searchFields: Record<string, unknown>[] = [
+        { firstName: contains },
+        { lastName: contains },
+        { email: contains },
+      ];
+      if (reader.role === 'owner' || reader.role === 'admin') {
+        searchFields.push({ nationalId: contains }, { employeeNumber: contains });
+      }
+      filters.push({ OR: searchFields });
     }
     const where = { tenantId: reader.tenantId, AND: filters };
     const [rows, total] = await Promise.all([

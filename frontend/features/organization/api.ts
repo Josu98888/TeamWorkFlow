@@ -5,19 +5,24 @@ import type {
   CreateEmployeeInput,
   CreatePostInput,
   CreateShiftInput,
+  CreateShiftTemplateInput,
   CreateSiteInput,
   Employee,
   ListEmployeesQuery,
+  ListShiftTemplatesQuery,
   ListShiftsQuery,
   ListSitesQuery,
   Paginated,
   Post,
   Shift,
+  ShiftTemplate,
+  ShiftTemplateWithGeneration,
   ShiftWithWarnings,
   Site,
   UpdateEmployeeInput,
   UpdatePostInput,
   UpdateShiftInput,
+  UpdateShiftTemplateInput,
   UpdateSiteInput,
 } from './types';
 
@@ -25,9 +30,10 @@ import type {
 export type OrganizationApi = {
   listSites: (query?: ListSitesQuery) => Promise<Paginated<Site>>;
   getSite: (siteId: string) => Promise<Site>;
-  listPosts: (siteId: string) => Promise<Paginated<Post>>;
+  listPosts: (siteId: string, query?: ListSitesQuery) => Promise<Paginated<Post>>;
   listEmployees: (query?: ListEmployeesQuery) => Promise<Paginated<Employee>>;
   listShifts: (query?: ListShiftsQuery) => Promise<Paginated<Shift>>;
+  listShiftTemplates: (query?: ListShiftTemplatesQuery) => Promise<Paginated<ShiftTemplate>>;
   createSite: (input: CreateSiteInput) => Promise<Site>;
   updateSite: (siteId: string, input: UpdateSiteInput) => Promise<Site>;
   /** Returns the site with the new `qrCode`. */
@@ -40,6 +46,9 @@ export type OrganizationApi = {
   updateShift: (shiftId: string, input: UpdateShiftInput) => Promise<ShiftWithWarnings>;
   reassignShift: (shiftId: string, input: { version: number; employeeId: string | null }) => Promise<ShiftWithWarnings>;
   cancelShift: (shiftId: string, input: { version: number }) => Promise<Shift>;
+  createShiftTemplate: (input: CreateShiftTemplateInput) => Promise<ShiftTemplateWithGeneration>;
+  updateShiftTemplate: (templateId: string, input: UpdateShiftTemplateInput) => Promise<ShiftTemplateWithGeneration>;
+  deactivateShiftTemplate: (templateId: string) => Promise<ShiftTemplate>;
 };
 
 // The only mock/real switch of this domain (see `shared/lib/config.ts`).

@@ -2,9 +2,11 @@ import type { ReactNode } from 'react';
 import './list.css';
 
 /** Filter/search bar placed above a list; children are the Fields. */
-export function Toolbar({ children, columns = 3 }: { children: ReactNode; columns?: 2 | 3 }) {
+export function Toolbar({ children, columns = 3 }: { children: ReactNode; columns?: 2 | 3 | 4 }) {
+  const colsClass =
+    columns === 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : columns === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2';
   return (
-    <div className={`list-toolbar grid-cols-1 ${columns === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>{children}</div>
+    <div className={`list-toolbar grid-cols-1 ${colsClass}`}>{children}</div>
   );
 }
 

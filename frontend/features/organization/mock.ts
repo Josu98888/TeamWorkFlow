@@ -14,7 +14,7 @@ import {
   type ShiftSlot,
 } from '@/shared/mocks/world';
 import type { OrganizationApi } from './api';
-import type { Employee, Paginated, Post, Shift, ShiftStatus, Site } from './types';
+import type { Employee, Paginated, Post, Shift, ShiftStatus, ShiftTemplate, Site } from './types';
 
 const CREATED_AT = '2026-03-02T12:00:00.000Z';
 
@@ -103,7 +103,7 @@ const EMPLOYEES: Employee[] = EMPLOYEE_SEEDS.map(([firstName, lastName, skills],
   phone: `+54 11 5${String(100 + index * 7).padStart(3, '0')}-${String(2000 + index * 131).slice(0, 4)}`,
   avatarMediaId: null,
   employeeNumber: `L-${String(1001 + index)}`,
-  nationalId: null,
+  nationalId: String(32_410_200 + index * 145_321),
   skills: [...skills],
   weeklyHoursLimit: 48,
   siteIds: SITE_EMPLOYEES.flatMap((employees, site) => (employees.includes(index) ? [siteId(site)] : [])),
@@ -156,6 +156,45 @@ function paginate<T>(items: T[]): Paginated<T> {
   return { items, total: items.length };
 }
 
+const SHIFT_TEMPLATES: ShiftTemplate[] = Array.from({ length: SITE_COUNT - 1 }, (_, site) => site).flatMap((site) =>
+  Array.from({ length: POSTS_PER_SITE[site] ?? 0 }, (_, post) => post).flatMap((post) => {
+    const primary = CURRENT_ASSIGNMENTS.find((item) => item.site === site && item.post === post);
+    const items: ShiftTemplate[] = [];
+    if (primary) {
+      items.push({
+        id: `tpl-${site}-${post}-1`,
+        tenantId: TENANT_ID,
+        siteId: siteId(site),
+        postId: postId(site, post),
+        employeeId: primary.employee === null ? null : employeeId(primary.employee),
+        weekdays: (site + post) % 2 === 0 ? [1, 2, 3, 4, 5] : [1, 3, 5, 6],
+        startTime: post === 0 ? '08:00' : post === 1 ? '14:00' : '22:00',
+        durationMinutes: 480,
+        isActive: true,
+        createdAt: CREATED_AT,
+        updatedAt: CREATED_AT,
+      });
+    }
+    const secondary = assignedEmployee(site, post, 'next');
+    if (secondary && secondary !== (primary?.employee == null ? null : employeeId(primary.employee))) {
+      items.push({
+        id: `tpl-${site}-${post}-2`,
+        tenantId: TENANT_ID,
+        siteId: siteId(site),
+        postId: postId(site, post),
+        employeeId: secondary,
+        weekdays: [2, 4, 6, 7],
+        startTime: post === 2 ? '06:00' : '14:00',
+        durationMinutes: 480,
+        isActive: true,
+        createdAt: CREATED_AT,
+        updatedAt: CREATED_AT,
+      });
+    }
+    return items;
+  }),
+);
+
 export const organizationMockApi: OrganizationApi = {
   createSite: mockUnavailable,
   updateSite: mockUnavailable,
@@ -168,6 +207,51 @@ export const organizationMockApi: OrganizationApi = {
   updateShift: mockUnavailable,
   reassignShift: mockUnavailable,
   cancelShift: mockUnavailable,
+  createShiftTemplate: async (input) => {
+    const created: ShiftTemplate = {
+      id: `tpl-mock-${Date.now()}`,
+      tenantId: TENANT_ID,
+      siteId: input.siteId,
+      postId: input.postId,
+      employeeId: input.employeeId ?? null,
+      weekdays: [...new Set(input.weekdays)].sort((a, b) => a - b),
+      startTime: input.startTime,
+      durationMinutes: input.durationMinutes,
+      isActive: true,
+      createdAt: CREATED_AT,
+      updatedAt: CREATED_AT,
+    };
+    SHIFT_TEMPLATES.unshift(created);
+    return mockResponse({
+      template: created,
+      generatedCount: created.weekdays.length * 2,
+      skippedOverlapCount: 0,
+    });
+  },
+  updateShiftTemplate: async (templateId, input) => {
+    const found = SHIFT_TEMPLATES.find((item) => item.id === templateId);
+    if (!found) throw new Error('La asignación semanal no existe.');
+    if (input.weekdays !== undefined) {
+      found.weekdays = [...new Set(input.weekdays)].sort((a, b) => a - b);
+    }
+    if (input.startTime !== undefined) found.startTime = input.startTime;
+    if (input.durationMinutes !== undefined) found.durationMinutes = input.durationMinutes;
+    if (input.employeeId !== undefined) found.employeeId = input.employeeId;
+    if (input.isActive !== undefined) found.isActive = input.isActive;
+    found.updatedAt = new Date().toISOString();
+    return mockResponse({
+      template: { ...found },
+      generatedCount: found.isActive ? found.weekdays.length : 0,
+      skippedOverlapCount: 0,
+    });
+  },
+  deactivateShiftTemplate: async (templateId) => {
+    const found = SHIFT_TEMPLATES.find((item) => item.id === templateId);
+    if (!found) throw new Error('La asignación semanal no existe.');
+    found.isActive = false;
+    found.updatedAt = new Date().toISOString();
+    return mockResponse({ ...found });
+  },
 
   listSites: () => mockResponse(paginate(SITES)),
 
@@ -179,16 +263,24 @@ export const organizationMockApi: OrganizationApi = {
 
   listPosts: (id) => mockResponse(paginate(POSTS.filter((post) => post.siteId === id))),
 
-  listEmployees: (query = {}) =>
-    mockResponse(
+  listEmployees: (query = {}) => {
+    const term = query.search?.trim().toLowerCase();
+    return mockResponse(
       paginate(
         EMPLOYEES.filter(
           (employee) =>
             (!query.siteId || employee.siteIds.includes(query.siteId)) &&
-            (query.isActive === undefined || employee.isActive === query.isActive),
+            (query.isActive === undefined || employee.isActive === query.isActive) &&
+            (!term ||
+              employee.firstName.toLowerCase().includes(term) ||
+              employee.lastName.toLowerCase().includes(term) ||
+              employee.email.toLowerCase().includes(term) ||
+              (employee.nationalId ?? '').toLowerCase().includes(term) ||
+              (employee.employeeNumber ?? '').toLowerCase().includes(term)),
         ),
       ),
-    ),
+    );
+  },
 
   listShifts: (query = {}) =>
     mockResponse(
@@ -196,6 +288,19 @@ export const organizationMockApi: OrganizationApi = {
         SHIFTS.filter(
           (shift) =>
             (!query.siteId || shift.siteId === query.siteId) && (!query.employeeId || shift.employeeId === query.employeeId),
+        ),
+      ),
+    ),
+
+  listShiftTemplates: (query = {}) =>
+    mockResponse(
+      paginate(
+        SHIFT_TEMPLATES.filter(
+          (tpl) =>
+            (!query.siteId || tpl.siteId === query.siteId) &&
+            (!query.postId || tpl.postId === query.postId) &&
+            (!query.employeeId || tpl.employeeId === query.employeeId) &&
+            (query.isActive === undefined || tpl.isActive === query.isActive),
         ),
       ),
     ),
