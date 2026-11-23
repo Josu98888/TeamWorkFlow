@@ -96,6 +96,8 @@ services:
     image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER in deploy/.env}/teamworkflow-frontend:${IMAGE_TAG:-latest}
     environment:
       NODE_OPTIONS: --max-old-space-size=192
+      # Help assistant (app/api/assistant); set it in deploy/.env. Empty disables the AI replies.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     restart: unless-stopped
     mem_limit: 256m
     healthcheck:
