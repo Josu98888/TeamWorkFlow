@@ -14,7 +14,7 @@ import { useFreshAlertIds } from '../useFreshAlertIds';
 import { useTowerLive } from '../useTowerLive';
 import type { Alert } from '../types';
 import { AlertItem } from './AlertItem';
-import { SiteStatusRow } from './SiteStatusRow';
+import { SiteOperationsTable } from './SiteOperationsTable';
 import { TowerMap, type TowerMapSite, type TowerSiteState } from './TowerMap';
 import { TowerTelemetryBar } from './TowerTelemetryBar';
 import './tower.css';
@@ -186,7 +186,9 @@ export function TowerView() {
         expected={expected}
         openAlerts={countByStatus('OPEN')}
         acknowledgedAlerts={countByStatus('ACKNOWLEDGED')}
+        resolvedAlerts={countByStatus('RESOLVED')}
         issuesCount={issueCount}
+        liveConnected={live.connected}
         activeFilter={filter}
         onlyIssues={siteView === 'issues'}
         onFilterAlerts={setFilter}
@@ -197,7 +199,7 @@ export function TowerView() {
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-5">
         <section aria-label="Alertas" className="lg:col-span-2 lg:col-start-4 lg:row-span-2 lg:row-start-1">
           <Card flush glow="none" className="h-full">
-            <div className="px-5 pt-5">
+            <div className="px-5 pt-4">
               <SectionLabel
                 action={
                   siteFilter ? (
@@ -213,7 +215,7 @@ export function TowerView() {
               >
                 Alertas{siteFilter ? ` · ${siteNames.get(siteFilter) ?? 'Sede'}` : ''}
               </SectionLabel>
-              <div className="pb-4">
+              <div className="pb-3">
                 <Segmented
                   label="Filtrar alertas por estado"
                   options={ALERT_FILTERS.map((option) => ({
@@ -237,7 +239,7 @@ export function TowerView() {
                 <EmptyState title="No hay alertas en esta vista" description="Probá con otro filtro o sede." />
               </div>
             ) : (
-              <ul className="flex flex-col gap-3 px-5 pb-5 lg:max-h-[780px] lg:overflow-y-auto">
+              <ul className="flex flex-col gap-2.5 px-5 pb-5 lg:max-h-[780px] lg:overflow-y-auto">
                 {visibleAlerts.map((alert) => (
                   <AlertItem
                     key={alert.id}
@@ -264,7 +266,7 @@ export function TowerView() {
 
         <section aria-label="Estado del personal por sede" className="lg:col-span-3 lg:col-start-1 lg:row-start-2">
           <Card flush glow="none">
-            <div className="px-5 pt-5">
+            <div className="px-5 pt-4">
               <SectionLabel
                 action={
                   <Segmented
@@ -278,7 +280,7 @@ export function TowerView() {
                   />
                 }
               >
-                Personal por sede
+                Matriz operativa por sede
               </SectionLabel>
             </div>
             {visibleRows.length === 0 ? (
@@ -286,20 +288,20 @@ export function TowerView() {
                 <EmptyState title="Ninguna sede con problemas" description="Todas tienen su personal y sin alertas abiertas." />
               </div>
             ) : (
-              <ul className="divide-y divide-line">
-                {visibleRows.map(({ item, state }) => (
-                  <SiteStatusRow
-                    key={item.siteId}
-                    name={siteNames.get(item.siteId) ?? 'Sede'}
-                    expected={item.expected}
-                    present={item.present}
-                    activeAlerts={alertCount(item.siteId)}
-                    state={state}
-                    selected={siteFilter === item.siteId}
-                    onSelect={() => toggleSite(item.siteId)}
-                  />
-                ))}
-              </ul>
+              <SiteOperationsTable
+                rows={visibleRows.map(({ item, state }) => ({
+                  siteId: item.siteId,
+                  name: siteNames.get(item.siteId) ?? 'Sede',
+                  present: item.present,
+                  expected: item.expected,
+                  activeAlerts: alertCount(item.siteId),
+                  openAlerts: alertCount(item.siteId, 'OPEN'),
+                  state,
+                }))}
+                selectedSiteId={siteFilter}
+                onSelectSite={toggleSite}
+                onLocateSite={showOnMap}
+              />
             )}
           </Card>
         </section>
