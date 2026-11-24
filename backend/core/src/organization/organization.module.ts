@@ -10,7 +10,10 @@ import { OrganizationResponder } from './responders/organization.responder';
 import { PostsService } from './sites/posts.service';
 import { SitesController } from './sites/sites.controller';
 import { SitesService } from './sites/sites.service';
+import { ShiftGeneratorJob } from './shifts/shift-generator.job';
 import { ShiftLifecycleService } from './shifts/shift-lifecycle.service';
+import { ShiftTemplatesController } from './shifts/shift-templates.controller';
+import { ShiftTemplatesService } from './shifts/shift-templates.service';
 import { ShiftsController } from './shifts/shifts.controller';
 import { ShiftsService } from './shifts/shifts.service';
 
@@ -22,6 +25,7 @@ import { ShiftsService } from './shifts/shifts.service';
     SitesController,
     EmployeesController,
     ShiftsController,
+    ShiftTemplatesController,
     OrganizationResponder,
   ],
   providers: [
@@ -30,7 +34,9 @@ import { ShiftsService } from './shifts/shifts.service';
     PostsService,
     EmployeesService,
     ShiftsService,
+    ShiftTemplatesService,
     ShiftLifecycleService,
+    ShiftGeneratorJob,
     ConsumedEventProcessor,
     UserCreatedHandler,
     OrganizationService,
