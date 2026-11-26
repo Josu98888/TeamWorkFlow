@@ -228,6 +228,12 @@ export class OrganizationConsumer implements OnModuleInit {
       throw new PoisonEventError('Employee payload missing required fields');
     }
 
+    const siteIds = Array.isArray(ctx.payload.siteIds)
+      ? ctx.payload.siteIds.filter(
+          (id): id is string => typeof id === 'string' && id.length > 0,
+        )
+      : undefined;
+
     await this.snapshots?.upsertEmployee(
       {
         employeeId,
@@ -246,6 +252,7 @@ export class OrganizationConsumer implements OnModuleInit {
             : ctx.payload.employeeNumber === null
               ? null
               : undefined,
+        ...(siteIds !== undefined ? { siteIds } : {}),
         isActive:
           typeof ctx.payload.isActive === 'boolean'
             ? ctx.payload.isActive
