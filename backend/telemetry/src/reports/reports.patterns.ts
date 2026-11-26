@@ -13,10 +13,13 @@ export const REPORTS_PATTERNS = {
   PAYROLL_EXPORT_EXCEL: 'attendance.report.payroll.export-excel',
   PAYROLL_RUN_CLOSE: 'attendance.report.payroll.run-close',
   PAYROLL_RUN_LIST: 'attendance.report.payroll.run-list',
+  SITE_EMAIL_STATUS: 'attendance.report.site.email-status',
+  SITE_REQUEST_EMAIL: 'attendance.report.site.request-email',
 } as const;
 
 export const REPORTS_EVENTS = {
   DAILY_REPORT_READY: 'daily_report_ready',
   MONTHLY_REPORT_READY: 'monthly_report_ready',
   PAYROLL_REPORT_READY: 'payroll_report_ready',
+  REPORT_EMAIL_SENT: 'report_email_sent',
 } as const;

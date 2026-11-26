@@ -85,6 +85,7 @@ export class OrgSnapshotsService {
       firstName: string;
       lastName: string;
       employeeNumber?: string | null;
+      siteIds?: string[];
       isActive?: boolean;
     },
     tx?: Prisma.TransactionClient,
@@ -99,6 +100,7 @@ export class OrgSnapshotsService {
         ...(input.employeeNumber !== undefined
           ? { employeeNumber: input.employeeNumber }
           : {}),
+        ...(input.siteIds !== undefined ? { siteIds: input.siteIds } : {}),
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
       },
       create: {
@@ -108,6 +110,7 @@ export class OrgSnapshotsService {
         firstName: input.firstName,
         lastName: input.lastName,
         employeeNumber: input.employeeNumber ?? null,
+        siteIds: input.siteIds ?? [],
         isActive: input.isActive ?? true,
       },
     });
@@ -170,6 +173,7 @@ export class OrgSnapshotsService {
               firstName: emp.firstName,
               lastName: emp.lastName,
               employeeNumber: emp.employeeNumber,
+              siteIds: emp.siteIds ?? [],
               isActive: emp.isActive,
             });
           }

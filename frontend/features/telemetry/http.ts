@@ -104,6 +104,14 @@ export const telemetryHttpApi: TelemetryApi = {
       ...options,
       method: 'DELETE',
     }),
+  getSiteReportEmailStatus: (siteId) =>
+    apiFetch(`/reports/sites/${siteId}/email-status`, options),
+  requestSiteReportEmail: (siteId, input) =>
+    apiFetch(`/reports/sites/${siteId}/request-email`, {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
 };
 
 /**

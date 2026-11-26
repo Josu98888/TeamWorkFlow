@@ -20,6 +20,9 @@ import type {
   PostOvertimeRateView,
   ReportRecipientView,
   ReportRecipientsResponse,
+  RequestSiteReportEmailInput,
+  RequestSiteReportEmailResponse,
+  SiteReportEmailStatusResponse,
   TowerSnapshotResponse,
   UpsertEmployeeCompensationInput,
   UpsertPostOvertimeRateInput,
@@ -53,6 +56,8 @@ export type TelemetryApi = {
   listReportRecipients: () => Promise<ReportRecipientsResponse>;
   upsertReportRecipient: (userId: string, input: UpsertReportRecipientInput) => Promise<ReportRecipientView>;
   removeReportRecipient: (userId: string) => Promise<void>;
+  getSiteReportEmailStatus: (siteId: string) => Promise<SiteReportEmailStatusResponse>;
+  requestSiteReportEmail: (siteId: string, input: RequestSiteReportEmailInput) => Promise<RequestSiteReportEmailResponse>;
 };
 
 // The only mock/real switch of this domain (see `shared/lib/config.ts`).

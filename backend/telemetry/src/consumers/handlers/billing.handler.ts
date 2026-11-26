@@ -67,6 +67,7 @@ export class BillingConsumer implements OnModuleInit {
     const tenantId = ctx.tenantId;
 
     // Delete in order to avoid FK constraint issues
+    await ctx.tx.reportEmailRequestLog?.deleteMany({ where: { tenantId } });
     await ctx.tx.monthlyPayrollLine?.deleteMany({ where: { tenantId } });
     await ctx.tx.monthlyPayrollRun?.deleteMany({ where: { tenantId } });
     await ctx.tx.monthlyAttendanceReport?.deleteMany({ where: { tenantId } });

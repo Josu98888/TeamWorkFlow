@@ -355,6 +355,14 @@ describe('EmployeesService', () => {
       expect(view.siteIds).toEqual([SITE_2]);
       expect(view.isActive).toBe(false);
       expect(view.firstName).toBe('Ana');
+      expect(publish).toHaveBeenCalledWith(
+        TENANT_A,
+        'employee_updated',
+        expect.objectContaining({
+          employeeId: 'e-ana',
+          siteIds: [SITE_2],
+        }),
+      );
     });
 
     it('leaves the sites alone when siteIds is not sent', async () => {

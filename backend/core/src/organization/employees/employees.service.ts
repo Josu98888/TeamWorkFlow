@@ -184,6 +184,7 @@ export class EmployeesService {
         lastName: row.lastName,
         employeeNumber: row.employeeNumber,
         isActive: row.isActive,
+        siteIds: row.sites.map((site) => site.siteId),
       },
     );
     return this.toView(manager, row);

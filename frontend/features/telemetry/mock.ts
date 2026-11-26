@@ -19,6 +19,9 @@ import type {
   MonthlyPayrollCalculation,
   PostOvertimeRateView,
   ReportRecipientView,
+  RequestSiteReportEmailResponse,
+  SiteReportEmailKind,
+  SiteReportEmailStatusResponse,
   SiteSummary,
   SiteSummarySnapshot,
 } from './types';
@@ -185,6 +188,7 @@ const MOCK_RECIPIENTS: ReportRecipientView[] = [
     employeeId: employeeId(0),
     employeeName: 'Fernández, Lucía',
     employeeNumber: 'L-1001',
+    siteIds: [siteId(0)],
     isActiveEmployee: true,
     receiveDaily: true,
     receiveMonthly: true,
@@ -193,6 +197,23 @@ const MOCK_RECIPIENTS: ReportRecipientView[] = [
     updatedAt: minutesFromNow(-120),
   },
 ];
+
+const MOCK_SITE_EMAIL_REQUESTS = new Map<
+  string,
+  { sentAt: string; targetPeriod: string }
+>();
+
+function mockTodayStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function mockTomorrowStr(): string {
+  return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function mockSiteRequestKey(targetSiteId: string, kind: SiteReportEmailKind, dateStr: string): string {
+  return `${targetSiteId}:${kind}:${dateStr}`;
+}
 
 function buildMockDailyReport(query?: { date?: string; siteId?: string }): DailyAttendanceReport {
   const reportDate = query?.date ?? new Date().toISOString().slice(0, 10);
@@ -428,12 +449,14 @@ export const telemetryMockApi: TelemetryApi = {
           userId: 'user-mock-1',
           fullName: 'Fernández, Lucía',
           employeeNumber: 'L-1001',
+          siteIds: [siteId(0)],
         },
         {
           employeeId: employeeId(1),
           userId: 'user-mock-2',
           fullName: 'Gómez, Martín',
           employeeNumber: 'L-1002',
+          siteIds: [siteId(1)],
         },
       ],
     }),
@@ -446,6 +469,7 @@ export const telemetryMockApi: TelemetryApi = {
       employeeId: input.employeeId ?? found?.employeeId ?? null,
       employeeName: found?.employeeName ?? 'Trabajador asignado',
       employeeNumber: found?.employeeNumber ?? null,
+      siteIds: input.siteIds ?? found?.siteIds ?? [siteId(0)],
       isActiveEmployee: true,
       receiveDaily: input.receiveDaily,
       receiveMonthly: input.receiveMonthly,
@@ -461,6 +485,82 @@ export const telemetryMockApi: TelemetryApi = {
     const idx = MOCK_RECIPIENTS.findIndex((item) => item.userId === userId);
     if (idx !== -1) MOCK_RECIPIENTS.splice(idx, 1);
     return mockResponse(undefined);
+  },
+  getSiteReportEmailStatus: (targetSiteId) => {
+    const today = mockTodayStr();
+    const tomorrow = mockTomorrowStr();
+    const daily = MOCK_SITE_EMAIL_REQUESTS.get(
+      mockSiteRequestKey(targetSiteId, 'daily_absences_pdf', today),
+    );
+    const monthly = MOCK_SITE_EMAIL_REQUESTS.get(
+      mockSiteRequestKey(targetSiteId, 'monthly_attendance_pdf', today),
+    );
+    const excel = MOCK_SITE_EMAIL_REQUESTS.get(
+      mockSiteRequestKey(targetSiteId, 'monthly_payroll_excel', today),
+    );
+    const status: SiteReportEmailStatusResponse = {
+      siteId: targetSiteId,
+      siteName: 'Sede operativa',
+      timezone: 'America/Argentina/Buenos_Aires',
+      currentDateInSiteTz: today,
+      nextAvailableDate: tomorrow,
+      nextAvailableAt: `${tomorrow}T03:00:00.000Z`,
+      recipientEmailMasked: 'o***@teamworkflow.demo',
+      hasProPlan: true,
+      permissions: {
+        canAccessPanel: true,
+        canRequestDaily: true,
+        canRequestMonthly: true,
+        canRequestPayrollExcel: true,
+      },
+      requestedToday: {
+        dailyAbsencesPdf: {
+          requested: Boolean(daily),
+          sentAt: daily?.sentAt ?? null,
+          targetPeriod: daily?.targetPeriod ?? null,
+        },
+        monthlyAttendancePdf: {
+          requested: Boolean(monthly),
+          sentAt: monthly?.sentAt ?? null,
+          targetPeriod: monthly?.targetPeriod ?? null,
+        },
+        monthlyPayrollExcel: {
+          requested: Boolean(excel),
+          sentAt: excel?.sentAt ?? null,
+          targetPeriod: excel?.targetPeriod ?? null,
+        },
+      },
+    };
+    return mockResponse(status);
+  },
+  requestSiteReportEmail: async (targetSiteId, input) => {
+    const today = mockTodayStr();
+    const tomorrow = mockTomorrowStr();
+    const key = mockSiteRequestKey(targetSiteId, input.kind, today);
+    if (MOCK_SITE_EMAIL_REQUESTS.has(key)) {
+      throw new Error(
+        `Solo se puede solicitar este informe una vez al día por sede. Próximo pedido disponible el ${tomorrow}.`,
+      );
+    }
+    const targetPeriod =
+      input.kind === 'daily_absences_pdf'
+        ? (input.date ?? today)
+        : (input.period ?? today.slice(0, 7));
+    const sentAt = new Date().toISOString();
+    MOCK_SITE_EMAIL_REQUESTS.set(key, { sentAt, targetPeriod });
+    const result: RequestSiteReportEmailResponse = {
+      requestId: `req-mock-${Date.now()}`,
+      siteId: targetSiteId,
+      siteName: 'Sede operativa',
+      kind: input.kind,
+      targetPeriod,
+      requestDate: today,
+      sentAt,
+      sentToEmailMasked: 'o***@teamworkflow.demo',
+      nextAvailableDate: tomorrow,
+      nextAvailableAt: `${tomorrow}T03:00:00.000Z`,
+    };
+    return mockResponse(result);
   },
 
   getTowerSnapshot: () => mockResponse({ items: snapshot() }),

@@ -16,6 +16,7 @@ export type Plan = 'basic' | 'pro';
 export interface VerifiedActor {
   userId: string;
   tenantId: string;
+  email?: string;
   role: Role;
   siteIds: string[];
   tenantStatus: TenantStatus;
@@ -36,6 +37,7 @@ export interface EmployeeDto {
   firstName?: string;
   lastName?: string;
   employeeNumber?: string | null;
+  siteIds?: string[];
   isActive?: boolean;
 }
 
@@ -46,6 +48,7 @@ export interface EmployeeCatalogDto {
   firstName: string;
   lastName: string;
   employeeNumber: string | null;
+  siteIds?: string[];
   isActive: boolean;
 }
 

@@ -248,6 +248,7 @@ export class AuthService {
       select: {
         id: true,
         tenantId: true,
+        email: true,
         role: true,
         isActive: true,
         siteIds: true,
@@ -270,6 +271,7 @@ export class AuthService {
     return {
       userId: user.id,
       tenantId: user.tenantId,
+      ...(user.email ? { email: user.email } : {}),
       role: toWireRole(user.role),
       ...(user.role === 'SUPERVISOR' ? { siteIds: user.siteIds } : {}),
       tenantStatus: tenant ? toWireTenantStatus(tenant.status) : null,

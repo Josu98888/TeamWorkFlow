@@ -51,6 +51,22 @@ enum PayrollRunStatus {
   @@map("payroll_run_status")
 }
 
+enum ReportEmailKind {
+  DAILY_ABSENCES_PDF
+  MONTHLY_ATTENDANCE_PDF
+  MONTHLY_PAYROLL_EXCEL
+
+  @@map("report_email_kind")
+}
+
+enum ReportEmailStatus {
+  PENDING
+  SENT
+  FAILED
+
+  @@map("report_email_status")
+}
+
 enum AlertType {
   LATE
   UNCOVERED_POST
@@ -253,6 +269,7 @@ model EmployeeSnapshot {
   firstName      String   @map("first_name")
   lastName       String   @map("last_name")
   employeeNumber String?  @map("employee_number")
+  siteIds        String[] @default([]) @map("site_ids")
   isActive       Boolean  @default(true) @map("is_active")
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -315,6 +332,7 @@ model ReportRecipient {
   tenantId            String   @map("tenant_id") @db.Uuid
   userId              String   @map("user_id") @db.Uuid
   employeeId          String?  @map("employee_id") @db.Uuid
+  siteIds             String[] @default([]) @map("site_ids")
   receiveDaily        Boolean  @default(true) @map("receive_daily")
   receiveMonthly      Boolean  @default(true) @map("receive_monthly")
   receivePayrollExcel Boolean  @default(false) @map("receive_payroll_excel")
@@ -324,6 +342,25 @@ model ReportRecipient {
 
   @@unique([tenantId, userId], map: "uq_report_recipient_tenant_user")
   @@map("report_recipients")
+}
+
+// Daily limit log for on-demand site report emails (at most 1 per day per user, site and report kind).
+model ReportEmailRequestLog {
+  id             String            @id @default(uuid(7)) @db.Uuid
+  tenantId       String            @map("tenant_id") @db.Uuid
+  siteId         String            @map("site_id") @db.Uuid
+  userId         String            @map("user_id") @db.Uuid
+  recipientEmail String            @map("recipient_email")
+  reportKind     ReportEmailKind   @map("report_kind")
+  requestDate    String            @map("request_date")
+  targetPeriod   String            @map("target_period")
+  status         ReportEmailStatus @default(PENDING)
+  requestedAt    DateTime          @default(now()) @map("requested_at") @db.Timestamptz(6)
+  sentAt         DateTime?         @map("sent_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, userId, siteId, reportKind, requestDate], map: "uq_report_email_req_daily_limit")
+  @@index([tenantId, siteId, requestDate], map: "idx_report_email_req_tenant_site_date")
+  @@map("report_email_request_logs")
 }
 
 // Persisted daily attendance report snapshots (Report 1).
