@@ -74,6 +74,10 @@ export type Shift = {
   employeeId: string | null;
   startsAt: string;
   endsAt: string;
+  authorizedOvertimeMinutes?: number;
+  overtimeReason?: string | null;
+  overtimeAssignedByUserId?: string | null;
+  overtimeAssignedAt?: string | null;
   status: ShiftStatus;
   version: number;
   createdAt: string;
@@ -112,9 +116,45 @@ export type CreateEmployeeInput = {
 /** The email is not editable; `siteIds` replaces the whole set. */
 export type UpdateEmployeeInput = Partial<Omit<CreateEmployeeInput, 'email'>> & { isActive?: boolean };
 
+export type BulkImportEmployeeItem = {
+  nationalId: string;
+  fullName: string;
+  email: string;
+  password: string;
+};
+
+export type BulkImportEmployeesInput = {
+  items: BulkImportEmployeeItem[];
+};
+
+export type BulkImportEmployeeRowResult = {
+  rowNumber: number;
+  nationalId: string;
+  fullName: string;
+  email: string;
+  status: 'created' | 'updated' | 'failed';
+  employeeId?: string;
+  code?: string;
+  detail?: string;
+};
+
+export type BulkImportEmployeesResponse = {
+  siteId: string;
+  totalRows: number;
+  createdCount: number;
+  updatedCount: number;
+  failedCount: number;
+  results: BulkImportEmployeeRowResult[];
+};
+
 export type CreateShiftInput = { siteId: string; postId: string; startsAt: string; endsAt: string; employeeId?: string | null };
 /** `version` is the one the caller read (optimistic concurrency). */
 export type UpdateShiftInput = { version: number; startsAt?: string; endsAt?: string; postId?: string };
+export type AssignShiftOvertimeInput = {
+  version: number;
+  authorizedOvertimeMinutes: number;
+  reason?: string | null;
+};
 
 export type ShiftWarningCode = 'rest_under_12h' | 'weekly_hours_exceeded' | 'missing_skill' | 'site_not_enabled';
 export type ShiftWarning = { code: ShiftWarningCode; message: string };
@@ -125,3 +165,49 @@ export type InvitableRole = 'employee' | 'supervisor';
 export type InviteRoleOption = { value: InvitableRole; label: string };
 /** Injected by the route: sends the access invitation (the organization domain does not know the auth domain). */
 export type InviteEmployee = (input: { email: string; role: InvitableRole }) => Promise<unknown>;
+
+export type ShiftTemplate = {
+  id: string;
+  tenantId: string;
+  siteId: string;
+  postId: string;
+  employeeId: string | null;
+  weekdays: number[];
+  startTime: string;
+  durationMinutes: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ShiftTemplateWithGeneration = {
+  template: ShiftTemplate;
+  generatedCount: number;
+  skippedOverlapCount: number;
+};
+
+export type ListShiftTemplatesQuery = {
+  siteId?: string;
+  postId?: string;
+  employeeId?: string;
+  isActive?: boolean;
+  page?: number;
+  pageSize?: number;
+};
+
+export type CreateShiftTemplateInput = {
+  siteId: string;
+  postId: string;
+  weekdays: number[];
+  startTime: string;
+  durationMinutes: number;
+  employeeId?: string | null;
+};
+
+export type UpdateShiftTemplateInput = {
+  weekdays?: number[];
+  startTime?: string;
+  durationMinutes?: number;
+  employeeId?: string | null;
+  isActive?: boolean;
+};

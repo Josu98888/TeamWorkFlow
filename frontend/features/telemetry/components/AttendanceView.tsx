@@ -21,10 +21,19 @@ import {
 } from '../labels';
 import { WORKDAY_STATUSES, type ClockEvent, type ListWorkdaysQuery, type Workday } from '../types';
 import { CorrectClockEventModal, ManualClockEventModal } from './ClockEventForms';
+import { PayrollTab, ReportRecipientsTab } from './PayrollAndRecipientsPanel';
+import { DailyReportTab, MonthlyReportTab } from './ReportsPanel';
 
-const TABS = ['events', 'workdays'] as const;
+const TABS = ['events', 'workdays', 'daily_report', 'monthly_report', 'payroll', 'recipients'] as const;
 type Tab = (typeof TABS)[number];
-const TAB_LABELS = { events: 'Fichadas', workdays: 'Jornadas' } as const satisfies Record<Tab, string>;
+const TAB_LABELS = {
+  events: 'Fichadas',
+  workdays: 'Jornadas',
+  daily_report: 'Informe Diario (PDF)',
+  monthly_report: 'Informe Mensual (PDF)',
+  payroll: 'Liquidación Excel (PRO)',
+  recipients: 'Destinatarios',
+} as const satisfies Record<Tab, string>;
 
 const minutes = (value: number) => `${Math.floor(value / 60)} h ${String(value % 60).padStart(2, '0')} min`;
 
@@ -65,8 +74,16 @@ export function AttendanceView() {
 
       {tab === 'events' ? (
         <ClockEventsTab siteId={siteId} employeeId={employeeId} employeeNames={employeeNames} siteNames={siteNames} />
-      ) : (
+      ) : tab === 'workdays' ? (
         <WorkdaysTab siteId={siteId} employeeId={employeeId} employeeNames={employeeNames} siteNames={siteNames} />
+      ) : tab === 'daily_report' ? (
+        <DailyReportTab siteId={siteId} />
+      ) : tab === 'monthly_report' ? (
+        <MonthlyReportTab siteId={siteId} employeeId={employeeId} />
+      ) : tab === 'payroll' ? (
+        <PayrollTab siteId={siteId} employeeId={employeeId} />
+      ) : (
+        <ReportRecipientsTab />
       )}
     </>
   );

@@ -8,12 +8,18 @@ import {
   EmployeeGetRequestDto,
   ShiftGetRequestDto,
   SiteGetRequestDto,
+  TenantCatalogRequestDto,
 } from './responder.dto';
 import {
   toTelemetryEmployee,
+  toTelemetryEmployeeCatalog,
+  toTelemetryPost,
   toTelemetryShift,
   toTelemetrySite,
+  toTelemetrySiteCatalog,
+  type TelemetryEmployeeCatalogDto,
   type TelemetryEmployeeDto,
+  type TelemetryPostDto,
   type TelemetryShiftDto,
   type TelemetrySiteDto,
 } from './telemetry-wire';
@@ -35,6 +41,25 @@ export class OrganizationResponder {
     );
   }
 
+  @MessagePattern(ORGANIZATION_PATTERNS.siteList)
+  async listSites(
+    @Payload() dto: TenantCatalogRequestDto,
+  ): Promise<TelemetrySiteDto[]> {
+    const sites = await this.organization.listSitesForTenant(dto.tenantId);
+    return sites.map(toTelemetrySiteCatalog);
+  }
+
+  @MessagePattern(ORGANIZATION_PATTERNS.postList)
+  async listPosts(
+    @Payload() dto: TenantCatalogRequestDto,
+  ): Promise<TelemetryPostDto[]> {
+    const posts = await this.organization.listPostsForTenant(
+      dto.tenantId,
+      dto.siteId,
+    );
+    return posts.map(toTelemetryPost);
+  }
+
   @MessagePattern(ORGANIZATION_PATTERNS.employeeGet)
   async getEmployee(
     @Payload() dto: EmployeeGetRequestDto,
@@ -45,6 +70,16 @@ export class OrganizationResponder {
       }),
       dto.userId,
     );
+  }
+
+  @MessagePattern(ORGANIZATION_PATTERNS.employeeList)
+  async listEmployees(
+    @Payload() dto: TenantCatalogRequestDto,
+  ): Promise<TelemetryEmployeeCatalogDto[]> {
+    const employees = await this.organization.listEmployeesForTenant(
+      dto.tenantId,
+    );
+    return employees.map(toTelemetryEmployeeCatalog);
   }
 
   @MessagePattern(ORGANIZATION_PATTERNS.shiftGet)

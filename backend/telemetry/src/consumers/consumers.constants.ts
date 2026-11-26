@@ -13,6 +13,10 @@ export const CONSUMED_SUBJECTS = {
   SHIFT_ENDED: 't.*.organization.shift_ended',
   SHIFT_STARTING: 't.*.organization.shift_starting',
   SITE_UPDATED: 't.*.organization.site_updated',
+  POST_CREATED: 't.*.organization.post_created',
+  POST_UPDATED: 't.*.organization.post_updated',
+  EMPLOYEE_CREATED: 't.*.organization.employee_created',
+  EMPLOYEE_UPDATED: 't.*.organization.employee_updated',
 
   // Auth events
   TENANT_SUSPENDED: 't.*.auth.tenant_suspended',
@@ -46,6 +50,10 @@ export const TELEMETRY_DURABLE_CONSUMERS: readonly DurableConsumerSpec[] = [
       CONSUMED_SUBJECTS.SHIFT_ENDED,
       CONSUMED_SUBJECTS.SHIFT_STARTING,
       CONSUMED_SUBJECTS.SITE_UPDATED,
+      CONSUMED_SUBJECTS.POST_CREATED,
+      CONSUMED_SUBJECTS.POST_UPDATED,
+      CONSUMED_SUBJECTS.EMPLOYEE_CREATED,
+      CONSUMED_SUBJECTS.EMPLOYEE_UPDATED,
     ],
   },
   {

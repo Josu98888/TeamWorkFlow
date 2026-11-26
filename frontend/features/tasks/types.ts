@@ -156,3 +156,8 @@ export type MediaUpload = {
   uploadUrl: string;
   expiresAt: string;
 };
+
+export type ReviewTaskInput = {
+  result: 'APPROVED' | 'OBSERVED';
+  note?: string;
+};

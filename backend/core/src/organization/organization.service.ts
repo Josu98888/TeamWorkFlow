@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type {
+  BulkImportEmployeesBodyDto,
   CreateEmployeeBodyDto,
   ListEmployeesQueryDto,
   UpdateEmployeeBodyDto,
@@ -15,12 +16,19 @@ import type {
 } from './sites/dto/site.dto';
 import { PostsService } from './sites/posts.service';
 import type {
+  AssignShiftOvertimeBodyDto,
   CancelShiftBodyDto,
   CreateShiftBodyDto,
   ListShiftsQueryDto,
   ReassignShiftBodyDto,
   UpdateShiftBodyDto,
 } from './shifts/dto/shift.dto';
+import type {
+  CreateShiftTemplateBodyDto,
+  ListShiftTemplatesQueryDto,
+  UpdateShiftTemplateBodyDto,
+} from './shifts/dto/shift-template.dto';
+import { ShiftTemplatesService } from './shifts/shift-templates.service';
 import { ShiftsService } from './shifts/shifts.service';
 import { SitesService, type SiteView } from './sites/sites.service';
 
@@ -34,6 +42,7 @@ export class OrganizationService {
     private readonly posts: PostsService,
     private readonly employees: EmployeesService,
     private readonly shifts: ShiftsService,
+    private readonly shiftTemplates: ShiftTemplatesService,
   ) {}
 
   // organization.site.create
@@ -62,6 +71,11 @@ export class OrganizationService {
     return this.sites.list(actor, query);
   }
 
+  // organization.site.list with an explicit tenant (telemetry catalog responder).
+  listSitesForTenant(tenantId: string): Promise<SiteView[]> {
+    return this.sites.listForTenant(tenantId);
+  }
+
   // organization.site.rotate-qr
   rotateSiteQr(actor: OrganizationActor, siteId: string) {
     return this.sites.rotateQr(actor, siteId);
@@ -82,9 +96,23 @@ export class OrganizationService {
     return this.posts.list(actor, siteId, query);
   }
 
+  // organization.post.list with an explicit tenant (telemetry catalog responder).
+  listPostsForTenant(tenantId: string, siteId?: string) {
+    return this.posts.listForTenant(tenantId, siteId);
+  }
+
   // organization.employee.create
   createEmployee(actor: OrganizationActor, dto: CreateEmployeeBodyDto) {
     return this.employees.create(actor, dto);
+  }
+
+  // organization.employee.bulk-import
+  bulkImportEmployees(
+    actor: OrganizationActor,
+    siteId: string,
+    dto: BulkImportEmployeesBodyDto,
+  ) {
+    return this.employees.bulkImportForSite(actor, siteId, dto);
   }
 
   // organization.employee.update
@@ -120,6 +148,11 @@ export class OrganizationService {
     return this.employees.list(actor, query);
   }
 
+  // organization.employee.list with an explicit tenant (telemetry catalog responder).
+  listEmployeesForTenant(tenantId: string) {
+    return this.employees.listForTenant(tenantId);
+  }
+
   // organization.shift.create
   createShift(actor: OrganizationActor, dto: CreateShiftBodyDto) {
     return this.shifts.create(actor, dto);
@@ -141,6 +174,15 @@ export class OrganizationService {
     dto: ReassignShiftBodyDto,
   ) {
     return this.shifts.reassign(actor, shiftId, dto);
+  }
+
+  // organization.shift.assign-overtime
+  assignShiftOvertime(
+    actor: OrganizationActor,
+    shiftId: string,
+    dto: AssignShiftOvertimeBodyDto,
+  ) {
+    return this.shifts.assignOvertime(actor, shiftId, dto);
   }
 
   // organization.shift.cancel
@@ -166,5 +208,35 @@ export class OrganizationService {
   // organization.shift.list
   listShifts(actor: OrganizationActor, query: ListShiftsQueryDto) {
     return this.shifts.list(actor, query);
+  }
+
+  // organization.shiftTemplate.create
+  createShiftTemplate(
+    actor: OrganizationActor,
+    dto: CreateShiftTemplateBodyDto,
+  ) {
+    return this.shiftTemplates.create(actor, dto);
+  }
+
+  // organization.shiftTemplate.update
+  updateShiftTemplate(
+    actor: OrganizationActor,
+    templateId: string,
+    dto: UpdateShiftTemplateBodyDto,
+  ) {
+    return this.shiftTemplates.update(actor, templateId, dto);
+  }
+
+  // organization.shiftTemplate.deactivate
+  deactivateShiftTemplate(actor: OrganizationActor, templateId: string) {
+    return this.shiftTemplates.deactivate(actor, templateId);
+  }
+
+  // organization.shiftTemplate.list
+  listShiftTemplates(
+    actor: OrganizationActor,
+    query: ListShiftTemplatesQueryDto,
+  ) {
+    return this.shiftTemplates.list(actor, query);
   }
 }

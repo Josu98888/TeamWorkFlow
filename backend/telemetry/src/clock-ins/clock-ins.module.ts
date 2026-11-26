@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { GeofenceModule } from '../geofence/geofence.module';
 import { ShiftsModule } from '../shifts/shifts.module';
+import { SnapshotsModule } from '../snapshots/snapshots.module';
 import { TenantsModule } from '../tenants/tenants.module';
 import { WorkdaysModule } from '../workdays/workdays.module';
 import { AlertsModule } from '../alerts/alerts.module';
@@ -12,6 +13,7 @@ import { ClockInsService } from './clock-ins.service';
   imports: [
     GeofenceModule,
     ShiftsModule,
+    SnapshotsModule,
     TenantsModule,
     WorkdaysModule,
     AlertsModule,

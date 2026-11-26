@@ -9,6 +9,8 @@ import {
   UpstreamUnavailableException,
   NoMatchingShiftException,
   WorkdayNotFoundException,
+  ReportRequestDailyLimitReachedException,
+  MailDeliveryFailedException,
   ValidationException,
 } from './app.exceptions';
 
@@ -76,6 +78,17 @@ describe('AppExceptions', () => {
     const exc = new WorkdayNotFoundException();
     expect(exc.status).toBe(404);
     expect(exc.code).toBe('workday_not_found');
+  });
+
+  it('creates ReportRequestDailyLimitReachedException with status 429 and MailDeliveryFailedException with status 502', () => {
+    const dailyLimit = new ReportRequestDailyLimitReachedException('2026-11-26');
+    expect(dailyLimit.status).toBe(429);
+    expect(dailyLimit.code).toBe('report_request_daily_limit_reached');
+    expect(dailyLimit.message).toContain('2026-11-26');
+
+    const mailErr = new MailDeliveryFailedException();
+    expect(mailErr.status).toBe(502);
+    expect(mailErr.code).toBe('mail_delivery_failed');
   });
 
   it('creates ValidationException with status 422 and errors list', () => {

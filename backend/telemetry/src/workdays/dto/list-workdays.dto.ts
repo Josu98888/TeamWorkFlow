@@ -12,6 +12,7 @@ export enum WorkdayStatusDto {
   OPEN = 'open',
   CLOSED = 'closed',
   MISSING_CLOCK_OUT = 'missing_clock_out',
+  ABSENT = 'absent',
 }
 
 export class ListWorkdaysDto {

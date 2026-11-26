@@ -32,8 +32,39 @@ enum WorkdayStatus {
   OPEN
   CLOSED
   MISSING_CLOCK_OUT
+  ABSENT
 
   @@map("workday_status")
+}
+
+enum PayRateType {
+  HOURLY
+  PER_SHIFT
+
+  @@map("pay_rate_type")
+}
+
+enum PayrollRunStatus {
+  DRAFT
+  CLOSED
+
+  @@map("payroll_run_status")
+}
+
+enum ReportEmailKind {
+  DAILY_ABSENCES_PDF
+  MONTHLY_ATTENDANCE_PDF
+  MONTHLY_PAYROLL_EXCEL
+
+  @@map("report_email_kind")
+}
+
+enum ReportEmailStatus {
+  PENDING
+  SENT
+  FAILED
+
+  @@map("report_email_status")
 }
 
 enum AlertType {
@@ -64,17 +95,19 @@ enum ShiftStatus {
 
 // Local snapshot of shifts replicated from the organization module in core.
 model ShiftSnapshot {
-  shiftId     String      @id @map("shift_id") @db.Uuid
-  tenantId    String      @map("tenant_id") @db.Uuid
-  siteId      String      @map("site_id") @db.Uuid
-  postId      String      @map("post_id") @db.Uuid
-  employeeId  String?     @map("employee_id") @db.Uuid
-  startsAt    DateTime    @map("starts_at") @db.Timestamptz(6)
-  endsAt      DateTime    @map("ends_at") @db.Timestamptz(6)
-  status      ShiftStatus @default(SCHEDULED)
-  version     Int         @default(1)
+  shiftId                   String      @id @map("shift_id") @db.Uuid
+  tenantId                  String      @map("tenant_id") @db.Uuid
+  siteId                    String      @map("site_id") @db.Uuid
+  postId                    String      @map("post_id") @db.Uuid
+  employeeId                String?     @map("employee_id") @db.Uuid
+  startsAt                  DateTime    @map("starts_at") @db.Timestamptz(6)
+  endsAt                    DateTime    @map("ends_at") @db.Timestamptz(6)
+  authorizedOvertimeMinutes Int         @default(0) @map("authorized_overtime_minutes")
+  status                    ShiftStatus @default(SCHEDULED)
+  version                   Int         @default(1)
 
   @@index([tenantId, siteId], map: "idx_shift_snapshot_tenant_site")
+  @@index([tenantId, startsAt], map: "idx_shift_snapshot_tenant_starts")
   @@index([status, startsAt], map: "idx_shift_snapshot_status_starts_at")
   @@map("shift_snapshots")
 }
@@ -126,19 +159,27 @@ model ClockEventCorrection {
 
 // Aggregated workday per shift.
 model Workday {
-  id              String        @id @default(uuid(7)) @db.Uuid
-  tenantId        String        @map("tenant_id") @db.Uuid
-  shiftId         String        @map("shift_id") @db.Uuid
-  employeeId      String        @map("employee_id") @db.Uuid
-  siteId          String        @map("site_id") @db.Uuid
-  workedMinutes   Int           @default(0) @map("worked_minutes")
-  overtimeMinutes Int           @default(0) @map("overtime_minutes")
-  lateMinutes     Int           @default(0) @map("late_minutes")
-  status          WorkdayStatus @default(OPEN)
-  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                        String        @id @default(uuid(7)) @db.Uuid
+  tenantId                  String        @map("tenant_id") @db.Uuid
+  shiftId                   String        @map("shift_id") @db.Uuid
+  employeeId                String        @map("employee_id") @db.Uuid
+  siteId                    String        @map("site_id") @db.Uuid
+  postId                    String?       @map("post_id") @db.Uuid
+  scheduledMinutes          Int           @default(0) @map("scheduled_minutes")
+  workedMinutes             Int           @default(0) @map("worked_minutes")
+  authorizedOvertimeMinutes Int           @default(0) @map("authorized_overtime_minutes")
+  rawOvertimeMinutes        Int           @default(0) @map("raw_overtime_minutes")
+  overtimeMinutes           Int           @default(0) @map("overtime_minutes")
+  lateMinutes               Int           @default(0) @map("late_minutes")
+  firstInAt                 DateTime?     @map("first_in_at") @db.Timestamptz(6)
+  lastOutAt                 DateTime?     @map("last_out_at") @db.Timestamptz(6)
+  hasOutOfGeofence          Boolean       @default(false) @map("has_out_of_geofence")
+  status                    WorkdayStatus @default(OPEN)
+  updatedAt                 DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@unique([tenantId, shiftId], map: "uq_workday_tenant_shift")
   @@index([tenantId, employeeId, status], map: "idx_workday_employee_status")
+  @@index([tenantId, status, updatedAt], map: "idx_workday_tenant_status")
   @@map("workdays")
 }
 
@@ -192,4 +233,218 @@ model ProcessedEvent {
 
   @@index([tenantId], map: "idx_processed_event_tenant")
   @@map("processed_events")
+}
+
+// Local snapshot of sites replicated from organization module.
+model SiteSnapshot {
+  siteId    String   @id @map("site_id") @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  timezone  String   @default("America/Argentina/Buenos_Aires")
+  isActive  Boolean  @default(true) @map("is_active")
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, isActive], map: "idx_site_snapshot_tenant")
+  @@map("site_snapshots")
+}
+
+// Local snapshot of posts replicated from organization module.
+model PostSnapshot {
+  postId    String   @id @map("post_id") @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  siteId    String   @map("site_id") @db.Uuid
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, siteId], map: "idx_post_snapshot_tenant_site")
+  @@map("post_snapshots")
+}
+
+// Local snapshot of employees replicated from organization module (no PII like DNI/phone).
+model EmployeeSnapshot {
+  employeeId     String   @id @map("employee_id") @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
+  firstName      String   @map("first_name")
+  lastName       String   @map("last_name")
+  employeeNumber String?  @map("employee_number")
+  siteIds        String[] @default([]) @map("site_ids")
+  isActive       Boolean  @default(true) @map("is_active")
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, userId], map: "uq_employee_snapshot_tenant_user")
+  @@index([tenantId, isActive], map: "idx_employee_snapshot_tenant")
+  @@map("employee_snapshots")
+}
+
+// Per-employee pay rate configuration (hourly or per shift).
+model EmployeeCompensation {
+  id              String      @id @default(uuid(7)) @db.Uuid
+  tenantId        String      @map("tenant_id") @db.Uuid
+  employeeId      String      @map("employee_id") @db.Uuid
+  payType         PayRateType @map("pay_type")
+  baseRate        Decimal     @map("base_rate") @db.Decimal(12, 2)
+  currency        String      @default("ARS")
+  updatedByUserId String      @map("updated_by_user_id") @db.Uuid
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, employeeId], map: "uq_employee_compensation_tenant_emp")
+  @@map("employee_compensations")
+}
+
+// Per-post overtime hourly rate configuration.
+model PostOvertimeRate {
+  id                 String   @id @default(uuid(7)) @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  postId             String   @map("post_id") @db.Uuid
+  siteId             String   @map("site_id") @db.Uuid
+  overtimeHourlyRate Decimal  @map("overtime_hourly_rate") @db.Decimal(12, 2)
+  currency           String   @default("ARS")
+  updatedByUserId    String   @map("updated_by_user_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, postId], map: "uq_post_overtime_rate_tenant_post")
+  @@map("post_overtime_rates")
+}
+
+// Audit trail of compensation rate changes.
+model CompensationChangeLog {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  targetType      String   @map("target_type")
+  targetId        String   @map("target_id") @db.Uuid
+  before          Json?
+  after           Json
+  changedByUserId String   @map("changed_by_user_id") @db.Uuid
+  reason          String?
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt], map: "idx_compensation_change_log_tenant")
+  @@map("compensation_change_logs")
+}
+
+// Authorized recipients assigned by the tenant owner to access and receive reports.
+model ReportRecipient {
+  id                  String   @id @default(uuid(7)) @db.Uuid
+  tenantId            String   @map("tenant_id") @db.Uuid
+  userId              String   @map("user_id") @db.Uuid
+  employeeId          String?  @map("employee_id") @db.Uuid
+  siteIds             String[] @default([]) @map("site_ids")
+  receiveDaily        Boolean  @default(true) @map("receive_daily")
+  receiveMonthly      Boolean  @default(true) @map("receive_monthly")
+  receivePayrollExcel Boolean  @default(false) @map("receive_payroll_excel")
+  assignedByUserId    String   @map("assigned_by_user_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, userId], map: "uq_report_recipient_tenant_user")
+  @@map("report_recipients")
+}
+
+// Daily limit log for on-demand site report emails (at most 1 per day per user, site and report kind).
+model ReportEmailRequestLog {
+  id             String            @id @default(uuid(7)) @db.Uuid
+  tenantId       String            @map("tenant_id") @db.Uuid
+  siteId         String            @map("site_id") @db.Uuid
+  userId         String            @map("user_id") @db.Uuid
+  recipientEmail String            @map("recipient_email")
+  reportKind     ReportEmailKind   @map("report_kind")
+  requestDate    String            @map("request_date")
+  targetPeriod   String            @map("target_period")
+  status         ReportEmailStatus @default(PENDING)
+  requestedAt    DateTime          @default(now()) @map("requested_at") @db.Timestamptz(6)
+  sentAt         DateTime?         @map("sent_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, userId, siteId, reportKind, requestDate], map: "uq_report_email_req_daily_limit")
+  @@index([tenantId, siteId, requestDate], map: "idx_report_email_req_tenant_site_date")
+  @@map("report_email_request_logs")
+}
+
+// Persisted daily attendance report snapshots (Report 1).
+model DailyAttendanceReport {
+  id                   String   @id @default(uuid(7)) @db.Uuid
+  tenantId             String   @map("tenant_id") @db.Uuid
+  reportDate           String   @map("report_date")
+  siteId               String?  @map("site_id") @db.Uuid
+  totalAssignedShifts  Int      @default(0) @map("total_assigned_shifts")
+  attendedShifts       Int      @default(0) @map("attended_shifts")
+  absentCount          Int      @default(0) @map("absent_count")
+  outOfGeofenceCount   Int      @default(0) @map("out_of_geofence_count")
+  missingClockOutCount Int      @default(0) @map("missing_clock_out_count")
+  payload              Json
+  generatedAt          DateTime @default(now()) @map("generated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, reportDate], map: "idx_daily_report_tenant_date")
+  @@map("daily_attendance_reports")
+}
+
+// Persisted monthly attendance report snapshots (Report 2).
+model MonthlyAttendanceReport {
+  id                    String   @id @default(uuid(7)) @db.Uuid
+  tenantId              String   @map("tenant_id") @db.Uuid
+  period                String
+  siteId                String?  @map("site_id") @db.Uuid
+  employeesCount        Int      @default(0) @map("employees_count")
+  totalAttendedShifts   Int      @default(0) @map("total_attended_shifts")
+  totalAbsentShifts     Int      @default(0) @map("total_absent_shifts")
+  totalOutOfGeofence    Int      @default(0) @map("total_out_of_geofence")
+  totalMissingClockOuts Int      @default(0) @map("total_missing_clock_outs")
+  totalWorkedMinutes    Int      @default(0) @map("total_worked_minutes")
+  totalOvertimeMinutes  Int      @default(0) @map("total_overtime_minutes")
+  payload               Json
+  generatedAt           DateTime @default(now()) @map("generated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, period], map: "idx_monthly_report_tenant_period")
+  @@map("monthly_attendance_reports")
+}
+
+// Closed/draft monthly payroll runs (Report 3, PRO feature).
+model MonthlyPayrollRun {
+  id                String             @id @default(uuid(7)) @db.Uuid
+  tenantId          String             @map("tenant_id") @db.Uuid
+  period            String
+  siteId            String?            @map("site_id") @db.Uuid
+  currency          String             @default("ARS")
+  totalRegularPay   Decimal            @map("total_regular_pay") @db.Decimal(14, 2)
+  totalOvertimePay  Decimal            @map("total_overtime_pay") @db.Decimal(14, 2)
+  totalPay          Decimal            @map("total_pay") @db.Decimal(14, 2)
+  warningsCount     Int                @default(0) @map("warnings_count")
+  generatedByUserId String             @map("generated_by_user_id") @db.Uuid
+  status            PayrollRunStatus   @default(CLOSED)
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  lines             MonthlyPayrollLine[]
+
+  @@index([tenantId, period], map: "idx_payroll_run_tenant_period")
+  @@map("monthly_payroll_runs")
+}
+
+model MonthlyPayrollLine {
+  id                    String            @id @default(uuid(7)) @db.Uuid
+  tenantId              String            @map("tenant_id") @db.Uuid
+  runId                 String            @map("run_id") @db.Uuid
+  employeeId            String            @map("employee_id") @db.Uuid
+  employeeName          String            @map("employee_name")
+  employeeNumber        String?           @map("employee_number")
+  payType               PayRateType?      @map("pay_type")
+  baseRateApplied       Decimal?          @map("base_rate_applied") @db.Decimal(12, 2)
+  assignedShifts        Int               @default(0) @map("assigned_shifts")
+  attendedShifts        Int               @default(0) @map("attended_shifts")
+  absentShifts          Int               @default(0) @map("absent_shifts")
+  missingClockOutShifts Int               @default(0) @map("missing_clock_out_shifts")
+  fraudulentClockIns    Int               @default(0) @map("fraudulent_clock_ins")
+  regularMinutes        Int               @default(0) @map("regular_minutes")
+  overtimeMinutes       Int               @default(0) @map("overtime_minutes")
+  regularPay            Decimal           @map("regular_pay") @db.Decimal(12, 2)
+  overtimePay           Decimal           @map("overtime_pay") @db.Decimal(12, 2)
+  totalPay              Decimal           @map("total_pay") @db.Decimal(12, 2)
+  observations          String?
+
+  run                   MonthlyPayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, runId], map: "idx_payroll_line_tenant_run")
+  @@map("monthly_payroll_lines")
 }

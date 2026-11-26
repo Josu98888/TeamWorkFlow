@@ -9,6 +9,7 @@ export type AppErrorCode =
   | 'post_not_found'
   | 'employee_not_found'
   | 'shift_not_found'
+  | 'shift_template_not_found'
   | 'shift_overlap'
   | 'version_conflict'
   | 'shift_not_editable'
@@ -140,6 +141,12 @@ export class EmployeeNotFoundException extends AppException {
 export class ShiftNotFoundException extends AppException {
   constructor() {
     super(404, 'shift_not_found', 'Shift not found');
+  }
+}
+
+export class ShiftTemplateNotFoundException extends AppException {
+  constructor() {
+    super(404, 'shift_template_not_found', 'Shift template not found');
   }
 }
 

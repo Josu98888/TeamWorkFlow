@@ -1,7 +1,5 @@
 // Data model of the organization module (AGENTS.md § Data Model).
 // Lives in the `organization` PostgreSQL schema of the shared `teamworkflow` database.
-// Shift templates (ShiftTemplate) come in a later feature: `Shift.templateId` is a
-// plain nullable column until then.
 generator client {
   provider     = "prisma-client"
   output       = "./generated"
@@ -38,9 +36,10 @@ model Site {
   createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  posts         Post[]
-  employeeSites EmployeeSite[]
-  shifts        Shift[]
+  posts          Post[]
+  employeeSites  EmployeeSite[]
+  shifts         Shift[]
+  shiftTemplates ShiftTemplate[]
 
   @@index([tenantId, isActive])
   @@map("sites")
@@ -57,8 +56,9 @@ model Post {
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  site   Site    @relation(fields: [siteId], references: [id], onDelete: Restrict)
-  shifts Shift[]
+  site           Site            @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  shifts         Shift[]
+  shiftTemplates ShiftTemplate[]
 
   @@index([tenantId, siteId])
   @@map("posts")
@@ -84,8 +84,9 @@ model Employee {
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  sites  EmployeeSite[]
-  shifts Shift[]
+  sites          EmployeeSite[]
+  shifts         Shift[]
+  shiftTemplates ShiftTemplate[]
 
   // Postgres treats NULLs as distinct, so nullable columns allow many NULLs per tenant.
   @@unique([tenantId, email])
@@ -111,7 +112,6 @@ model EmployeeSite {
 model Shift {
   id         String      @id @default(uuid(7)) @db.Uuid
   tenantId   String      @map("tenant_id") @db.Uuid
-  // Generated shifts only; no ShiftTemplate model yet, so no foreign key.
   templateId String?     @map("template_id") @db.Uuid
   siteId     String      @map("site_id") @db.Uuid
   postId     String      @map("post_id") @db.Uuid
@@ -119,6 +119,10 @@ model Shift {
   startsAt   DateTime    @map("starts_at") @db.Timestamptz(3)
   endsAt     DateTime    @map("ends_at") @db.Timestamptz(3)
   status     ShiftStatus @default(SCHEDULED)
+  authorizedOvertimeMinutes Int       @default(0) @map("authorized_overtime_minutes")
+  overtimeReason            String?   @map("overtime_reason")
+  overtimeAssignedByUserId  String?   @map("overtime_assigned_by_user_id") @db.Uuid
+  overtimeAssignedAt        DateTime? @map("overtime_assigned_at") @db.Timestamptz(3)
   // Optimistic locking: incremented on every successful write.
   version    Int         @default(1)
   // Marker so `shift_starting` is emitted once.
@@ -126,9 +130,10 @@ model Shift {
   createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt  DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  site     Site      @relation(fields: [siteId], references: [id], onDelete: Restrict)
-  post     Post      @relation(fields: [postId], references: [id], onDelete: Restrict)
-  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  template ShiftTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  site     Site           @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  post     Post           @relation(fields: [postId], references: [id], onDelete: Restrict)
+  employee Employee?      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   // Generator idempotency (NULL template ids never collide).
   @@unique([tenantId, templateId, startsAt])
@@ -137,6 +142,32 @@ model Shift {
   // Lifecycle job: scans all tenants by status and start time.
   @@index([status, startsAt])
   @@map("shifts")
+}
+
+model ShiftTemplate {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  siteId          String   @map("site_id") @db.Uuid
+  postId          String   @map("post_id") @db.Uuid
+  employeeId      String?  @map("employee_id") @db.Uuid
+  // ISO weekdays 1 (Monday) .. 7 (Sunday).
+  weekdays        Int[]
+  // Wall-clock start time HH:mm in the site's IANA timezone.
+  startTime       String   @map("start_time")
+  durationMinutes Int      @map("duration_minutes")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  site     Site      @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  post     Post      @relation(fields: [postId], references: [id], onDelete: Restrict)
+  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  shifts   Shift[]
+
+  @@index([tenantId, siteId, postId, isActive])
+  @@index([tenantId, employeeId])
+  @@index([isActive, tenantId])
+  @@map("shift_templates")
 }
 
 // One row per tenant that is (or was) suspended or cancelled. No row means active.

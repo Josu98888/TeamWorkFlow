@@ -14,7 +14,16 @@ import {
   type ShiftSlot,
 } from '@/shared/mocks/world';
 import type { OrganizationApi } from './api';
-import type { Employee, Paginated, Post, Shift, ShiftStatus, Site } from './types';
+import type {
+  BulkImportEmployeeRowResult,
+  Employee,
+  Paginated,
+  Post,
+  Shift,
+  ShiftStatus,
+  ShiftTemplate,
+  Site,
+} from './types';
 
 const CREATED_AT = '2026-03-02T12:00:00.000Z';
 
@@ -103,7 +112,7 @@ const EMPLOYEES: Employee[] = EMPLOYEE_SEEDS.map(([firstName, lastName, skills],
   phone: `+54 11 5${String(100 + index * 7).padStart(3, '0')}-${String(2000 + index * 131).slice(0, 4)}`,
   avatarMediaId: null,
   employeeNumber: `L-${String(1001 + index)}`,
-  nationalId: null,
+  nationalId: String(32_410_200 + index * 145_321),
   skills: [...skills],
   weeklyHoursLimit: 48,
   siteIds: SITE_EMPLOYEES.flatMap((employees, site) => (employees.includes(index) ? [siteId(site)] : [])),
@@ -156,18 +165,248 @@ function paginate<T>(items: T[]): Paginated<T> {
   return { items, total: items.length };
 }
 
+const SHIFT_TEMPLATES: ShiftTemplate[] = Array.from({ length: SITE_COUNT - 1 }, (_, site) => site).flatMap((site) =>
+  Array.from({ length: POSTS_PER_SITE[site] ?? 0 }, (_, post) => post).flatMap((post) => {
+    const primary = CURRENT_ASSIGNMENTS.find((item) => item.site === site && item.post === post);
+    const items: ShiftTemplate[] = [];
+    if (primary) {
+      items.push({
+        id: `tpl-${site}-${post}-1`,
+        tenantId: TENANT_ID,
+        siteId: siteId(site),
+        postId: postId(site, post),
+        employeeId: primary.employee === null ? null : employeeId(primary.employee),
+        weekdays: (site + post) % 2 === 0 ? [1, 2, 3, 4, 5] : [1, 3, 5, 6],
+        startTime: post === 0 ? '08:00' : post === 1 ? '14:00' : '22:00',
+        durationMinutes: 480,
+        isActive: true,
+        createdAt: CREATED_AT,
+        updatedAt: CREATED_AT,
+      });
+    }
+    const secondary = assignedEmployee(site, post, 'next');
+    if (secondary && secondary !== (primary?.employee == null ? null : employeeId(primary.employee))) {
+      items.push({
+        id: `tpl-${site}-${post}-2`,
+        tenantId: TENANT_ID,
+        siteId: siteId(site),
+        postId: postId(site, post),
+        employeeId: secondary,
+        weekdays: [2, 4, 6, 7],
+        startTime: post === 2 ? '06:00' : '14:00',
+        durationMinutes: 480,
+        isActive: true,
+        createdAt: CREATED_AT,
+        updatedAt: CREATED_AT,
+      });
+    }
+    return items;
+  }),
+);
+
 export const organizationMockApi: OrganizationApi = {
   createSite: mockUnavailable,
   updateSite: mockUnavailable,
   rotateSiteQr: mockUnavailable,
   createPost: mockUnavailable,
   updatePost: mockUnavailable,
-  createEmployee: mockUnavailable,
-  updateEmployee: mockUnavailable,
+  createEmployee: async (input) => {
+    const normalizedEmail = input.email.trim().toLowerCase();
+    if (EMPLOYEES.some((emp) => emp.email.toLowerCase() === normalizedEmail)) {
+      throw new Error('Ese correo o legajo ya pertenece a otro empleado.');
+    }
+    const now = new Date().toISOString();
+    const created: Employee = {
+      id: `emp-mock-${Date.now()}`,
+      tenantId: TENANT_ID,
+      userId: `usr-mock-${Date.now()}`,
+      email: normalizedEmail,
+      firstName: input.firstName.trim(),
+      lastName: input.lastName.trim(),
+      phone: input.phone ?? null,
+      avatarMediaId: null,
+      employeeNumber: input.employeeNumber ?? null,
+      nationalId: input.nationalId ?? null,
+      skills: input.skills ? [...input.skills] : [],
+      weeklyHoursLimit: input.weeklyHoursLimit ?? null,
+      siteIds: input.siteIds ? [...input.siteIds] : [],
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+    EMPLOYEES.unshift(created);
+    return mockResponse({ ...created });
+  },
+  bulkImportEmployees: async (targetSiteId, input) => {
+    const siteExists = SITES.some((item) => item.id === targetSiteId);
+    if (!siteExists) throw new Error('La sede no existe.');
+
+    const results: BulkImportEmployeeRowResult[] = [];
+    let createdCount = 0;
+    let updatedCount = 0;
+    let failedCount = 0;
+
+    input.items.forEach((item, index) => {
+      const rowNumber = index + 1;
+      const email = item.email.trim().toLowerCase();
+      const nationalId = item.nationalId.trim();
+      const fullName = item.fullName.trim();
+      const parts = fullName.split(/\s+/).filter(Boolean);
+      const firstName = parts[0] ?? fullName;
+      const lastName = parts.length > 1 ? parts.slice(1).join(' ') : '-';
+
+      const dniCollision = EMPLOYEES.find(
+        (emp) => emp.nationalId === nationalId && emp.email.toLowerCase() !== email,
+      );
+      if (dniCollision) {
+        failedCount += 1;
+        results.push({
+          rowNumber,
+          nationalId,
+          fullName,
+          email,
+          status: 'failed',
+          code: 'national_id_taken',
+          detail: 'Ya existe otro trabajador con ese DNI y otro correo.',
+        });
+        return;
+      }
+
+      const existing = EMPLOYEES.find((emp) => emp.email.toLowerCase() === email);
+      const now = new Date().toISOString();
+      if (existing) {
+        existing.firstName = firstName;
+        existing.lastName = lastName;
+        existing.nationalId = nationalId;
+        existing.isActive = true;
+        if (!existing.siteIds.includes(targetSiteId)) {
+          existing.siteIds = [...existing.siteIds, targetSiteId];
+        }
+        existing.updatedAt = now;
+        updatedCount += 1;
+        results.push({
+          rowNumber,
+          nationalId,
+          fullName,
+          email,
+          status: 'updated',
+          employeeId: existing.id,
+        });
+        return;
+      }
+
+      const created: Employee = {
+        id: `emp-import-${Date.now()}-${rowNumber}`,
+        tenantId: TENANT_ID,
+        userId: `usr-import-${Date.now()}-${rowNumber}`,
+        email,
+        firstName,
+        lastName,
+        phone: null,
+        avatarMediaId: null,
+        employeeNumber: null,
+        nationalId,
+        skills: [],
+        weeklyHoursLimit: 48,
+        siteIds: [targetSiteId],
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      };
+      EMPLOYEES.unshift(created);
+      createdCount += 1;
+      results.push({
+        rowNumber,
+        nationalId,
+        fullName,
+        email,
+        status: 'created',
+        employeeId: created.id,
+      });
+    });
+
+    return mockResponse({
+      siteId: targetSiteId,
+      totalRows: input.items.length,
+      createdCount,
+      updatedCount,
+      failedCount,
+      results,
+    });
+  },
+  updateEmployee: async (targetEmployeeId, input) => {
+    const found = EMPLOYEES.find((emp) => emp.id === targetEmployeeId);
+    if (!found) throw new Error('El empleado no existe.');
+    if (input.firstName !== undefined) found.firstName = input.firstName;
+    if (input.lastName !== undefined) found.lastName = input.lastName;
+    if (input.phone !== undefined) found.phone = input.phone;
+    if (input.employeeNumber !== undefined) found.employeeNumber = input.employeeNumber;
+    if (input.nationalId !== undefined) found.nationalId = input.nationalId;
+    if (input.skills !== undefined) found.skills = [...input.skills];
+    if (input.weeklyHoursLimit !== undefined) found.weeklyHoursLimit = input.weeklyHoursLimit;
+    if (input.siteIds !== undefined) found.siteIds = [...input.siteIds];
+    if (input.isActive !== undefined) found.isActive = input.isActive;
+    found.updatedAt = new Date().toISOString();
+    return mockResponse({ ...found });
+  },
   createShift: mockUnavailable,
   updateShift: mockUnavailable,
   reassignShift: mockUnavailable,
+  assignShiftOvertime: async (targetShiftId, input) => {
+    const found = SHIFTS.find((item) => item.id === targetShiftId);
+    if (!found) throw new Error('El turno no existe.');
+    found.authorizedOvertimeMinutes = input.authorizedOvertimeMinutes;
+    found.overtimeReason = input.reason ?? null;
+    found.version += 1;
+    found.updatedAt = new Date().toISOString();
+    return mockResponse({ ...found });
+  },
   cancelShift: mockUnavailable,
+  createShiftTemplate: async (input) => {
+    const created: ShiftTemplate = {
+      id: `tpl-mock-${Date.now()}`,
+      tenantId: TENANT_ID,
+      siteId: input.siteId,
+      postId: input.postId,
+      employeeId: input.employeeId ?? null,
+      weekdays: [...new Set(input.weekdays)].sort((a, b) => a - b),
+      startTime: input.startTime,
+      durationMinutes: input.durationMinutes,
+      isActive: true,
+      createdAt: CREATED_AT,
+      updatedAt: CREATED_AT,
+    };
+    SHIFT_TEMPLATES.unshift(created);
+    return mockResponse({
+      template: created,
+      generatedCount: created.weekdays.length * 2,
+      skippedOverlapCount: 0,
+    });
+  },
+  updateShiftTemplate: async (templateId, input) => {
+    const found = SHIFT_TEMPLATES.find((item) => item.id === templateId);
+    if (!found) throw new Error('La asignación semanal no existe.');
+    if (input.weekdays !== undefined) {
+      found.weekdays = [...new Set(input.weekdays)].sort((a, b) => a - b);
+    }
+    if (input.startTime !== undefined) found.startTime = input.startTime;
+    if (input.durationMinutes !== undefined) found.durationMinutes = input.durationMinutes;
+    if (input.employeeId !== undefined) found.employeeId = input.employeeId;
+    if (input.isActive !== undefined) found.isActive = input.isActive;
+    found.updatedAt = new Date().toISOString();
+    return mockResponse({
+      template: { ...found },
+      generatedCount: found.isActive ? found.weekdays.length : 0,
+      skippedOverlapCount: 0,
+    });
+  },
+  deactivateShiftTemplate: async (templateId) => {
+    const found = SHIFT_TEMPLATES.find((item) => item.id === templateId);
+    if (!found) throw new Error('La asignación semanal no existe.');
+    found.isActive = false;
+    found.updatedAt = new Date().toISOString();
+    return mockResponse({ ...found });
+  },
 
   listSites: () => mockResponse(paginate(SITES)),
 
@@ -179,16 +418,24 @@ export const organizationMockApi: OrganizationApi = {
 
   listPosts: (id) => mockResponse(paginate(POSTS.filter((post) => post.siteId === id))),
 
-  listEmployees: (query = {}) =>
-    mockResponse(
+  listEmployees: (query = {}) => {
+    const term = query.search?.trim().toLowerCase();
+    return mockResponse(
       paginate(
         EMPLOYEES.filter(
           (employee) =>
             (!query.siteId || employee.siteIds.includes(query.siteId)) &&
-            (query.isActive === undefined || employee.isActive === query.isActive),
+            (query.isActive === undefined || employee.isActive === query.isActive) &&
+            (!term ||
+              employee.firstName.toLowerCase().includes(term) ||
+              employee.lastName.toLowerCase().includes(term) ||
+              employee.email.toLowerCase().includes(term) ||
+              (employee.nationalId ?? '').toLowerCase().includes(term) ||
+              (employee.employeeNumber ?? '').toLowerCase().includes(term)),
         ),
       ),
-    ),
+    );
+  },
 
   listShifts: (query = {}) =>
     mockResponse(
@@ -196,6 +443,19 @@ export const organizationMockApi: OrganizationApi = {
         SHIFTS.filter(
           (shift) =>
             (!query.siteId || shift.siteId === query.siteId) && (!query.employeeId || shift.employeeId === query.employeeId),
+        ),
+      ),
+    ),
+
+  listShiftTemplates: (query = {}) =>
+    mockResponse(
+      paginate(
+        SHIFT_TEMPLATES.filter(
+          (tpl) =>
+            (!query.siteId || tpl.siteId === query.siteId) &&
+            (!query.postId || tpl.postId === query.postId) &&
+            (!query.employeeId || tpl.employeeId === query.employeeId) &&
+            (query.isActive === undefined || tpl.isActive === query.isActive),
         ),
       ),
     ),

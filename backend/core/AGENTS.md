@@ -191,6 +191,7 @@ Target map built from the operations documented in each module's `AGENTS.md`. Pa
 | `POST /sites/:siteId/rotate-qr` | `organization.site.rotate-qr` | owner, admin | - |
 | `POST /sites/:siteId/posts`, `PATCH /posts/:postId`, `GET /sites/:siteId/posts` | `organization.post.create` / `update` / `list` | any (module decides) | - |
 | `POST /employees` | `organization.employee.create` | owner, admin | - |
+| `POST /employees/sites/:siteId/bulk-import` | `organization.employee.bulk-import` | owner, admin | - |
 | `PATCH /employees/:employeeId` | `organization.employee.update` | owner, admin | - |
 | `GET /employees/:employeeId`, `GET /employees` | `organization.employee.get` / `list` | any | - |
 | `GET /shifts/:shiftId/available-employees` | `organization.employee.list-available` | owner, admin, supervisor | - |

@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import {
   ConsumedEventProcessor,
   PoisonEventError,
@@ -7,6 +7,7 @@ import {
 } from '../consumed-event.processor';
 import { CONSUMED_SUBJECTS } from '../consumers.constants';
 import { ShiftSnapshotService } from '../../shifts/shift-snapshot.service';
+import { OrgSnapshotsService } from '../../snapshots/org-snapshots.service';
 import { WorkdaysService } from '../../workdays/workdays.service';
 import { SiteCacheService } from '../../geofence/site-cache.service';
 import { TowerService } from '../../tower/tower.service';
@@ -23,6 +24,7 @@ export class OrganizationConsumer implements OnModuleInit {
     private readonly workdays: WorkdaysService,
     private readonly siteCache: SiteCacheService,
     private readonly tower: TowerService,
+    @Optional() private readonly snapshots?: OrgSnapshotsService,
   ) {}
 
   onModuleInit(): void {
@@ -60,6 +62,25 @@ export class OrganizationConsumer implements OnModuleInit {
       filter: CONSUMED_SUBJECTS.SITE_UPDATED,
       handle: (ctx) => this.handleSiteUpdated(ctx),
     });
+
+    if (this.snapshots) {
+      this.processor.register({
+        filter: CONSUMED_SUBJECTS.POST_CREATED,
+        handle: (ctx) => this.handlePostUpsert(ctx),
+      });
+      this.processor.register({
+        filter: CONSUMED_SUBJECTS.POST_UPDATED,
+        handle: (ctx) => this.handlePostUpsert(ctx),
+      });
+      this.processor.register({
+        filter: CONSUMED_SUBJECTS.EMPLOYEE_CREATED,
+        handle: (ctx) => this.handleEmployeeUpsert(ctx),
+      });
+      this.processor.register({
+        filter: CONSUMED_SUBJECTS.EMPLOYEE_UPDATED,
+        handle: (ctx) => this.handleEmployeeUpsert(ctx),
+      });
+    }
   }
 
   private async handleShiftUpsert(
@@ -85,6 +106,9 @@ export class OrganizationConsumer implements OnModuleInit {
       employeeId: (p.employeeId as string) ?? null,
       startsAt,
       endsAt,
+      ...(typeof p.authorizedOvertimeMinutes === 'number'
+        ? { authorizedOvertimeMinutes: p.authorizedOvertimeMinutes }
+        : {}),
       status,
       version,
     };
@@ -92,6 +116,9 @@ export class OrganizationConsumer implements OnModuleInit {
     await this.shifts.upsertShift(shiftDto, ctx.tx);
     return [
       async () => {
+        if (typeof p.authorizedOvertimeMinutes === 'number') {
+          await this.workdays.recomputeWorkday(ctx.tenantId, shiftId);
+        }
         await this.tower.emitSiteSummaryUpdated(ctx.tenantId, siteId);
       },
     ];
@@ -147,5 +174,91 @@ export class OrganizationConsumer implements OnModuleInit {
     }
 
     this.siteCache.invalidateSite(siteId);
+    if (this.snapshots) {
+      await this.snapshots.upsertSite(
+        {
+          siteId,
+          tenantId: ctx.tenantId,
+          name:
+            typeof ctx.payload.name === 'string' ? ctx.payload.name : undefined,
+          timezone:
+            typeof ctx.payload.timezone === 'string'
+              ? ctx.payload.timezone
+              : undefined,
+          isActive:
+            typeof ctx.payload.isActive === 'boolean'
+              ? ctx.payload.isActive
+              : undefined,
+        },
+        ctx.tx,
+      );
+    }
+  }
+
+  private async handlePostUpsert(ctx: ConsumedEventContext): Promise<void> {
+    const postId = (ctx.payload.postId ?? ctx.payload.id) as string | undefined;
+    const siteId = ctx.payload.siteId as string | undefined;
+    const name = ctx.payload.name as string | undefined;
+    if (!postId || !siteId || !name) {
+      throw new PoisonEventError('Post payload missing required fields');
+    }
+
+    await this.snapshots?.upsertPost(
+      {
+        postId,
+        tenantId: ctx.tenantId,
+        siteId,
+        name,
+        isActive:
+          typeof ctx.payload.isActive === 'boolean'
+            ? ctx.payload.isActive
+            : true,
+      },
+      ctx.tx,
+    );
+  }
+
+  private async handleEmployeeUpsert(ctx: ConsumedEventContext): Promise<void> {
+    const employeeId = (ctx.payload.employeeId ?? ctx.payload.id) as
+      | string
+      | undefined;
+    const firstName = ctx.payload.firstName as string | undefined;
+    const lastName = ctx.payload.lastName as string | undefined;
+    if (!employeeId || !firstName || !lastName) {
+      throw new PoisonEventError('Employee payload missing required fields');
+    }
+
+    const siteIds = Array.isArray(ctx.payload.siteIds)
+      ? ctx.payload.siteIds.filter(
+          (id): id is string => typeof id === 'string' && id.length > 0,
+        )
+      : undefined;
+
+    await this.snapshots?.upsertEmployee(
+      {
+        employeeId,
+        tenantId: ctx.tenantId,
+        userId:
+          typeof ctx.payload.userId === 'string'
+            ? ctx.payload.userId
+            : ctx.payload.userId === null
+              ? null
+              : undefined,
+        firstName,
+        lastName,
+        employeeNumber:
+          typeof ctx.payload.employeeNumber === 'string'
+            ? ctx.payload.employeeNumber
+            : ctx.payload.employeeNumber === null
+              ? null
+              : undefined,
+        ...(siteIds !== undefined ? { siteIds } : {}),
+        isActive:
+          typeof ctx.payload.isActive === 'boolean'
+            ? ctx.payload.isActive
+            : true,
+      },
+      ctx.tx,
+    );
   }
 }

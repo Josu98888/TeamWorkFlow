@@ -15,9 +15,31 @@ import { formatDateTime, formatPercent, fullName } from '@/shared/lib/format';
 import { tasksApi } from '../api';
 import { CreateTaskModal } from './CreateTaskModal';
 import { TASK_KIND_LABELS, TASK_STATUS_LABELS, TASK_STATUS_TONES } from '../labels';
-import { TASK_STATUSES, type TaskStatus } from '../types';
+import { TASK_STATUSES, type Task, type TaskStatus } from '../types';
+import { TaskDetailDrawer } from './TaskDetailDrawer';
 
 type Filter = 'ALL' | TaskStatus;
+
+function formatRelativeDeadline(task: Task): { text: string; urgent: boolean; overdue: boolean } {
+  const diffMs = new Date(task.deadline).getTime() - Date.now();
+  if (Number.isNaN(diffMs)) {
+    return { text: `vence ${formatDateTime(task.deadline)}`, urgent: false, overdue: false };
+  }
+
+  const absMinutes = Math.round(Math.abs(diffMs) / 60_000);
+  const hours = Math.floor(absMinutes / 60);
+  const minutes = absMinutes % 60;
+  const span = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+
+  if (task.status === 'COMPLETED') {
+    return { text: `plazo ${formatDateTime(task.deadline)}`, urgent: false, overdue: false };
+  }
+  if (diffMs <= 0) {
+    return { text: `venció hace ${span}`, urgent: false, overdue: true };
+  }
+  const urgent = diffMs <= 2 * 3_600_000;
+  return { text: `vence en ${span}`, urgent, overdue: false };
+}
 
 export function TasksView() {
   const tasks = useResource(tasksApi.listTasks);
@@ -25,7 +47,10 @@ export function TasksView() {
   const sites = useResource(organizationApi.listSites);
   const employees = useResource(organizationApi.listEmployees);
   const [filter, setFilter] = useState<Filter>('ALL');
+  const [siteFilter, setSiteFilter] = useState<string>('ALL');
+  const [query, setQuery] = useState('');
   const [creating, setCreating] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   const header = (
     <>
@@ -86,7 +111,21 @@ export function TasksView() {
 
   const siteNames = new Map(sites.data.items.map((site) => [site.id, site.name]));
   const employeeNames = new Map(employees.data.items.map((employee) => [employee.id, fullName(employee)]));
-  const visible = tasks.data.filter((task) => filter === 'ALL' || task.status === filter);
+  const normalizedQuery = query.trim().toLowerCase();
+
+  const visible = tasks.data.filter((task) => {
+    if (filter !== 'ALL' && task.status !== filter) return false;
+    if (siteFilter !== 'ALL' && task.siteId !== siteFilter) return false;
+    if (!normalizedQuery) return true;
+    const empName = task.employeeId ? (employeeNames.get(task.employeeId) ?? '').toLowerCase() : '';
+    const siteName = (siteNames.get(task.siteId) ?? '').toLowerCase();
+    return (
+      task.title.toLowerCase().includes(normalizedQuery) ||
+      empName.includes(normalizedQuery) ||
+      siteName.includes(normalizedQuery)
+    );
+  });
+
   const { byStatus } = report.data;
   const closed = byStatus.COMPLETED + byStatus.EXPIRED;
 
@@ -110,7 +149,9 @@ export function TasksView() {
         <section aria-label="Reporte de cumplimiento" className="lg:col-span-2">
           <Card className="h-full">
             <SectionLabel>Cumplimiento</SectionLabel>
-            <p className="text-4xl font-bold tracking-tight text-title">{formatPercent(report.data.complianceRate)}</p>
+            <p className="text-4xl font-bold tracking-tight tabular-nums text-title">
+              {formatPercent(report.data.complianceRate)}
+            </p>
             <p className="mb-3 mt-1 text-xs text-muted">
               {report.data.byStatus.COMPLETED} de {closed} tareas cerradas se completaron en plazo.
             </p>
@@ -122,7 +163,7 @@ export function TasksView() {
                 <li key={row.siteId}>
                   <div className="mb-1.5 flex items-baseline justify-between gap-3">
                     <p className="truncate text-sm font-semibold text-title">{siteNames.get(row.siteId) ?? 'Sede'}</p>
-                    <p className="shrink-0 text-xs text-muted">
+                    <p className="shrink-0 text-xs tabular-nums text-muted">
                       {row.completed}/{row.total} completadas
                     </p>
                   </div>
@@ -140,9 +181,35 @@ export function TasksView() {
 
         <section aria-label="Listado de tareas" className="lg:col-span-3">
           <Card flush glow="none">
-            <div className="px-5 pt-5">
-              <SectionLabel>Tareas</SectionLabel>
-              <div className="flex flex-wrap gap-2 pb-4">
+            <div className="space-y-3 px-5 pt-5 pb-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <SectionLabel>Tareas ({visible.length})</SectionLabel>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    aria-label="Filtrar tareas por sede"
+                    value={siteFilter}
+                    onChange={(e) => setSiteFilter(e.target.value)}
+                    className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs text-body outline-none focus:border-brand-medium"
+                  >
+                    <option value="ALL">Todas las sedes</option>
+                    {sites.data.items.map((site) => (
+                      <option key={site.id} value={site.id}>
+                        {site.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Buscar tarea o empleado..."
+                    aria-label="Buscar tarea o empleado"
+                    className="w-44 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs text-body outline-none placeholder:text-muted focus:border-brand-medium sm:w-52"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
                 <FilterChip
                   label="Todas"
                   count={tasks.data.length}
@@ -163,31 +230,101 @@ export function TasksView() {
 
             {visible.length === 0 ? (
               <div className="px-5 pb-5">
-                <EmptyState title="No hay tareas con este estado" description="Elegí otro filtro para ver más." />
+                <EmptyState
+                  title="No hay tareas con estos filtros"
+                  description="Probá limpiar la búsqueda o cambiar el estado o la sede."
+                />
               </div>
             ) : (
               <ul className="divide-y divide-line border-t border-line">
-                {visible.map((task) => (
-                  <li key={task.id} className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-title">{task.title}</p>
-                      <p className="mt-1 text-xs text-body">
-                        <span className="font-semibold">{siteNames.get(task.siteId) ?? 'Sede'}</span>
-                        {' · '}
-                        {task.employeeId ? (employeeNames.get(task.employeeId) ?? 'Empleado') : 'Sin reclamar'}
-                      </p>
-                      <p className="mt-0.5 text-xs text-muted">
-                        {TASK_KIND_LABELS[task.kind]} · vence {formatDateTime(task.deadline)}
-                      </p>
-                    </div>
-                    <Badge tone={TASK_STATUS_TONES[task.status]}>{TASK_STATUS_LABELS[task.status]}</Badge>
-                  </li>
-                ))}
+                {visible.map((task) => {
+                  const rel = formatRelativeDeadline(task);
+                  return (
+                    <li key={task.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTask(task)}
+                        className="flex w-full flex-wrap items-start justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-alt/60 cursor-pointer"
+                      >
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-semibold text-title">{task.title}</p>
+                            {task.expectedQr && (
+                              <span className="rounded border border-line bg-alt/80 px-1.5 py-0.2 font-mono text-[10px] font-semibold uppercase tracking-wide text-body">
+                                QR puesto
+                              </span>
+                            )}
+                            {task.answer && (
+                              <span
+                                className={`rounded border border-line bg-alt/80 px-1.5 py-0.2 text-[10px] font-semibold ${
+                                  task.answer.reviewResult === 'APPROVED'
+                                    ? 'text-status-success'
+                                    : task.answer.reviewResult === 'OBSERVED'
+                                      ? 'text-status-warning'
+                                      : 'text-body'
+                                }`}
+                              >
+                                {task.answer.reviewResult === 'APPROVED'
+                                  ? 'Aprobada'
+                                  : task.answer.reviewResult === 'OBSERVED'
+                                    ? 'Observada'
+                                    : 'Con evidencia'}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-body">
+                            <span className="font-semibold">{siteNames.get(task.siteId) ?? 'Sede'}</span>
+                            {' · '}
+                            {task.employeeId ? (
+                              (employeeNames.get(task.employeeId) ?? 'Empleado')
+                            ) : (
+                              <span className="italic text-muted">Sin reclamar</span>
+                            )}
+                          </p>
+                          <p className="text-xs text-muted">
+                            <span>{TASK_KIND_LABELS[task.kind]}</span>
+                            {' · '}
+                            <span
+                              className={`tabular-nums font-medium ${
+                                rel.overdue
+                                  ? 'text-status-danger'
+                                  : rel.urgent
+                                    ? 'text-status-warning'
+                                    : 'text-muted'
+                              }`}
+                            >
+                              {rel.text}
+                            </span>
+                            {' · '}
+                            <span className="tabular-nums">{formatDateTime(task.deadline)}</span>
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1.5">
+                          <Badge tone={TASK_STATUS_TONES[task.status]}>{TASK_STATUS_LABELS[task.status]}</Badge>
+                          <span className="text-[11px] font-medium text-muted">Ver detalle →</span>
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </Card>
         </section>
       </div>
+
+      {selectedTask && (
+        <TaskDetailDrawer
+          task={selectedTask}
+          siteName={siteNames.get(selectedTask.siteId) ?? 'Sede'}
+          employeeName={selectedTask.employeeId ? (employeeNames.get(selectedTask.employeeId) ?? 'Empleado') : null}
+          onClose={() => setSelectedTask(null)}
+          onReviewed={(updated) => {
+            setSelectedTask(updated);
+            tasks.reload();
+          }}
+        />
+      )}
     </>
   );
 }

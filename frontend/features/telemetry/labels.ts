@@ -44,18 +44,22 @@ export const WORKDAY_STATUS_LABELS = {
   OPEN: 'Abierta',
   CLOSED: 'Cerrada',
   MISSING_CLOCK_OUT: 'Sin salida',
+  ABSENT: 'Ausente',
 } as const satisfies Record<WorkdayStatus, string>;
 
 export const WORKDAY_STATUS_TONES = {
   OPEN: 'info',
   CLOSED: 'success',
   MISSING_CLOCK_OUT: 'danger',
+  ABSENT: 'danger',
 } as const satisfies Record<WorkdayStatus, Tone>;
 
 /** Spanish copy for the backend error codes of `POST /clock-events` (telemetry `app.exceptions.ts`). */
 export const CLOCK_ERROR_MESSAGES: Record<string, string> = {
   invalid_qr: 'El código QR no corresponde a la sede del turno. Escaneá el QR impreso en tu sede.',
   no_matching_shift: 'No encontramos un turno para esta fichada. Revisá el turno elegido y el tipo de fichada (para salir necesitás haber fichado la entrada).',
+  already_clocked_in: 'Ya tenés una entrada abierta en este turno. Registrá primero la salida o inicio de descanso.',
+  invalid_clock_sequence: 'Secuencia de fichada inválida. Verificá si corresponde registrar entrada, descanso o salida.',
   clock_too_old: 'La fichada tiene más de 24 horas y ya no se puede registrar. Pedile una corrección a tu supervisor.',
   validation_error: 'Faltan datos: necesitamos tu ubicación o el código QR.',
   forbidden: 'No tenés permiso para fichar con esta cuenta (no hay un legajo de empleado asociado).',

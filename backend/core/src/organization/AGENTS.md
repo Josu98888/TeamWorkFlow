@@ -112,7 +112,7 @@ Ask before installing any dependency.
 First tasks, in order (ask before each install):
 
 - [x] Create `OrganizationModule` in `backend/core/src/organization/`, its config (`ORGANIZATION_DATABASE_URL`) in `src/config/envs.ts` and `.env.example`.
-- [x] Prisma schema and first migration (`prisma:organization:*` scripts, `prisma.organization.config.ts`). `ShiftTemplate` comes with the template feature.
+- [x] Prisma schema, migrations (`init_organization`, `add_shift_templates`) and `prisma.organization.config.ts`. `ShiftTemplate` and daily `ShiftGeneratorJob` implemented.
 - [x] Sub-modules `sites` (done in T2), `employees` (done in T3), `shifts` (done in T4), with their HTTP controllers, the exported facade service and the pattern constants for the NATS responders.
 - [ ] Consumers of `auth` events (`user_created` done in T3; `user_deactivated`, tenant status and purge pending) and the jobs.
 - [ ] Expose the module routes through its HTTP controllers in `core` (no separate service, no extra compose entry).
@@ -135,6 +135,7 @@ In `core` the operations below are **in-process calls** to the module's facade s
 | `organization.site.rotate-qr` | HTTP controller (owner/admin) | actor, `siteId` | site with the new `qrCode` |
 | `organization.post.create` / `update` / `list` | HTTP controller | actor, `siteId`, post fields | post / posts |
 | `organization.employee.create` | HTTP controller (owner/admin) | actor, profile + operational fields, `email` | employee |
+| `organization.employee.bulk-import` | HTTP controller (owner/admin) | actor, `siteId`, `items[]` (`nationalId`, `fullName`, `email`, `password`) | `{ siteId, totalRows, createdCount, updatedCount, failedCount, results }` |
 | `organization.employee.update` | HTTP controller (owner/admin) | actor, `employeeId`, fields (skills, enabled sites, weekly limit, ...) | employee |
 | `organization.employee.get` | HTTP controller, other core modules (facade); `telemetry` (NATS responder) | actor, `employeeId` OR `userId` | employee |
 | `organization.employee.list` | HTTP controller | actor, filters, `page`, `pageSize` | employees |

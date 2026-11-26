@@ -1,6 +1,5 @@
 'use client';
 
-import { HelpAssistantWidget } from '../../shared/components/HelpAssistantWidget';
 import React, { useEffect, useState } from 'react';
 import { Sidebar } from '../../components/layout/Sidebar';
 import { Topbar } from '../../components/layout/Topbar';
@@ -64,10 +63,6 @@ export default function DashboardLayout({
           <main className="flex-1 p-6 overflow-y-auto"><RouteGuard>{children}</RouteGuard></main>
         </div>
       </div>
-      
-      
-      <HelpAssistantWidget />
-      
     </SidebarProvider>
   );
 }

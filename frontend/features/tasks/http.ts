@@ -1,14 +1,27 @@
 import { apiFetch } from '@/shared/lib/http';
 import type { TasksApi } from './api';
 import { buildTaskReport } from './report';
-import type { AnswerTaskInput, CreateTaskInput, Form, FormInput, FormVersion, FormsPage, ListTasksQuery, MediaUpload, RequestUploadInput, Task, TasksPage } from './types';
+import type {
+  AnswerTaskInput,
+  CreateTaskInput,
+  Form,
+  FormInput,
+  FormVersion,
+  FormsPage,
+  ListTasksQuery,
+  MediaUpload,
+  RequestUploadInput,
+  ReviewTaskInput,
+  Task,
+  TasksPage,
+} from './types';
 
 /** Backend maximum for `pageSize` (`ListTasksQueryDto`). */
 const PAGE_SIZE = 100;
 /**
- * Safety cap on the pages fetched to build the list and the report: 10 pages x 100 = 1000 tasks.
- * Core has no reporting endpoint, so both numbers are computed from the listed tasks; beyond the cap the
- * oldest-deadline tasks win (core orders by `deadline` ascending).
+- Safety cap on the pages fetched to build the list and the report: 10 pages x 100 = 1000 tasks.
+- Core has no reporting endpoint, so both numbers are computed from the listed tasks; beyond the cap the
+- oldest-deadline tasks win (core orders by `deadline` ascending).
  */
 const MAX_PAGES = 10;
 
@@ -44,6 +57,8 @@ export const tasksHttpApi: TasksApi = {
   claimTask: (taskId) => apiFetch<Task>(`/tasks/${taskId}/claim`, { method: 'POST', body: '{}' }),
   answerTask: (taskId, input: AnswerTaskInput) =>
     apiFetch<Task>(`/tasks/${taskId}/answer`, { method: 'POST', body: JSON.stringify(input) }),
+  reviewTask: (taskId, input: ReviewTaskInput) =>
+    apiFetch<Task>(`/tasks/${taskId}/review`, { method: 'POST', body: JSON.stringify(input) }),
   requestUpload: (input: RequestUploadInput) =>
     apiFetch<MediaUpload>('/media/uploads', { method: 'POST', body: JSON.stringify(input) }),
   uploadFile: async (uploadUrl, file) => {

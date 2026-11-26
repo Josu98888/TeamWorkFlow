@@ -13,8 +13,10 @@ import {
   ValidationErrorItem,
 } from '../common/exceptions';
 import type {
+  EmployeeCatalogDto,
   EmployeeDto,
   Plan,
+  PostDto,
   Role,
   ShiftDto,
   SiteDto,
@@ -333,6 +335,27 @@ export class NatsClientService {
     return this.request<{ tenantId: string; shiftId: string }, ShiftDto>(
       NATS_PATTERNS.ORGANIZATION_SHIFT_GET,
       { tenantId, shiftId },
+    );
+  }
+
+  async listSites(tenantId: string): Promise<SiteDto[]> {
+    return this.request<{ tenantId: string }, SiteDto[]>(
+      NATS_PATTERNS.ORGANIZATION_SITE_LIST,
+      { tenantId },
+    );
+  }
+
+  async listPosts(tenantId: string, siteId?: string): Promise<PostDto[]> {
+    return this.request<{ tenantId: string; siteId?: string }, PostDto[]>(
+      NATS_PATTERNS.ORGANIZATION_POST_LIST,
+      { tenantId, ...(siteId ? { siteId } : {}) },
+    );
+  }
+
+  async listEmployees(tenantId: string): Promise<EmployeeCatalogDto[]> {
+    return this.request<{ tenantId: string }, EmployeeCatalogDto[]>(
+      NATS_PATTERNS.ORGANIZATION_EMPLOYEE_LIST,
+      { tenantId },
     );
   }
 }

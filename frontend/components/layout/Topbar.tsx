@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import { NotificationBell } from '@/features/notifications';
+import { HelpAssistantWidget } from '@/shared/components/HelpAssistantWidget';
 import { useLogout, useSession } from '@/shared/hooks/useSession';
 import { USE_MOCKS } from '@/shared/lib/config';
 import { isDemoSimulating, setDemoRole } from '@/shared/lib/session';
@@ -117,17 +118,17 @@ export function Topbar() {
         )}
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5">
         {session && (
-          <span className="hidden sm:inline text-xs mr-1" style={{ color: 'var(--text-subtitle)' }} title={session.userId}>
+          <span className="hidden lg:inline text-xs mr-1" style={{ color: 'var(--text-subtitle)' }} title={session.userId}>
             <span className="font-semibold capitalize">{session.role}</span> · {session.userId.slice(0, 8)}
           </span>
         )}
-{showRoleSwitcher && (
+        {showRoleSwitcher && (
           <>
             <button
               onClick={handleSwitchDemoRole}
-              className="inline-flex items-center justify-center gap-2 w-[168px] py-1.5 rounded-lg text-xs font-semibold tracking-wide uppercase transition-colors cursor-pointer border"
+              className="inline-flex items-center justify-center gap-2 w-[164px] py-1.5 rounded-lg text-xs font-semibold tracking-wide uppercase transition-colors cursor-pointer border"
               style={
                 isSimulatingEmployee
                   ? {
@@ -153,11 +154,13 @@ export function Topbar() {
           </>
         )}
 
+        <HelpAssistantWidget />
+
         <NotificationBell />
 
         <button
           onClick={toggleTheme}
-          className="inline-flex items-center justify-center w-[122px] py-1.5 rounded-lg text-xs font-semibold tracking-wide uppercase transition-colors cursor-pointer border"
+          className="inline-flex items-center justify-center w-[118px] py-1.5 rounded-lg text-xs font-semibold tracking-wide uppercase transition-colors cursor-pointer border"
           style={{
             borderColor: 'var(--border-main)',
             backgroundColor: 'var(--bg-main)',
@@ -166,7 +169,7 @@ export function Topbar() {
         >
           {isDark ? 'Tema Claro' : 'Tema Oscuro'}
         </button>
-        
+
         <button
           onClick={logout}
           className="px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide uppercase transition-colors cursor-pointer border"

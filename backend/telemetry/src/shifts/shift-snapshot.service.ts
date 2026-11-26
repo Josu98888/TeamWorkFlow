@@ -4,7 +4,8 @@ import { NatsClientService } from '../nats/nats-client.service';
 import type { ShiftDto } from '../nats/dto/nats-contracts';
 import type { Prisma, ShiftSnapshot, ShiftStatus } from '../prisma/generated/client';
 
-export const CLOCK_IN_EARLY_MINUTES = 60;
+export const CLOCK_IN_EARLY_MINUTES = 15;
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class ShiftSnapshotService {
@@ -37,7 +38,10 @@ export class ShiftSnapshotService {
           status: remote.status,
           startsAt: new Date(remote.startsAt),
           endsAt: new Date(remote.endsAt),
-          employeeId: remote.employeeId,
+          ...(remote.authorizedOvertimeMinutes !== undefined
+            ? { authorizedOvertimeMinutes: remote.authorizedOvertimeMinutes }
+            : {}),
+          employeeId: remote.employeeId ?? null,
           version: remote.version,
         },
         create: {
@@ -45,9 +49,12 @@ export class ShiftSnapshotService {
           tenantId: remote.tenantId,
           siteId: remote.siteId,
           postId: remote.postId,
-          employeeId: remote.employeeId,
+          employeeId: remote.employeeId ?? null,
           startsAt: new Date(remote.startsAt),
           endsAt: new Date(remote.endsAt),
+          ...(remote.authorizedOvertimeMinutes !== undefined
+            ? { authorizedOvertimeMinutes: remote.authorizedOvertimeMinutes }
+            : {}),
           status: remote.status,
           version: remote.version,
         },
@@ -80,7 +87,10 @@ export class ShiftSnapshotService {
         status: remote.status,
         startsAt: new Date(remote.startsAt),
         endsAt: new Date(remote.endsAt),
-        employeeId: remote.employeeId,
+        ...(remote.authorizedOvertimeMinutes !== undefined
+          ? { authorizedOvertimeMinutes: remote.authorizedOvertimeMinutes }
+          : {}),
+        employeeId: remote.employeeId ?? null,
         version: remote.version,
       },
       create: {
@@ -88,9 +98,12 @@ export class ShiftSnapshotService {
         tenantId: remote.tenantId,
         siteId: remote.siteId,
         postId: remote.postId,
-        employeeId: remote.employeeId,
+        employeeId: remote.employeeId ?? null,
         startsAt: new Date(remote.startsAt),
         endsAt: new Date(remote.endsAt),
+        ...(remote.authorizedOvertimeMinutes !== undefined
+          ? { authorizedOvertimeMinutes: remote.authorizedOvertimeMinutes }
+          : {}),
         status: remote.status,
         version: remote.version,
       },
@@ -115,8 +128,7 @@ export class ShiftSnapshotService {
 
   /**
    * Matches an 'IN' clock event to a shift of the employee for the given site and deviceTime:
-   * From 60 minutes BEFORE the shift start until the shift end. When several shifts match,
-   * see `pickAmongCandidates`.
+   * From 15 minutes BEFORE the shift start until the shift effective end (`endsAt + authorizedOvertimeMinutes`).
    */
   async findMatchingShiftForClockIn(
     tenantId: string,
@@ -140,7 +152,12 @@ export class ShiftSnapshotService {
     const candidates = shifts.filter((shift) => {
       const windowStart =
         shift.startsAt.getTime() - CLOCK_IN_EARLY_MINUTES * 60 * 1000;
-      return time >= windowStart && time <= shift.endsAt.getTime();
+      const windowEnd =
+        shift.endsAt.getTime() +
+        ((shift as { authorizedOvertimeMinutes?: number }).authorizedOvertimeMinutes ?? 0) *
+          60 *
+          1000;
+      return time >= windowStart && time <= windowEnd;
     });
 
     if (candidates.length <= 1) {
@@ -148,6 +165,37 @@ export class ShiftSnapshotService {
     }
 
     return this.pickAmongCandidates(tenantId, employeeId, candidates);
+  }
+
+  /**
+   * Detects when an employee tries to clock IN earlier than `startsAt - 15 min` for an
+   * upcoming shift at that site within the next 24 hours.
+   */
+  async findUpcomingTooEarlyShift(
+    tenantId: string,
+    employeeId: string,
+    siteId: string,
+    deviceTime: Date,
+  ): Promise<ShiftSnapshot | null> {
+    const time = deviceTime.getTime();
+    const shifts = await this.prisma.shiftSnapshot.findMany({
+      where: {
+        tenantId,
+        employeeId,
+        siteId,
+        status: { not: 'CANCELLED' },
+      },
+      orderBy: { startsAt: 'asc' },
+    });
+
+    return (
+      shifts.find((shift) => {
+        const earlyWindowStart =
+          shift.startsAt.getTime() - CLOCK_IN_EARLY_MINUTES * 60 * 1000;
+        const diff = shift.startsAt.getTime() - time;
+        return time < earlyWindowStart && diff > 0 && diff <= TWENTY_FOUR_HOURS_MS;
+      }) ?? null
+    );
   }
 
   /**
