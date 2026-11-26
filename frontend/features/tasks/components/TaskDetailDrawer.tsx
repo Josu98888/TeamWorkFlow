@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Badge } from '@/shared/components/Badge';
 import { Button } from '@/shared/components/Button';
+import { ApiError } from '@/shared/lib/http';
 import { formatDateTime } from '@/shared/lib/format';
+import { tasksApi } from '../api';
 import { FORM_FIELD_TYPE_LABELS, TASK_KIND_LABELS, TASK_STATUS_LABELS, TASK_STATUS_TONES } from '../labels';
 import type { FormField, Task } from '../types';
 
@@ -74,12 +76,19 @@ export function TaskDetailDrawer({
   siteName,
   employeeName,
   onClose,
+  onReviewed,
 }: {
   task: Task;
   siteName: string;
   employeeName: string | null;
   onClose: () => void;
+  onReviewed?: (updated: Task) => void;
 }) {
+  const [observing, setObserving] = useState(false);
+  const [note, setNote] = useState(task.answer?.reviewNote ?? '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
@@ -91,8 +100,34 @@ export function TaskDetailDrawer({
   const fields = task.formVersion?.fields ?? [];
   const answer = task.answer ?? null;
 
+  async function handleReview(result: 'APPROVED' | 'OBSERVED') {
+    if (result === 'OBSERVED' && !note.trim()) {
+      setError('Escribí el motivo de la observación para el empleado.');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await tasksApi.reviewTask(task.id, {
+        result,
+        note: result === 'OBSERVED' ? note.trim() : undefined,
+      });
+      setObserving(false);
+      onReviewed?.(updated);
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : 'No se pudo registrar la revisión en este momento.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/35 backdrop-blur-[1px]" role="dialog" aria-modal="true" aria-label={`Detalle de ${task.title}`}>
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-black/35 backdrop-blur-[1px]"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Detalle de ${task.title}`}
+    >
       <div className="flex-1" onClick={onClose} aria-hidden="true" />
       <aside className="flex h-full w-full max-w-lg flex-col border-l border-line bg-card shadow-2xl">
         {/* Header */}
@@ -105,7 +140,8 @@ export function TaskDetailDrawer({
             <h2 className="text-base font-bold text-title">{task.title}</h2>
             {task.formVersion && (
               <p className="text-xs text-muted">
-                Formulario: <span className="font-medium text-body">{task.formVersion.name}</span> · v{task.formVersion.version}
+                Formulario: <span className="font-medium text-body">{task.formVersion.name}</span> · v
+                {task.formVersion.version}
               </p>
             )}
           </div>
@@ -123,9 +159,7 @@ export function TaskDetailDrawer({
         <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
           {/* Operational Metadata */}
           <section className="rounded-xl border border-line bg-surface p-4">
-            <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted">
-              Datos operativos
-            </h3>
+            <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted">Datos operativos</h3>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
               <div>
                 <dt className="text-muted">Sede</dt>
@@ -196,8 +230,36 @@ export function TaskDetailDrawer({
               </ul>
 
               <p className="text-[11px] tabular-nums text-muted">
-                Registrada en dispositivo: {formatDateTime(answer.deviceTime)} · Recibida: {formatDateTime(answer.receivedAt)}
+                Registrada en dispositivo: {formatDateTime(answer.deviceTime)} · Recibida:{' '}
+                {formatDateTime(answer.receivedAt)}
               </p>
+
+              {/* Supervisor Audit Form */}
+              {observing && (
+                <div className="space-y-2 rounded-xl border border-line bg-surface p-3.5">
+                  <label htmlFor="review-note" className="block text-xs font-semibold text-title">
+                    Detalle de la observación
+                  </label>
+                  <textarea
+                    id="review-note"
+                    rows={3}
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Ej: Falta foto legible del precinto trasero..."
+                    className="w-full rounded-lg border border-line bg-card px-3 py-2 text-xs text-body outline-none placeholder:text-muted focus:border-brand-medium"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" onClick={() => setObserving(false)} disabled={saving}>
+                      Cancelar
+                    </Button>
+                    <Button type="button" variant="primary" onClick={() => void handleReview('OBSERVED')} disabled={saving}>
+                      {saving ? 'Guardando...' : 'Guardar observación'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {error && <p className="text-xs font-medium text-status-danger">{error}</p>}
             </section>
           ) : (
             <section className="space-y-2.5">
@@ -228,7 +290,32 @@ export function TaskDetailDrawer({
         </div>
 
         {/* Footer */}
-        <footer className="flex justify-end border-t border-line bg-alt/40 px-6 py-3.5">
+        <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-line bg-alt/40 px-6 py-3.5">
+          {answer && !observing ? (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => void handleReview('APPROVED')}
+                disabled={saving || answer.reviewResult === 'APPROVED'}
+              >
+                {answer.reviewResult === 'APPROVED' ? 'Aprobada ✓' : 'Aprobar'}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setObserving(true);
+                }}
+                disabled={saving}
+              >
+                Observar
+              </Button>
+            </div>
+          ) : (
+            <span />
+          )}
+
           <Button type="button" onClick={onClose}>
             Cerrar
           </Button>

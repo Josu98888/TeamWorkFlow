@@ -4,7 +4,7 @@ import type { TasksApi } from './api';
 import { buildTaskReport } from './report';
 import { ApiError } from '@/shared/lib/http';
 import { formsMock, mockFormVersions } from './mock-forms';
-import type { MediaUpload, Task, TaskStatus } from './types';
+import type { FormField, MediaUpload, Task, TaskStatus } from './types';
 
 type Seed = {
   title: string;
@@ -39,24 +39,50 @@ const SEEDS: readonly Seed[] = [
 
 const VERSIONS = mockFormVersions();
 
-const TASKS: Task[] = SEEDS.map((seed, index) => ({
-  id: mockId(8, index + 1),
-  tenantId: TENANT_ID,
-  kind: seed.perShift ? 'PER_SHIFT' : 'SINGLE',
-  status: seed.status,
-  title: seed.title,
-  deadline: minutesFromNow(seed.deadline),
-  employeeId: seed.employee === null ? null : employeeId(seed.employee),
-  claimedAt: seed.employee === null ? null : minutesFromNow(seed.deadline - 120),
-  siteId: siteId(seed.site),
-  postId: postId(seed.site, seed.post),
-  shiftId: seed.perShift ? shiftId(seed.site, seed.post, 'current') : null,
-  createdAt: minutesFromNow(-600),
-  formVersionId: VERSIONS[index % VERSIONS.length].id,
-  formVersion: VERSIONS[index % VERSIONS.length],
-  expectedQr: null,
-  answer: null,
-}));
+function buildSeedAnswer(taskId: string, fields: FormField[], offsetMinutes: number): Task['answer'] {
+  const answers: Record<string, unknown> = {};
+  for (const field of fields) {
+    if (field.type === 'yes_no') answers[field.key] = true;
+    else if (field.type === 'number') answers[field.key] = field.min ?? 1;
+    else if (field.type === 'select') answers[field.key] = field.options?.[0] ?? 'Conforme';
+    else if (field.type === 'checklist') answers[field.key] = field.options?.slice(0, 2) ?? ['Verificado'];
+    else if (field.type === 'qr') answers[field.key] = 'QR-PUESTO-OK';
+    else if (field.type === 'photo') answers[field.key] = `media_${taskId.slice(-6)}`;
+    else answers[field.key] = 'Sin novedades durante la recorrida.';
+  }
+  return {
+    id: mockId(11, Math.abs(offsetMinutes) + 1),
+    taskId,
+    answers,
+    deviceTime: minutesFromNow(offsetMinutes - 5),
+    receivedAt: minutesFromNow(offsetMinutes - 4),
+    reviewResult: 'NONE',
+    reviewNote: null,
+  };
+}
+
+const TASKS: Task[] = SEEDS.map((seed, index) => {
+  const id = mockId(8, index + 1);
+  const version = VERSIONS[index % VERSIONS.length];
+  return {
+    id,
+    tenantId: TENANT_ID,
+    kind: seed.perShift ? 'PER_SHIFT' : 'SINGLE',
+    status: seed.status,
+    title: seed.title,
+    deadline: minutesFromNow(seed.deadline),
+    employeeId: seed.employee === null ? null : employeeId(seed.employee),
+    claimedAt: seed.employee === null ? null : minutesFromNow(seed.deadline - 120),
+    siteId: siteId(seed.site),
+    postId: postId(seed.site, seed.post),
+    shiftId: seed.perShift ? shiftId(seed.site, seed.post, 'current') : null,
+    createdAt: minutesFromNow(-600),
+    formVersionId: version.id,
+    formVersion: version,
+    expectedQr: null,
+    answer: seed.status === 'COMPLETED' ? buildSeedAnswer(id, version.fields, seed.deadline) : null,
+  };
+});
 
 /** The demo employee: owns the pending seeded task of employee 2 and can claim the unclaimed ones. */
 const MY_EMPLOYEE_ID = employeeId(2);
@@ -119,6 +145,17 @@ export const tasksMockApi: TasksApi = {
     } catch (cause) {
       return Promise.reject(cause);
     }
+  },
+  reviewTask: (taskId, input) => {
+    const task = TASKS.find((item) => item.id === taskId);
+    if (!task) return Promise.reject(new ApiError(404, 'task_not_found', 'Task not found'));
+    if (!task.answer) return Promise.reject(new ApiError(409, 'task_not_answered', 'Task has no answer to review'));
+    task.answer = {
+      ...task.answer,
+      reviewResult: input.result,
+      reviewNote: input.note?.trim() || null,
+    };
+    return mockResponse({ ...task });
   },
   requestUpload: (): Promise<MediaUpload> =>
     mockResponse({ mediaId: crypto.randomUUID(), uploadUrl: 'mock://storage/upload', expiresAt: minutesFromNow(5) }),

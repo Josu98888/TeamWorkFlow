@@ -255,8 +255,20 @@ export function TasksView() {
                               </span>
                             )}
                             {task.answer && (
-                              <span className="rounded border border-line bg-alt/80 px-1.5 py-0.2 text-[10px] font-semibold text-status-success">
-                                Con evidencia
+                              <span
+                                className={`rounded border border-line bg-alt/80 px-1.5 py-0.2 text-[10px] font-semibold ${
+                                  task.answer.reviewResult === 'APPROVED'
+                                    ? 'text-status-success'
+                                    : task.answer.reviewResult === 'OBSERVED'
+                                      ? 'text-status-warning'
+                                      : 'text-body'
+                                }`}
+                              >
+                                {task.answer.reviewResult === 'APPROVED'
+                                  ? 'Aprobada'
+                                  : task.answer.reviewResult === 'OBSERVED'
+                                    ? 'Observada'
+                                    : 'Con evidencia'}
                               </span>
                             )}
                           </div>
@@ -307,6 +319,10 @@ export function TasksView() {
           siteName={siteNames.get(selectedTask.siteId) ?? 'Sede'}
           employeeName={selectedTask.employeeId ? (employeeNames.get(selectedTask.employeeId) ?? 'Empleado') : null}
           onClose={() => setSelectedTask(null)}
+          onReviewed={(updated) => {
+            setSelectedTask(updated);
+            tasks.reload();
+          }}
         />
       )}
     </>

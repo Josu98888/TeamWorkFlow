@@ -1,7 +1,20 @@
 import { USE_MOCKS } from '@/shared/lib/config';
 import { tasksHttpApi } from './http';
 import { tasksMockApi } from './mock';
-import type { AnswerTaskInput, CreateTaskInput, Form, FormInput, FormVersion, FormsPage, ListTasksQuery, MediaUpload, RequestUploadInput, Task, TaskReport } from './types';
+import type {
+  AnswerTaskInput,
+  CreateTaskInput,
+  Form,
+  FormInput,
+  FormVersion,
+  FormsPage,
+  ListTasksQuery,
+  MediaUpload,
+  RequestUploadInput,
+  ReviewTaskInput,
+  Task,
+  TaskReport,
+} from './types';
 
 export type TasksApi = {
   listTasks: (query?: ListTasksQuery) => Promise<Task[]>;
@@ -19,6 +32,8 @@ export type TasksApi = {
   claimTask: (taskId: string) => Promise<Task>;
   /** Completes the task (claims it first when unclaimed). */
   answerTask: (taskId: string, input: AnswerTaskInput) => Promise<Task>;
+  /** Supervisor/Admin: approves or observes a completed task answer. */
+  reviewTask: (taskId: string, input: ReviewTaskInput) => Promise<Task>;
   requestUpload: (input: RequestUploadInput) => Promise<MediaUpload>;
   /** PUTs the file bytes to the presigned URL returned by `requestUpload`. */
   uploadFile: (uploadUrl: string, file: File) => Promise<void>;
