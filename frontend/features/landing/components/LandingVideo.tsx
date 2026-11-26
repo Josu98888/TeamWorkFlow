@@ -5,8 +5,8 @@ import { LANDING_VIDEO_POSTER, LANDING_VIDEO_SRC } from '../content';
 import { PlayIcon } from './icons';
 
 /**
- * Parody video, self-hosted so the VPS nginx CSP (`media-src 'self'`) allows it. Nothing loads until the
- * visitor presses play, to keep the page light. Without `NEXT_PUBLIC_LANDING_VIDEO_SRC` it shows "próximamente".
+ * Parody video, self-hosted so the VPS nginx CSP (`media-src 'self'`) allows it. Only the poster loads until
+ * the visitor presses play, to keep the page light. With an empty `LANDING_VIDEO_SRC` it shows "próximamente".
  */
 export function LandingVideo() {
   const [playing, setPlaying] = useState(false);
@@ -31,7 +31,7 @@ export function LandingVideo() {
               <PlayIcon size={30} filled />
             </span>
             <strong>{hasVideo ? 'Mirá cómo era antes' : 'Video próximamente'}</strong>
-            <small>Parodia · menos de 1 minuto</small>
+            <small>Parodia · 47 seg</small>
           </button>
         )}
       </div>

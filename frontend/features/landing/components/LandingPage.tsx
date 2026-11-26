@@ -5,6 +5,7 @@ import {
   ABOUT_TEXT,
   FAQ,
   FEATURES,
+  FOUNDATION_LOGO,
   LANDING_CONTACT,
   LANDING_PATHS,
   NAV_LINKS,
@@ -16,6 +17,14 @@ import {
 import { CompareSlider } from './CompareSlider';
 import { LandingVideo } from './LandingVideo';
 import { ChatBubbleIcon, MenuIcon, PainIconSvg, PlayIcon } from './icons';
+
+const initials = (name: string) =>
+  name
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
 function Logo() {
   return (
@@ -218,16 +227,24 @@ export function LandingPage() {
           </p>
           <h2 className="lp-h2">Tres estudiantes de la beca IntegrarTEC</h2>
           <p>{ABOUT_TEXT}</p>
+          <div className="lp-foundation">
+            {/* eslint-disable-next-line @next/next/no-img-element -- small static logo */}
+            <img src={FOUNDATION_LOGO} alt="Logo de la fundación" width={64} height={64} />
+            <span>Con el apoyo de la fundación de la beca IntegrarTEC</span>
+          </div>
         </div>
         <div className="lp-team">
-          {TEAM.map((m, i) => (
-            <div key={i} className="lp-card lp-member">
-              {/* TODO(landing): team photos in public/landing/ */}
-              <span className="lp-avatar" aria-hidden="true">
-                FOTO
-              </span>
+          {TEAM.map((m) => (
+            <div key={m.name} className="lp-card lp-member">
+              {m.photo ? (
+                // eslint-disable-next-line @next/next/no-img-element -- small static photo
+                <img className="lp-avatar" src={m.photo} alt={`Foto de ${m.name}`} width={76} height={76} />
+              ) : (
+                <span className="lp-avatar" aria-hidden="true">
+                  {initials(m.name)}
+                </span>
+              )}
               <strong>{m.name}</strong>
-              <small>{m.role}</small>
             </div>
           ))}
         </div>
