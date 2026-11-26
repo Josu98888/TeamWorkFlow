@@ -16,6 +16,7 @@ import { tasksApi } from '../api';
 import { CreateTaskModal } from './CreateTaskModal';
 import { TASK_KIND_LABELS, TASK_STATUS_LABELS, TASK_STATUS_TONES } from '../labels';
 import { TASK_STATUSES, type Task, type TaskStatus } from '../types';
+import { TaskDetailDrawer } from './TaskDetailDrawer';
 
 type Filter = 'ALL' | TaskStatus;
 
@@ -49,6 +50,7 @@ export function TasksView() {
   const [siteFilter, setSiteFilter] = useState<string>('ALL');
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   const header = (
     <>
@@ -238,47 +240,58 @@ export function TasksView() {
                 {visible.map((task) => {
                   const rel = formatRelativeDeadline(task);
                   return (
-                    <li
-                      key={task.id}
-                      className="flex flex-wrap items-start justify-between gap-3 px-5 py-4 transition-colors hover:bg-alt/40"
-                    >
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold text-title">{task.title}</p>
-                          {task.expectedQr && (
-                            <span className="rounded border border-line bg-alt/80 px-1.5 py-0.2 font-mono text-[10px] font-semibold uppercase tracking-wide text-body">
-                              QR puesto
+                    <li key={task.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTask(task)}
+                        className="flex w-full flex-wrap items-start justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-alt/60 cursor-pointer"
+                      >
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-semibold text-title">{task.title}</p>
+                            {task.expectedQr && (
+                              <span className="rounded border border-line bg-alt/80 px-1.5 py-0.2 font-mono text-[10px] font-semibold uppercase tracking-wide text-body">
+                                QR puesto
+                              </span>
+                            )}
+                            {task.answer && (
+                              <span className="rounded border border-line bg-alt/80 px-1.5 py-0.2 text-[10px] font-semibold text-status-success">
+                                Con evidencia
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-body">
+                            <span className="font-semibold">{siteNames.get(task.siteId) ?? 'Sede'}</span>
+                            {' · '}
+                            {task.employeeId ? (
+                              (employeeNames.get(task.employeeId) ?? 'Empleado')
+                            ) : (
+                              <span className="italic text-muted">Sin reclamar</span>
+                            )}
+                          </p>
+                          <p className="text-xs text-muted">
+                            <span>{TASK_KIND_LABELS[task.kind]}</span>
+                            {' · '}
+                            <span
+                              className={`tabular-nums font-medium ${
+                                rel.overdue
+                                  ? 'text-status-danger'
+                                  : rel.urgent
+                                    ? 'text-status-warning'
+                                    : 'text-muted'
+                              }`}
+                            >
+                              {rel.text}
                             </span>
-                          )}
+                            {' · '}
+                            <span className="tabular-nums">{formatDateTime(task.deadline)}</span>
+                          </p>
                         </div>
-                        <p className="text-xs text-body">
-                          <span className="font-semibold">{siteNames.get(task.siteId) ?? 'Sede'}</span>
-                          {' · '}
-                          {task.employeeId ? (
-                            (employeeNames.get(task.employeeId) ?? 'Empleado')
-                          ) : (
-                            <span className="italic text-muted">Sin reclamar</span>
-                          )}
-                        </p>
-                        <p className="text-xs text-muted">
-                          <span>{TASK_KIND_LABELS[task.kind]}</span>
-                          {' · '}
-                          <span
-                            className={`tabular-nums font-medium ${
-                              rel.overdue
-                                ? 'text-status-danger'
-                                : rel.urgent
-                                  ? 'text-status-warning'
-                                  : 'text-muted'
-                            }`}
-                          >
-                            {rel.text}
-                          </span>
-                          {' · '}
-                          <span className="tabular-nums">{formatDateTime(task.deadline)}</span>
-                        </p>
-                      </div>
-                      <Badge tone={TASK_STATUS_TONES[task.status]}>{TASK_STATUS_LABELS[task.status]}</Badge>
+                        <div className="flex flex-col items-end gap-1.5">
+                          <Badge tone={TASK_STATUS_TONES[task.status]}>{TASK_STATUS_LABELS[task.status]}</Badge>
+                          <span className="text-[11px] font-medium text-muted">Ver detalle →</span>
+                        </div>
+                      </button>
                     </li>
                   );
                 })}
@@ -287,6 +300,15 @@ export function TasksView() {
           </Card>
         </section>
       </div>
+
+      {selectedTask && (
+        <TaskDetailDrawer
+          task={selectedTask}
+          siteName={siteNames.get(selectedTask.siteId) ?? 'Sede'}
+          employeeName={selectedTask.employeeId ? (employeeNames.get(selectedTask.employeeId) ?? 'Empleado') : null}
+          onClose={() => setSelectedTask(null)}
+        />
+      )}
     </>
   );
 }
