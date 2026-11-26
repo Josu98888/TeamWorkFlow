@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Badge } from '@/shared/components/Badge';
 import { Button } from '@/shared/components/Button';
 import { Card, SectionLabel } from '@/shared/components/Card';
-import { TextField } from '@/shared/components/Fields';
+import { SelectField, TextField } from '@/shared/components/Fields';
 import { PageHeader } from '@/shared/components/PageHeader';
 import { ErrorState, LoadingState } from '@/shared/components/States';
 import { useAction } from '@/shared/hooks/useAction';
@@ -13,14 +13,15 @@ import { useResource } from '@/shared/hooks/useResource';
 import { formatDateTime } from '@/shared/lib/format';
 import { tasksApi } from '../api';
 import { newDraftField, toDraftField, toFormField, validateDraft, type DraftField } from '../form-fields';
+import { FORM_TEMPLATES, findFormTemplate } from '../form-templates';
 import { FORM_FIELD_TYPE_LABELS } from '../labels';
 import type { Form, FormVersion } from '../types';
 import { FieldEditor } from './FieldEditor';
 import { FORMS_PATH } from './FormsView';
 
-/** Builder page: `formId` edits an existing form, no `formId` creates one. */
-export function FormBuilder({ formId }: { formId?: string }) {
-  if (!formId) return <FormEditor />;
+/** Builder page: `formId` edits an existing form, no `formId` creates one (optionally from `templateId`). */
+export function FormBuilder({ formId, templateId }: { formId?: string; templateId?: string }) {
+  if (!formId) return <FormEditor initialTemplateId={templateId} />;
   return <LoadedFormEditor formId={formId} />;
 }
 
@@ -47,14 +48,34 @@ function LoadedFormEditor({ formId }: { formId: string }) {
   return <FormEditor key={form.data.id} form={form.data} />;
 }
 
-function FormEditor({ form }: { form?: Form }) {
+function FormEditor({ form, initialTemplateId }: { form?: Form; initialTemplateId?: string }) {
   const router = useRouter();
-  const [name, setName] = useState(form?.name ?? '');
-  const [fields, setFields] = useState<DraftField[]>(() => (form ? form.draftFields.map(toDraftField) : [newDraftField()]));
+  const initialTemplate = form ? undefined : findFormTemplate(initialTemplateId);
+  const [selectedTemplateId, setSelectedTemplateId] = useState(initialTemplate?.id ?? '');
+  const [name, setName] = useState(form?.name ?? initialTemplate?.name ?? '');
+  const [fields, setFields] = useState<DraftField[]>(() => {
+    if (form) return form.draftFields.map(toDraftField);
+    if (initialTemplate) return initialTemplate.fields.map(toDraftField);
+    return [newDraftField()];
+  });
   const [versions, setVersions] = useState<FormVersion[]>(form?.versions ?? []);
   const [localError, setLocalError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const { run, pending, error, clearError } = useAction();
+
+  const applyTemplate = (nextId: string) => {
+    setSelectedTemplateId(nextId);
+    setLocalError(null);
+    setNotice(null);
+    const tpl = findFormTemplate(nextId);
+    if (!tpl) {
+      setName('');
+      setFields([newDraftField()]);
+      return;
+    }
+    setName(tpl.name);
+    setFields(tpl.fields.map(toDraftField));
+  };
 
   const updateField = (uid: string, next: DraftField) => setFields((current) => current.map((item) => (item.uid === uid ? next : item)));
   const removeField = (uid: string) => setFields((current) => current.filter((item) => item.uid !== uid));
@@ -122,7 +143,21 @@ function FormEditor({ form }: { form?: Form }) {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <section aria-label="Campos del formulario" className="space-y-4 lg:col-span-2">
-          <Card glow="none">
+          <Card glow="none" className="space-y-3">
+            {!form && (
+              <SelectField
+                label="Partir de una plantilla por rubro (opcional)"
+                value={selectedTemplateId}
+                onChange={applyTemplate}
+                options={[
+                  { value: '', label: 'En blanco (personalizado)' },
+                  ...FORM_TEMPLATES.map((tpl) => ({
+                    value: tpl.id,
+                    label: `${tpl.industry} — ${tpl.name}`,
+                  })),
+                ]}
+              />
+            )}
             <TextField label="Nombre del formulario" value={name} onChange={setName} maxLength={120} required />
           </Card>
 
