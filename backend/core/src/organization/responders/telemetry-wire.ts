@@ -44,6 +44,7 @@ export interface TelemetryEmployeeCatalogDto {
   lastName: string;
   employeeNumber: string | null;
   isActive: boolean;
+  siteIds?: string[];
 }
 
 export interface TelemetryShiftDto {
@@ -122,6 +123,7 @@ export function toTelemetryEmployeeCatalog(
     lastName: employee.lastName,
     employeeNumber: employee.employeeNumber,
     isActive: employee.isActive,
+    siteIds: employee.siteIds ?? [],
   };
 }
 
