@@ -229,7 +229,7 @@ export function HelpAssistantWidget() {
     inputRef.current?.focus();
   };
 
-  return (
+return (
     <div ref={containerRef} className="relative">
       <button
         ref={launcherRef}
@@ -238,7 +238,7 @@ export function HelpAssistantWidget() {
         aria-expanded={open}
         aria-label={open ? 'Cerrar guía operativa' : 'Abrir guía operativa (Ctrl+J)'}
         title="Guía operativa (Ctrl+J)"
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide uppercase transition-colors cursor-pointer border"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide uppercase transition-all duration-150 cursor-pointer border active:scale-95"
         style={
           open
             ? {
@@ -263,6 +263,7 @@ export function HelpAssistantWidget() {
           strokeLinecap="round"
           strokeLinejoin="round"
           aria-hidden="true"
+          className={`transition-transform duration-200 ${open ? 'rotate-12' : ''}`}
         >
           <circle cx="8" cy="8" r="6.5" />
           <path d="M6.2 6.2a1.9 1.9 0 0 1 3.6.6c0 1.3-1.8 1.8-1.8 2.9" />
@@ -271,149 +272,163 @@ export function HelpAssistantWidget() {
         <span>Guía</span>
       </button>
 
-      {open && (
-        <section
-          role="dialog"
-          aria-label="Asistente de ayuda de TeamWorkFlow"
-          className="fixed right-4 top-16 z-50 mt-1 flex h-[480px] w-[370px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-line bg-card shadow-lg sm:absolute sm:right-0 sm:top-full sm:mt-2"
-        >
-          {/* Header */}
-          <header className="flex items-center justify-between border-b border-line bg-alt/80 px-4 py-3">
-            <div className="flex items-center gap-2.5">
-              <span className="grid h-7 w-7 place-items-center rounded-lg bg-brand-medium text-xs font-bold text-white">
-                ?
-              </span>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-title">
-                    Guía Operativa
-                  </h2>
-                  <kbd className="hidden rounded border border-line bg-card px-1.5 py-0.5 font-mono text-[10px] text-muted sm:inline">
-                    Ctrl+J
-                  </kbd>
-                </div>
-                <p className="text-[11px] text-muted">Consultas y paso a paso</p>
+<section
+        role="dialog"
+        aria-label="Asistente de ayuda de TeamWorkFlow"
+        aria-hidden={!open}
+        style={{
+          clipPath: open ? 'inset(0 0 -16px 0 round 12px)' : 'inset(0 0 100% 0 round 12px)',
+          transition:
+            'clip-path 320ms cubic-bezier(0.22, 1, 0.36, 1), transform 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease',
+        }}
+        className={`fixed right-4 top-16 z-50 mt-1 flex h-[480px] w-[370px] max-w-[calc(100vw-2rem)] origin-top flex-col overflow-hidden rounded-xl border border-line bg-card shadow-xl motion-reduce:transition-none sm:absolute sm:right-0 sm:top-full sm:mt-2 ${
+          open
+            ? 'pointer-events-auto translate-y-0 opacity-100'
+            : 'pointer-events-none -translate-y-1 opacity-0'
+        }`}
+      >
+        {/* Header */}
+        <header className="flex items-center justify-between border-b border-line bg-alt/80 px-4 py-3">
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-brand-medium text-xs font-bold text-white">
+              ?
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-title">
+                  Guía Operativa
+                </h2>
+                <kbd className="hidden rounded border border-line bg-card px-1.5 py-0.5 font-mono text-[10px] text-muted sm:inline">
+                  Ctrl+J
+                </kbd>
               </div>
+              <p className="text-[11px] text-muted">Consultas y paso a paso</p>
             </div>
+          </div>
 
-            <div className="flex items-center gap-1">
-              {messages.length > 1 && (
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  className="rounded-lg px-2 py-1 text-[11px] font-medium text-muted transition-colors hover:bg-card hover:text-title focus-visible:outline-2 focus-visible:outline-brand-medium"
-                >
-                  Limpiar
-                </button>
-              )}
+          <div className="flex items-center gap-1">
+            {messages.length > 1 && (
               <button
                 type="button"
-                onClick={() => setOpen(false)}
-                aria-label="Cerrar asistente"
-                title="Cerrar (Esc)"
-                className="grid h-7 w-7 place-items-center rounded-lg text-sm font-semibold text-muted transition-colors hover:bg-card hover:text-title focus-visible:outline-2 focus-visible:outline-brand-medium"
+                tabIndex={open ? 0 : -1}
+                onClick={handleReset}
+                className="rounded-lg px-2 py-1 text-[11px] font-medium text-muted transition-colors hover:bg-card hover:text-title focus-visible:outline-2 focus-visible:outline-brand-medium"
               >
-                ✕
+                Limpiar
               </button>
-            </div>
-          </header>
-
-          {/* Preset quick-access questions filtered by user role and active screen */}
-          <div className="border-b border-line bg-alt/40 px-3 py-2.5">
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
-              Preguntas frecuentes
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {guides.map((guide) => {
-                const isCurrentView =
-                  Boolean(guide.route?.href) &&
-                  guide.route?.href !== '/' &&
-                  (pathname === guide.route?.href ||
-                    pathname.startsWith(`${guide.route?.href}/`));
-
-                return (
-                  <button
-                    key={guide.id}
-                    type="button"
-                    onClick={() => handleSelectGuide(guide)}
-                    className={`rounded-lg border bg-card px-2.5 py-1 text-left text-[11px] font-medium text-body transition-colors hover:border-brand-medium hover:text-title focus-visible:outline-2 focus-visible:outline-brand-medium ${
-                      isCurrentView ? 'border-brand-medium/60 font-semibold text-title' : 'border-line'
-                    }`}
-                  >
-                    {guide.question}
-                  </button>
-                );
-              })}
-            </div>
+            )}
+            <button
+              type="button"
+              tabIndex={open ? 0 : -1}
+              onClick={() => setOpen(false)}
+              aria-label="Cerrar asistente"
+              title="Cerrar (Esc)"
+              className="grid h-7 w-7 place-items-center rounded-lg text-sm font-semibold text-muted transition-colors hover:bg-card hover:text-title focus-visible:outline-2 focus-visible:outline-brand-medium"
+            >
+              ✕
+            </button>
           </div>
+        </header>
 
-          {/* Conversation thread */}
-          <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3 text-xs">
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex flex-col ${
-                  msg.sender === 'user' ? 'items-end' : 'items-start'
-                }`}
-              >
-                {msg.badge && msg.sender === 'assistant' && (
-                  <span className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-muted">
-                    {msg.badge}
-                  </span>
-                )}
-                <div
-                  className={`max-w-[88%] whitespace-pre-line rounded-xl px-3 py-2 leading-relaxed ${
-                    msg.sender === 'user'
-                      ? 'bg-brand-medium text-white'
-                      : 'border border-line bg-alt/60 text-body'
+        {/* Preset quick-access questions filtered by user role and active screen */}
+        <div className="border-b border-line bg-alt/40 px-3 py-2.5">
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+            Preguntas frecuentes
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {guides.map((guide) => {
+              const isCurrentView =
+                Boolean(guide.route?.href) &&
+                guide.route?.href !== '/' &&
+                (pathname === guide.route?.href ||
+                  pathname.startsWith(`${guide.route?.href}/`));
+
+              return (
+                <button
+                  key={guide.id}
+                  type="button"
+                  tabIndex={open ? 0 : -1}
+                  onClick={() => handleSelectGuide(guide)}
+                  className={`rounded-lg border bg-card px-2.5 py-1 text-left text-[11px] font-medium text-body transition-colors hover:border-brand-medium hover:text-title focus-visible:outline-2 focus-visible:outline-brand-medium ${
+                    isCurrentView ? 'border-brand-medium/60 font-semibold text-title' : 'border-line'
                   }`}
                 >
-                  {msg.sender === 'assistant' ? renderFormattedText(msg.text) : msg.text}
-                </div>
-                {msg.route && msg.route.href !== pathname && (
-                  <Link
-                    href={msg.route.href}
-                    onClick={() => setOpen(false)}
-                    className="mt-1.5 inline-flex items-center gap-1 rounded-lg border border-line bg-card px-2.5 py-1 text-[11px] font-semibold text-title transition-colors hover:border-brand-medium focus-visible:outline-2 focus-visible:outline-brand-medium"
-                  >
-                    {msg.route.label} →
-                  </Link>
-                )}
-              </div>
-            ))}
-            {loading && (
-              <div className="flex items-start">
-                <div className="rounded-xl border border-line bg-alt/60 px-3 py-2 text-xs text-muted">
-                  Consultando guía...
-                </div>
-              </div>
-            )}
-            <div ref={bottomRef} />
+                  {guide.question}
+                </button>
+              );
+            })}
           </div>
+        </div>
 
-          {/* Free-text AI input */}
-          <form onSubmit={handleSubmit} className="border-t border-line bg-card p-2.5">
-            <div className="flex items-center gap-2">
-              <input
-                ref={inputRef}
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Escribí tu duda sobre la app..."
-                maxLength={500}
-                className="min-w-0 flex-1 rounded-xl border border-line bg-alt/50 px-3 py-2 text-xs text-body outline-none placeholder:text-muted focus:border-brand-medium"
-              />
-              <button
-                type="submit"
-                disabled={loading || !input.trim()}
-                className="rounded-xl bg-brand-medium px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-95 focus-visible:outline-2 focus-visible:outline-brand-medium disabled:opacity-40"
+        {/* Conversation thread */}
+        <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3 text-xs">
+          {messages.map((msg) => (
+            <div
+              key={msg.id}
+              className={`flex flex-col ${
+                msg.sender === 'user' ? 'items-end' : 'items-start'
+              }`}
+            >
+              {msg.badge && msg.sender === 'assistant' && (
+                <span className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-muted">
+                  {msg.badge}
+                </span>
+              )}
+              <div
+                className={`max-w-[88%] whitespace-pre-line rounded-xl px-3 py-2 leading-relaxed ${
+                  msg.sender === 'user'
+                    ? 'bg-brand-medium text-white'
+                    : 'border border-line bg-alt/60 text-body'
+                }`}
               >
-                Enviar
-              </button>
+                {msg.sender === 'assistant' ? renderFormattedText(msg.text) : msg.text}
+              </div>
+              {msg.route && msg.route.href !== pathname && (
+                <Link
+                  href={msg.route.href}
+                  tabIndex={open ? 0 : -1}
+                  onClick={() => setOpen(false)}
+                  className="mt-1.5 inline-flex items-center gap-1 rounded-lg border border-line bg-card px-2.5 py-1 text-[11px] font-semibold text-title transition-colors hover:border-brand-medium focus-visible:outline-2 focus-visible:outline-brand-medium"
+                >
+                  {msg.route.label} →
+                </Link>
+              )}
             </div>
-          </form>
-        </section>
-      )}
+          ))}
+          {loading && (
+            <div className="flex items-start">
+              <div className="rounded-xl border border-line bg-alt/60 px-3 py-2 text-xs text-muted">
+                Consultando guía...
+              </div>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Free-text AI input */}
+        <form onSubmit={handleSubmit} className="border-t border-line bg-card p-2.5">
+          <div className="flex items-center gap-2">
+            <input
+              ref={inputRef}
+              type="text"
+              tabIndex={open ? 0 : -1}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Escribí tu duda sobre la app..."
+              maxLength={500}
+              className="min-w-0 flex-1 rounded-xl border border-line bg-alt/50 px-3 py-2 text-xs text-body outline-none placeholder:text-muted focus:border-brand-medium"
+            />
+            <button
+              type="submit"
+              tabIndex={open ? 0 : -1}
+              disabled={loading || !input.trim()}
+              className="rounded-xl bg-brand-medium px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-95 focus-visible:outline-2 focus-visible:outline-brand-medium disabled:opacity-40"
+            >
+              Enviar
+            </button>
+          </div>
+        </form>
+      </section>
     </div>
   );
 }
