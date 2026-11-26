@@ -71,10 +71,13 @@ export function HelpAssistantWidget() {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const launcherRef = useRef<HTMLButtonElement | null>(null);
 
-  useEffect(() => {
+  // Reload the per-role history when the role changes (adjusting state during render, not in an effect).
+  const [historyRole, setHistoryRole] = useState<string | undefined>(undefined);
+  if (session?.role !== historyRole) {
+    setHistoryRole(session?.role);
     setMessages(loadStoredMessages(session?.role));
     setInput('');
-  }, [session?.role]);
+  }
 
   useEffect(() => {
     if (typeof window === 'undefined' || !session?.role) return;
