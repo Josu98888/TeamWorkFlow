@@ -14,7 +14,16 @@ import {
   type ShiftSlot,
 } from '@/shared/mocks/world';
 import type { OrganizationApi } from './api';
-import type { Employee, Paginated, Post, Shift, ShiftStatus, ShiftTemplate, Site } from './types';
+import type {
+  BulkImportEmployeeRowResult,
+  Employee,
+  Paginated,
+  Post,
+  Shift,
+  ShiftStatus,
+  ShiftTemplate,
+  Site,
+} from './types';
 
 const CREATED_AT = '2026-03-02T12:00:00.000Z';
 
@@ -201,8 +210,145 @@ export const organizationMockApi: OrganizationApi = {
   rotateSiteQr: mockUnavailable,
   createPost: mockUnavailable,
   updatePost: mockUnavailable,
-  createEmployee: mockUnavailable,
-  updateEmployee: mockUnavailable,
+  createEmployee: async (input) => {
+    const normalizedEmail = input.email.trim().toLowerCase();
+    if (EMPLOYEES.some((emp) => emp.email.toLowerCase() === normalizedEmail)) {
+      throw new Error('Ese correo o legajo ya pertenece a otro empleado.');
+    }
+    const now = new Date().toISOString();
+    const created: Employee = {
+      id: `emp-mock-${Date.now()}`,
+      tenantId: TENANT_ID,
+      userId: `usr-mock-${Date.now()}`,
+      email: normalizedEmail,
+      firstName: input.firstName.trim(),
+      lastName: input.lastName.trim(),
+      phone: input.phone ?? null,
+      avatarMediaId: null,
+      employeeNumber: input.employeeNumber ?? null,
+      nationalId: input.nationalId ?? null,
+      skills: input.skills ? [...input.skills] : [],
+      weeklyHoursLimit: input.weeklyHoursLimit ?? null,
+      siteIds: input.siteIds ? [...input.siteIds] : [],
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+    EMPLOYEES.unshift(created);
+    return mockResponse({ ...created });
+  },
+  bulkImportEmployees: async (targetSiteId, input) => {
+    const siteExists = SITES.some((item) => item.id === targetSiteId);
+    if (!siteExists) throw new Error('La sede no existe.');
+
+    const results: BulkImportEmployeeRowResult[] = [];
+    let createdCount = 0;
+    let updatedCount = 0;
+    let failedCount = 0;
+
+    input.items.forEach((item, index) => {
+      const rowNumber = index + 1;
+      const email = item.email.trim().toLowerCase();
+      const nationalId = item.nationalId.trim();
+      const fullName = item.fullName.trim();
+      const parts = fullName.split(/\s+/).filter(Boolean);
+      const firstName = parts[0] ?? fullName;
+      const lastName = parts.length > 1 ? parts.slice(1).join(' ') : '-';
+
+      const dniCollision = EMPLOYEES.find(
+        (emp) => emp.nationalId === nationalId && emp.email.toLowerCase() !== email,
+      );
+      if (dniCollision) {
+        failedCount += 1;
+        results.push({
+          rowNumber,
+          nationalId,
+          fullName,
+          email,
+          status: 'failed',
+          code: 'national_id_taken',
+          detail: 'Ya existe otro trabajador con ese DNI y otro correo.',
+        });
+        return;
+      }
+
+      const existing = EMPLOYEES.find((emp) => emp.email.toLowerCase() === email);
+      const now = new Date().toISOString();
+      if (existing) {
+        existing.firstName = firstName;
+        existing.lastName = lastName;
+        existing.nationalId = nationalId;
+        existing.isActive = true;
+        if (!existing.siteIds.includes(targetSiteId)) {
+          existing.siteIds = [...existing.siteIds, targetSiteId];
+        }
+        existing.updatedAt = now;
+        updatedCount += 1;
+        results.push({
+          rowNumber,
+          nationalId,
+          fullName,
+          email,
+          status: 'updated',
+          employeeId: existing.id,
+        });
+        return;
+      }
+
+      const created: Employee = {
+        id: `emp-import-${Date.now()}-${rowNumber}`,
+        tenantId: TENANT_ID,
+        userId: `usr-import-${Date.now()}-${rowNumber}`,
+        email,
+        firstName,
+        lastName,
+        phone: null,
+        avatarMediaId: null,
+        employeeNumber: null,
+        nationalId,
+        skills: [],
+        weeklyHoursLimit: 48,
+        siteIds: [targetSiteId],
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      };
+      EMPLOYEES.unshift(created);
+      createdCount += 1;
+      results.push({
+        rowNumber,
+        nationalId,
+        fullName,
+        email,
+        status: 'created',
+        employeeId: created.id,
+      });
+    });
+
+    return mockResponse({
+      siteId: targetSiteId,
+      totalRows: input.items.length,
+      createdCount,
+      updatedCount,
+      failedCount,
+      results,
+    });
+  },
+  updateEmployee: async (targetEmployeeId, input) => {
+    const found = EMPLOYEES.find((emp) => emp.id === targetEmployeeId);
+    if (!found) throw new Error('El empleado no existe.');
+    if (input.firstName !== undefined) found.firstName = input.firstName;
+    if (input.lastName !== undefined) found.lastName = input.lastName;
+    if (input.phone !== undefined) found.phone = input.phone;
+    if (input.employeeNumber !== undefined) found.employeeNumber = input.employeeNumber;
+    if (input.nationalId !== undefined) found.nationalId = input.nationalId;
+    if (input.skills !== undefined) found.skills = [...input.skills];
+    if (input.weeklyHoursLimit !== undefined) found.weeklyHoursLimit = input.weeklyHoursLimit;
+    if (input.siteIds !== undefined) found.siteIds = [...input.siteIds];
+    if (input.isActive !== undefined) found.isActive = input.isActive;
+    found.updatedAt = new Date().toISOString();
+    return mockResponse({ ...found });
+  },
   createShift: mockUnavailable,
   updateShift: mockUnavailable,
   reassignShift: mockUnavailable,
