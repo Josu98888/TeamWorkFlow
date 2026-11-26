@@ -17,6 +17,10 @@ export interface Envs {
   jwtSecret?: string;
   authCacheTtlMs: number;
   defaultReportTz: string;
+  mailEnabled: boolean;
+  mailFrom: string;
+  mailProvider: 'fake' | 'resend';
+  resendApiKey?: string;
 }
 
 interface EnvVars {
@@ -34,6 +38,10 @@ interface EnvVars {
   JWT_SECRET?: string;
   AUTH_CACHE_TTL_MS: number;
   DEFAULT_REPORT_TZ: string;
+  MAIL_ENABLED: boolean;
+  MAIL_FROM: string;
+  MAIL_PROVIDER: 'fake' | 'resend';
+  RESEND_API_KEY?: string;
 }
 
 const envsSchema = joi
@@ -67,6 +75,10 @@ const envsSchema = joi
     JWT_SECRET: joi.string().min(16).optional(),
     AUTH_CACHE_TTL_MS: joi.number().min(0).default(5000),
     DEFAULT_REPORT_TZ: joi.string().default('America/Argentina/Buenos_Aires'),
+    MAIL_ENABLED: joi.boolean().default(false),
+    MAIL_FROM: joi.string().email().default('no-reply@teamworkflow.local'),
+    MAIL_PROVIDER: joi.string().valid('fake', 'resend').default('fake'),
+    RESEND_API_KEY: joi.string().allow('').optional(),
   })
   .unknown(true);
 
@@ -119,5 +131,9 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
     jwtSecret: envVars.JWT_SECRET,
     authCacheTtlMs: envVars.AUTH_CACHE_TTL_MS,
     defaultReportTz: envVars.DEFAULT_REPORT_TZ,
+    mailEnabled: envVars.MAIL_ENABLED,
+    mailFrom: envVars.MAIL_FROM,
+    mailProvider: envVars.MAIL_PROVIDER,
+    ...(envVars.RESEND_API_KEY ? { resendApiKey: envVars.RESEND_API_KEY } : {}),
   };
 }
