@@ -52,6 +52,23 @@ function isUniqueViolation(error: unknown): boolean {
   );
 }
 
+export interface ProvisionEmployeeAccountInput {
+  actor: {
+    userId: string;
+    tenantId: string | null;
+    role: string;
+  };
+  email: string;
+  name: string;
+  password: string;
+}
+
+export interface ProvisionedEmployeeAccount {
+  userId: string;
+  email: string;
+  created: boolean;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -355,6 +372,102 @@ export class AuthService {
       throw new Error('UserListRecipientsService is not available');
     }
     return this.userListRecipients.listRecipients(dto);
+  }
+
+  // Internal-only facade method (`auth.user.provision-employee`) invoked by
+  // `organization` during bulk employee onboarding. Never expose via HTTP
+  // controllers or NATS responders.
+  async provisionEmployeeAccount(
+    input: ProvisionEmployeeAccountInput,
+  ): Promise<ProvisionedEmployeeAccount> {
+    const { actor } = input;
+    if (
+      !actor.tenantId ||
+      (actor.role !== 'owner' && actor.role !== 'admin')
+    ) {
+      throw new ForbiddenException();
+    }
+    const tenantId = actor.tenantId;
+    const email = normalizeEmail(input.email);
+    const name = input.name.trim();
+
+    const existing = await this.prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        tenantId: true,
+        tenant: { select: { status: true } },
+      },
+    });
+    if (existing) {
+      if (
+        existing.tenantId !== tenantId ||
+        existing.tenant?.status === 'DELETED'
+      ) {
+        throw new EmailTakenException();
+      }
+      assertTenantAllowsAccess('EMPLOYEE', existing.tenant?.status);
+      return { userId: existing.id, email, created: false };
+    }
+
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { status: true },
+    });
+    if (!tenant || tenant.status === 'DELETED') {
+      throw new ForbiddenException();
+    }
+    assertTenantAllowsAccess('EMPLOYEE', tenant.status);
+
+    // Argon2id hashing runs outside the transaction so it never holds a DB connection.
+    const passwordHash = await hashPassword(input.password);
+
+    let createdUser: { id: string; email: string; role: 'EMPLOYEE' };
+    try {
+      createdUser = await this.prisma.$transaction(async (tx) => {
+        await tx.invitation.updateMany({
+          where: {
+            tenantId,
+            email,
+            usedAt: null,
+            revokedAt: null,
+          },
+          data: { revokedAt: new Date() },
+        });
+        const user = await tx.user.create({
+          data: {
+            tenantId,
+            email,
+            passwordHash,
+            role: 'EMPLOYEE',
+            isActive: true,
+          },
+        });
+        return { id: user.id, email: user.email, role: 'EMPLOYEE' };
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        const concurrent = await this.prisma.user.findUnique({
+          where: { email },
+          select: { id: true, tenantId: true },
+        });
+        if (concurrent && concurrent.tenantId === tenantId) {
+          return { userId: concurrent.id, email, created: false };
+        }
+        throw new EmailTakenException();
+      }
+      throw error;
+    }
+
+    await this.events.publish(tenantId, AUTH_EVENTS.userCreated, {
+      userId: createdUser.id,
+      tenantId,
+      email: createdUser.email,
+      name,
+      role: toWireRole(createdUser.role),
+    });
+
+    return { userId: createdUser.id, email: createdUser.email, created: true };
   }
 
   // The increment is atomic; the 5th consecutive failure sets the lock and

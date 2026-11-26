@@ -3,7 +3,9 @@ import '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import {
+  BulkImportEmployeesBodyDto,
   CreateEmployeeBodyDto,
+  EmployeeSiteParamDto,
   ListEmployeesQueryDto,
   UpdateEmployeeBodyDto,
 } from './dto/employee.dto';
@@ -42,6 +44,7 @@ async function errorsOf<T extends object>(cls: new () => T, plain: object) {
 describe('EmployeesController', () => {
   const employees = {
     create: jest.fn(),
+    bulkImportForSite: jest.fn(),
     list: jest.fn(),
     get: jest.fn(),
     update: jest.fn(),
@@ -52,7 +55,22 @@ describe('EmployeesController', () => {
 
   it('passes only the documented actor fields plus the validated input', async () => {
     const body = { firstName: 'x' };
+    const bulkBody = {
+      items: [
+        {
+          nationalId: '30111222',
+          fullName: 'Juan Perez',
+          email: 'juan@example.com',
+          password: 'Password123!',
+        },
+      ],
+    };
     await controller.create(VERIFIED as never, body as never);
+    await controller.bulkImportForSite(
+      VERIFIED as never,
+      { siteId: SITE_ID },
+      bulkBody,
+    );
     await controller.update(
       VERIFIED as never,
       { employeeId: EMPLOYEE_ID },
@@ -62,6 +80,11 @@ describe('EmployeesController', () => {
     await controller.list(VERIFIED as never, { page: 2 });
 
     expect(employees.create).toHaveBeenCalledWith(ORG_ACTOR, body);
+    expect(employees.bulkImportForSite).toHaveBeenCalledWith(
+      ORG_ACTOR,
+      SITE_ID,
+      bulkBody,
+    );
     expect(employees.update).toHaveBeenCalledWith(ORG_ACTOR, EMPLOYEE_ID, body);
     expect(employees.get).toHaveBeenCalledWith(ORG_ACTOR, {
       employeeId: EMPLOYEE_ID,
@@ -132,6 +155,46 @@ describe('EmployeesController', () => {
       expect(await validate(query)).toEqual([]);
       expect(query.isActive).toBe(false);
       expect(query.page).toBe(2);
+    });
+
+    it('validates bulk import DTOs and site param', async () => {
+      expect(await errorsOf(EmployeeSiteParamDto, { siteId: SITE_ID })).toEqual(
+        [],
+      );
+      expect(
+        (await errorsOf(EmployeeSiteParamDto, { siteId: 'bad-id' })).length,
+      ).toBeGreaterThan(0);
+
+      expect(
+        await errorsOf(BulkImportEmployeesBodyDto, {
+          items: [
+            {
+              nationalId: '30111222',
+              fullName: 'Juan Perez',
+              email: 'juan@example.com',
+              password: 'Password123',
+            },
+          ],
+        }),
+      ).toEqual([]);
+
+      expect(
+        (await errorsOf(BulkImportEmployeesBodyDto, { items: [] })).length,
+      ).toBeGreaterThan(0);
+      expect(
+        (
+          await errorsOf(BulkImportEmployeesBodyDto, {
+            items: [
+              {
+                nationalId: '30111222',
+                fullName: 'Juan Perez',
+                email: 'juan@example.com',
+                password: 'short',
+              },
+            ],
+          })
+        ).length,
+      ).toBeGreaterThan(0);
     });
   });
 });
