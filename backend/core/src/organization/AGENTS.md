@@ -135,6 +135,7 @@ In `core` the operations below are **in-process calls** to the module's facade s
 | `organization.site.rotate-qr` | HTTP controller (owner/admin) | actor, `siteId` | site with the new `qrCode` |
 | `organization.post.create` / `update` / `list` | HTTP controller | actor, `siteId`, post fields | post / posts |
 | `organization.employee.create` | HTTP controller (owner/admin) | actor, profile + operational fields, `email` | employee |
+| `organization.employee.bulk-import` | HTTP controller (owner/admin) | actor, `siteId`, `items[]` (`nationalId`, `fullName`, `email`, `password`) | `{ siteId, totalRows, createdCount, updatedCount, failedCount, results }` |
 | `organization.employee.update` | HTTP controller (owner/admin) | actor, `employeeId`, fields (skills, enabled sites, weekly limit, ...) | employee |
 | `organization.employee.get` | HTTP controller, other core modules (facade); `telemetry` (NATS responder) | actor, `employeeId` OR `userId` | employee |
 | `organization.employee.list` | HTTP controller | actor, filters, `page`, `pageSize` | employees |
