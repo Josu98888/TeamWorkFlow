@@ -19,6 +19,7 @@ import { PostFormModal } from './PostFormModal';
 import { SiteFormModal } from './SiteFormModal';
 import { SiteMap } from './SiteMap';
 import { SiteQrCard } from './SiteQrCard';
+import { SiteReportEmailCard } from './SiteReportEmailCard';
 
 const BACK = { href: '/sedes', label: 'Volver a Sedes y Geocercas' } as const;
 
@@ -218,6 +219,8 @@ export function SiteDetailView({ siteId }: { siteId: string }) {
           </Card>
         </div>
       </div>
+
+      <SiteReportEmailCard siteId={siteId} />
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card flush glow="none">
