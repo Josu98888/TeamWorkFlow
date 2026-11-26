@@ -327,6 +327,7 @@ export type ReportRecipientView = {
   employeeId: string | null;
   employeeName: string | null;
   employeeNumber: string | null;
+  siteIds?: string[];
   isActiveEmployee: boolean;
   receiveDaily: boolean;
   receiveMonthly: boolean;
@@ -342,6 +343,7 @@ export type ReportRecipientsResponse = {
     userId: string;
     fullName: string;
     employeeNumber: string | null;
+    siteIds?: string[];
   }[];
 };
 
@@ -358,9 +360,67 @@ export type UpsertPostOvertimeRateInput = {
 
 export type UpsertReportRecipientInput = {
   employeeId?: string | null;
+  siteIds?: string[];
   receiveDaily: boolean;
   receiveMonthly: boolean;
   receivePayrollExcel: boolean;
+};
+
+export const SITE_REPORT_EMAIL_KINDS = [
+  'daily_absences_pdf',
+  'monthly_attendance_pdf',
+  'monthly_payroll_excel',
+] as const;
+
+export type SiteReportEmailKind = (typeof SITE_REPORT_EMAIL_KINDS)[number];
+
+export type SiteReportDailyQuotaItem = {
+  requested: boolean;
+  sentAt: string | null;
+  targetPeriod: string | null;
+};
+
+export type SiteReportEmailPermissions = {
+  canAccessPanel: boolean;
+  canRequestDaily: boolean;
+  canRequestMonthly: boolean;
+  canRequestPayrollExcel: boolean;
+};
+
+export type SiteReportEmailStatusResponse = {
+  siteId: string;
+  siteName: string;
+  timezone: string;
+  currentDateInSiteTz: string;
+  nextAvailableDate: string;
+  nextAvailableAt: string;
+  recipientEmailMasked: string | null;
+  hasProPlan: boolean;
+  permissions: SiteReportEmailPermissions;
+  requestedToday: {
+    dailyAbsencesPdf: SiteReportDailyQuotaItem;
+    monthlyAttendancePdf: SiteReportDailyQuotaItem;
+    monthlyPayrollExcel: SiteReportDailyQuotaItem;
+  };
+};
+
+export type RequestSiteReportEmailInput = {
+  kind: SiteReportEmailKind;
+  date?: string;
+  period?: string;
+};
+
+export type RequestSiteReportEmailResponse = {
+  requestId: string;
+  siteId: string;
+  siteName: string;
+  kind: SiteReportEmailKind;
+  targetPeriod: string;
+  requestDate: string;
+  sentAt: string;
+  sentToEmailMasked: string;
+  nextAvailableDate: string;
+  nextAvailableAt: string;
 };
 
 /** Body of `POST /api/v1/auth/socket-token` (core): short-lived token for the Tower socket handshake. */
