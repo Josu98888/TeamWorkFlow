@@ -25,17 +25,46 @@ import {
   MonthlyReportQueryDto,
   RecipientUserIdParamDto,
   ReportHistoryQueryDto,
+  RequestSiteReportEmailDto,
+  SiteIdParamDto,
   UpsertReportRecipientDto,
 } from './dto/reports.dto';
 import { ReportRecipientsService } from './report-recipients.service';
 import { ReportsService } from './reports.service';
+import { SiteReportEmailService } from './site-report-email.service';
 
 @Controller('reports')
 export class ReportsController {
   constructor(
     private readonly reportsService: ReportsService,
     private readonly recipientsService: ReportRecipientsService,
+    private readonly siteReportEmailService: SiteReportEmailService,
   ) {}
+
+  @Get('sites/:siteId/email-status')
+  getSiteEmailRequestStatus(
+    @CurrentActor() actor: VerifiedActor,
+    @Param() params: SiteIdParamDto,
+  ) {
+    return this.siteReportEmailService.getSiteEmailRequestStatus(
+      actor,
+      params.siteId,
+    );
+  }
+
+  @Post('sites/:siteId/request-email')
+  @HttpCode(HttpStatus.CREATED)
+  requestSiteReportEmail(
+    @CurrentActor() actor: VerifiedActor,
+    @Param() params: SiteIdParamDto,
+    @Body() dto: RequestSiteReportEmailDto,
+  ) {
+    return this.siteReportEmailService.requestSiteReportEmail(
+      actor,
+      params.siteId,
+      dto,
+    );
+  }
 
   @Get('recipients')
   @Roles('owner')

@@ -4,10 +4,12 @@ import { SnapshotsModule } from '../snapshots/snapshots.module';
 import { TenantsModule } from '../tenants/tenants.module';
 import { ExcelPayrollExporter } from './export/excel-payroll-exporter';
 import { PdfReportExporter } from './export/pdf-report-exporter';
+import { ReportMailService } from './mail/report-mail.service';
 import { ReportRecipientsService } from './report-recipients.service';
 import { ReportsController } from './reports.controller';
 import { DailyReportJob, MonthlyReportJob } from './reports.jobs';
 import { ReportsService } from './reports.service';
+import { SiteReportEmailService } from './site-report-email.service';
 
 @Module({
   imports: [SnapshotsModule, TenantsModule],
@@ -15,11 +17,18 @@ import { ReportsService } from './reports.service';
   providers: [
     ReportsService,
     ReportRecipientsService,
+    ReportMailService,
+    SiteReportEmailService,
     PdfReportExporter,
     ExcelPayrollExporter,
     DailyReportJob,
     MonthlyReportJob,
   ],
-  exports: [ReportsService, ReportRecipientsService],
+  exports: [
+    ReportsService,
+    ReportRecipientsService,
+    ReportMailService,
+    SiteReportEmailService,
+  ],
 })
 export class ReportsModule {}
