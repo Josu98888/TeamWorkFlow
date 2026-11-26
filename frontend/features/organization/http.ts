@@ -35,6 +35,7 @@ export const organizationHttpApi: OrganizationApi = {
   createPost: (siteId, input) => send(`/sites/${siteId}/posts`, 'POST', input),
   updatePost: (postId, input) => send(`/posts/${postId}`, 'PATCH', input),
   createEmployee: (input) => send('/employees', 'POST', input),
+  bulkImportEmployees: (siteId, input) => send(`/employees/sites/${siteId}/bulk-import`, 'POST', input),
   updateEmployee: (employeeId, input) => send(`/employees/${employeeId}`, 'PATCH', input),
   createShift: (input) => send('/shifts', 'POST', input),
   updateShift: (shiftId, input) => send(`/shifts/${shiftId}`, 'PATCH', input),

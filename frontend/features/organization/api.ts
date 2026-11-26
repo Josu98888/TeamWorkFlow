@@ -3,6 +3,8 @@ import { organizationHttpApi } from './http';
 import { organizationMockApi } from './mock';
 import type {
   AssignShiftOvertimeInput,
+  BulkImportEmployeesInput,
+  BulkImportEmployeesResponse,
   CreateEmployeeInput,
   CreatePostInput,
   CreateShiftInput,
@@ -42,6 +44,7 @@ export type OrganizationApi = {
   createPost: (siteId: string, input: CreatePostInput) => Promise<Post>;
   updatePost: (postId: string, input: UpdatePostInput) => Promise<Post>;
   createEmployee: (input: CreateEmployeeInput) => Promise<Employee>;
+  bulkImportEmployees: (siteId: string, input: BulkImportEmployeesInput) => Promise<BulkImportEmployeesResponse>;
   updateEmployee: (employeeId: string, input: UpdateEmployeeInput) => Promise<Employee>;
   createShift: (input: CreateShiftInput) => Promise<ShiftWithWarnings>;
   updateShift: (shiftId: string, input: UpdateShiftInput) => Promise<ShiftWithWarnings>;

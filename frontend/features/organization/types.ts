@@ -116,6 +116,37 @@ export type CreateEmployeeInput = {
 /** The email is not editable; `siteIds` replaces the whole set. */
 export type UpdateEmployeeInput = Partial<Omit<CreateEmployeeInput, 'email'>> & { isActive?: boolean };
 
+export type BulkImportEmployeeItem = {
+  nationalId: string;
+  fullName: string;
+  email: string;
+  password: string;
+};
+
+export type BulkImportEmployeesInput = {
+  items: BulkImportEmployeeItem[];
+};
+
+export type BulkImportEmployeeRowResult = {
+  rowNumber: number;
+  nationalId: string;
+  fullName: string;
+  email: string;
+  status: 'created' | 'updated' | 'failed';
+  employeeId?: string;
+  code?: string;
+  detail?: string;
+};
+
+export type BulkImportEmployeesResponse = {
+  siteId: string;
+  totalRows: number;
+  createdCount: number;
+  updatedCount: number;
+  failedCount: number;
+  results: BulkImportEmployeeRowResult[];
+};
+
 export type CreateShiftInput = { siteId: string; postId: string; startsAt: string; endsAt: string; employeeId?: string | null };
 /** `version` is the one the caller read (optimistic concurrency). */
 export type UpdateShiftInput = { version: number; startsAt?: string; endsAt?: string; postId?: string };
