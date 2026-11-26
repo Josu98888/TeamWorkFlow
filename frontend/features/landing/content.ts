@@ -74,10 +74,9 @@ export const PLANS: { name: string; tagline: string; price: string; features: st
   },
 ];
 
-// TODO(landing): photo of Angela in `public/landing/team/`.
 export const TEAM: { name: string; photo?: string }[] = [
   { name: 'Josué Aquino', photo: '/landing/team/josue-aquino.jpg' },
-  { name: 'Angela' },
+  { name: 'Ángela Alvarez', photo: '/landing/team/angela-alvarez.jpg' },
   { name: 'Matías Robles', photo: '/landing/team/matias-robles.jpg' },
 ];
 
