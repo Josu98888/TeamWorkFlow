@@ -23,6 +23,7 @@ const STATUS_MAP: Record<WorkdayStatusDto, WorkdayStatus> = {
   [WorkdayStatusDto.OPEN]: 'OPEN',
   [WorkdayStatusDto.CLOSED]: 'CLOSED',
   [WorkdayStatusDto.MISSING_CLOCK_OUT]: 'MISSING_CLOCK_OUT',
+  [WorkdayStatusDto.ABSENT]: 'ABSENT',
 };
 
 @Injectable()
@@ -72,8 +73,13 @@ export class WorkdaysService {
     let currentIn: Date | null = null;
     let currentBreakStart: Date | null = null;
     let firstIn: Date | null = null;
+    let lastOut: Date | null = null;
+    let hasOutOfGeofence = false;
 
     for (const evt of events) {
+      if ((evt as { outOfGeofence?: boolean }).outOfGeofence) {
+        hasOutOfGeofence = true;
+      }
       if (evt.type === 'IN') {
         if (!firstIn) {
           firstIn = evt.deviceTime;
@@ -91,6 +97,7 @@ export class WorkdaysService {
           currentBreakStart = null;
         }
       } else if (evt.type === 'OUT') {
+        lastOut = evt.deviceTime;
         if (currentIn) {
           if (currentBreakStart) {
             totalBreakMs += evt.deviceTime.getTime() - currentBreakStart.getTime();
@@ -106,12 +113,21 @@ export class WorkdaysService {
 
     const now = Date.now();
     const shiftEndMs = shift.endsAt.getTime();
+    const authorizedOvertimeMinutes = Math.max(
+      0,
+      (shift as { authorizedOvertimeMinutes?: number }).authorizedOvertimeMinutes ?? 0,
+    );
+    const hasExplicitOvertimeCap =
+      typeof (shift as { authorizedOvertimeMinutes?: number }).authorizedOvertimeMinutes ===
+      'number';
+    const effectiveEndMs = shiftEndMs + authorizedOvertimeMinutes * 60_000;
     const missingClockOutThreshold =
-      shiftEndMs +
+      effectiveEndMs +
       WORKDAYS_CONSTANTS.MISSING_CLOCK_OUT_HOURS * 60 * 60 * 1000;
 
     let status: WorkdayStatus;
     let workedMinutes = 0;
+    let rawOvertimeMinutes = 0;
     let overtimeMinutes = 0;
 
     const shiftDurationMinutes = Math.max(
@@ -122,15 +138,27 @@ export class WorkdaysService {
     if (firstIn && currentIn && now >= missingClockOutThreshold) {
       status = 'MISSING_CLOCK_OUT';
       workedMinutes = 0;
+      rawOvertimeMinutes = 0;
       overtimeMinutes = 0;
     } else if (firstIn && !currentIn) {
       status = 'CLOSED';
       workedMinutes = Math.floor(totalWorkedMs / 60000);
-      overtimeMinutes = Math.max(0, workedMinutes - shiftDurationMinutes);
+      rawOvertimeMinutes = Math.max(0, workedMinutes - shiftDurationMinutes);
+      overtimeMinutes = hasExplicitOvertimeCap
+        ? Math.min(rawOvertimeMinutes, authorizedOvertimeMinutes)
+        : rawOvertimeMinutes;
+    } else if (!firstIn && (now >= shiftEndMs || shift.status === 'COMPLETED')) {
+      status = 'ABSENT';
+      workedMinutes = 0;
+      rawOvertimeMinutes = 0;
+      overtimeMinutes = 0;
     } else {
       status = 'OPEN';
       workedMinutes = Math.floor(totalWorkedMs / 60000);
-      overtimeMinutes = Math.max(0, workedMinutes - shiftDurationMinutes);
+      rawOvertimeMinutes = Math.max(0, workedMinutes - shiftDurationMinutes);
+      overtimeMinutes = hasExplicitOvertimeCap
+        ? Math.min(rawOvertimeMinutes, authorizedOvertimeMinutes)
+        : rawOvertimeMinutes;
     }
 
     let lateMinutes = 0;
@@ -162,17 +190,31 @@ export class WorkdaysService {
           shiftId,
           employeeId,
           siteId: shift.siteId,
+          postId: (shift as { postId?: string }).postId ?? null,
+          scheduledMinutes: shiftDurationMinutes,
           workedMinutes,
+          authorizedOvertimeMinutes,
+          rawOvertimeMinutes,
           overtimeMinutes,
           lateMinutes,
+          firstInAt: firstIn,
+          lastOutAt: lastOut,
+          hasOutOfGeofence,
           status,
         },
         update: {
           employeeId,
           siteId: shift.siteId,
+          postId: (shift as { postId?: string }).postId ?? null,
+          scheduledMinutes: shiftDurationMinutes,
           workedMinutes,
+          authorizedOvertimeMinutes,
+          rawOvertimeMinutes,
           overtimeMinutes,
           lateMinutes,
+          firstInAt: firstIn,
+          lastOutAt: lastOut,
+          hasOutOfGeofence,
           status,
         },
       });

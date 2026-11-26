@@ -14,12 +14,18 @@ import {
 } from '../organization-actor';
 import type { PageResult } from '../sites/sites.service';
 import {
+  BulkImportEmployeesBodyDto,
   CreateEmployeeBodyDto,
   EmployeeIdParamDto,
+  EmployeeSiteParamDto,
   ListEmployeesQueryDto,
   UpdateEmployeeBodyDto,
 } from './dto/employee.dto';
-import { EmployeesService, type EmployeeView } from './employees.service';
+import {
+  EmployeesService,
+  type BulkImportEmployeesResult,
+  type EmployeeView,
+} from './employees.service';
 
 // HTTP transport only (route map in `backend/core/AGENTS.md`). The actor comes
 // from the AuthGuard; roles and visibility are enforced by the service.
@@ -33,6 +39,19 @@ export class EmployeesController {
     @Body() body: CreateEmployeeBodyDto,
   ): Promise<EmployeeView> {
     return this.employees.create(toOrganizationActor(actor), body);
+  }
+
+  @Post('sites/:siteId/bulk-import')
+  bulkImportForSite(
+    @CurrentActor() actor: OrganizationActor,
+    @Param() params: EmployeeSiteParamDto,
+    @Body() body: BulkImportEmployeesBodyDto,
+  ): Promise<BulkImportEmployeesResult> {
+    return this.employees.bulkImportForSite(
+      toOrganizationActor(actor),
+      params.siteId,
+      body,
+    );
   }
 
   @Get()

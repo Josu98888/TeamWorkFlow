@@ -14,6 +14,7 @@ interface LifecycleRow {
   employeeId: string | null;
   startsAt: Date;
   endsAt: Date;
+  authorizedOvertimeMinutes?: number;
   status: ShiftStatus;
   version: number;
 }
@@ -126,6 +127,17 @@ export class ShiftLifecycleService {
 
       let batchApplied = 0;
       for (const row of rows) {
+        if (
+          event === ORGANIZATION_EVENTS.shiftEnded &&
+          (row.authorizedOvertimeMinutes ?? 0) > 0
+        ) {
+          const effectiveEndMs =
+            row.endsAt.getTime() + (row.authorizedOvertimeMinutes ?? 0) * 60_000;
+          const threshold = (where.endsAt as { lte?: Date } | undefined)?.lte;
+          if (threshold && effectiveEndMs > threshold.getTime()) {
+            continue;
+          }
+        }
         const next = transition(row);
         const { count } = await this.prisma.shift.updateMany({
           where: {

@@ -5,7 +5,7 @@ import {
   ValidationException,
 } from '../../common/exceptions/app.exceptions';
 import type { OrganizationActor } from '../organization-actor';
-import { EmployeesService } from './employees.service';
+import { EmployeesService, splitEmployeeFullName } from './employees.service';
 
 jest.mock('../../config', () => ({ envs: {} }));
 // Only the class shape of the generated client is needed.
@@ -355,6 +355,14 @@ describe('EmployeesService', () => {
       expect(view.siteIds).toEqual([SITE_2]);
       expect(view.isActive).toBe(false);
       expect(view.firstName).toBe('Ana');
+      expect(publish).toHaveBeenCalledWith(
+        TENANT_A,
+        'employee_updated',
+        expect.objectContaining({
+          employeeId: 'e-ana',
+          siteIds: [SITE_2],
+        }),
+      );
     });
 
     it('leaves the sites alone when siteIds is not sent', async () => {
@@ -554,6 +562,149 @@ describe('EmployeesService', () => {
         service.list(actor('platform_admin', { tenantId: null }), {}),
       );
       expect(error).toBeInstanceOf(ForbiddenException);
+    });
+  });
+
+  // Covers: EMP-2.2
+  describe('splitEmployeeFullName', () => {
+    it('splits space-separated, comma-separated, PascalCase and single-token names', () => {
+      expect(splitEmployeeFullName('Juan Carlos Perez')).toEqual({
+        firstName: 'Juan',
+        lastName: 'Carlos Perez',
+      });
+      expect(splitEmployeeFullName('Perez, Juan Carlos')).toEqual({
+        firstName: 'Juan Carlos',
+        lastName: 'Perez',
+      });
+      expect(splitEmployeeFullName('JuanPerez')).toEqual({
+        firstName: 'Juan',
+        lastName: 'Perez',
+      });
+      expect(splitEmployeeFullName('Juan')).toEqual({
+        firstName: 'Juan',
+        lastName: '-',
+      });
+    });
+  });
+
+  // Covers: EMP-2.2
+  describe('bulkImportForSite', () => {
+    const provisionEmployeeAccount = jest.fn();
+    let bulkService: EmployeesService;
+
+    beforeEach(() => {
+      provisionEmployeeAccount.mockReset();
+      bulkService = new EmployeesService(
+        prisma as never,
+        { publish } as never,
+        { findExistingSiteIds } as never,
+        { provisionEmployeeAccount } as never,
+      );
+    });
+
+    it('provisions auth accounts, creates new employees in the target site, links existing ones and reports per-row conflicts', async () => {
+      const existingBob = rows.find((r) => r.id === 'e-bob');
+      if (existingBob) existingBob.nationalId = '29444555';
+
+      provisionEmployeeAccount
+        .mockResolvedValueOnce({
+          userId: 'u-lucas',
+          email: 'lucas@example.com',
+          created: true,
+        })
+        .mockResolvedValueOnce({
+          userId: USER_BOB,
+          email: 'e-bob@example.com',
+          created: false,
+        })
+        .mockRejectedValueOnce(new EmailTakenException());
+
+      const summary = await bulkService.bulkImportForSite(
+        actor('owner'),
+        SITE_1,
+        {
+          items: [
+            {
+              nationalId: '35123456',
+              fullName: 'LucasGomez',
+              email: 'Lucas@Example.com',
+              password: 'Password123!',
+            },
+            {
+              nationalId: '29444555',
+              fullName: 'Bob Benitez',
+              email: 'e-bob@example.com',
+              password: 'Password123!',
+            },
+            {
+              nationalId: '40999888',
+              fullName: 'Otro Tenant',
+              email: 'taken@other.com',
+              password: 'Password123!',
+            },
+            {
+              nationalId: '30111222',
+              fullName: 'Clon Dni',
+              email: 'clon@example.com',
+              password: 'Password123!',
+            },
+          ],
+        },
+      );
+
+      expect(summary.siteId).toBe(SITE_1);
+      expect(summary.totalRows).toBe(4);
+      expect(summary.createdCount).toBe(1);
+      expect(summary.updatedCount).toBe(1);
+      expect(summary.failedCount).toBe(2);
+      expect(summary.results.map((r) => r.status)).toEqual([
+        'created',
+        'updated',
+        'failed',
+        'failed',
+      ]);
+      expect(summary.results[2]?.code).toBe('email_taken');
+      expect(summary.results[3]?.code).toBe('national_id_taken');
+
+      const createdLucas = rows.find((r) => r.email === 'lucas@example.com');
+      expect(createdLucas).toMatchObject({
+        firstName: 'Lucas',
+        lastName: 'Gomez',
+        nationalId: '35123456',
+        userId: 'u-lucas',
+        sites: [{ tenantId: TENANT_A, siteId: SITE_1 }],
+      });
+
+      const updatedBob = rows.find((r) => r.id === 'e-bob');
+      expect(updatedBob?.sites.map((s) => s.siteId)).toEqual([SITE_2, SITE_1]);
+    });
+
+    it('rejects non-managers (403) and sites outside the tenant (422)', async () => {
+      await expect(
+        bulkService.bulkImportForSite(actor('supervisor', { siteIds: [SITE_1] }), SITE_1, {
+          items: [
+            {
+              nationalId: '35123456',
+              fullName: 'Lucas Gomez',
+              email: 'lucas@example.com',
+              password: 'Password123!',
+            },
+          ],
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      await expect(
+        bulkService.bulkImportForSite(actor('admin'), SITE_B, {
+          items: [
+            {
+              nationalId: '35123456',
+              fullName: 'Lucas Gomez',
+              email: 'lucas@example.com',
+              password: 'Password123!',
+            },
+          ],
+        }),
+      ).rejects.toBeInstanceOf(ValidationException);
     });
   });
 });

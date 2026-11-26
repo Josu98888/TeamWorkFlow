@@ -93,8 +93,8 @@ describe('ShiftSnapshotService', () => {
       mockPrisma.shiftSnapshot.findMany.mockResolvedValue([shift]);
     });
 
-    it('matches clock-in 60 minutes before shift start', async () => {
-      const deviceTime = new Date('2026-10-28T08:00:00.000Z'); // Exactly 60 min before
+    it('matches clock-in 15 minutes before shift start', async () => {
+      const deviceTime = new Date('2026-10-28T08:45:00.000Z'); // Exactly 15 min before
       const matched = await service.findMatchingShiftForClockIn(
         'tenant-1',
         'emp-1',
@@ -106,8 +106,8 @@ describe('ShiftSnapshotService', () => {
       expect(matched?.shiftId).toBe('shift-1');
     });
 
-    it('rejects clock-in 61 minutes before shift start (outside window)', async () => {
-      const deviceTime = new Date('2026-10-28T07:59:00.000Z'); // 61 min before
+    it('rejects clock-in 16 minutes before shift start and finds it as upcoming too-early shift', async () => {
+      const deviceTime = new Date('2026-10-28T08:44:00.000Z'); // 16 min before
       const matched = await service.findMatchingShiftForClockIn(
         'tenant-1',
         'emp-1',
@@ -116,6 +116,13 @@ describe('ShiftSnapshotService', () => {
       );
 
       expect(matched).toBeNull();
+      const upcoming = await service.findUpcomingTooEarlyShift(
+        'tenant-1',
+        'emp-1',
+        'site-1',
+        deviceTime,
+      );
+      expect(upcoming?.shiftId).toBe('shift-1');
     });
 
     it('matches clock-in at the middle of the shift', async () => {
@@ -155,8 +162,8 @@ describe('ShiftSnapshotService', () => {
         startsAt: new Date('2026-10-28T12:00:00.000Z'),
         endsAt: new Date('2026-10-28T16:00:00.000Z'),
       };
-      // Inside A's window and B's early window.
-      const deviceTime = new Date('2026-10-28T11:30:00.000Z');
+      // Inside A's window and B's 15-min early window.
+      const deviceTime = new Date('2026-10-28T11:45:00.000Z');
       const at = (iso: string) => new Date(iso);
       const match = () =>
         service.findMatchingShiftForClockIn('tenant-1', 'emp-1', 'site-1', deviceTime);

@@ -4,6 +4,9 @@ export const DEFAULT_LOCALE = 'es';
 
 export const NOTIFICATION_TEMPLATES = {
   alertOpened: 'alert_opened',
+  dailyAttendanceReport: 'daily_attendance_report',
+  monthlyAttendanceReport: 'monthly_attendance_report',
+  payrollReportReady: 'payroll_report_ready',
   taskAssigned: 'task_assigned',
   billingInvoiceIssued: 'billing_invoice_issued',
   billingDueSoon: 'billing_due_soon',
@@ -53,6 +56,33 @@ const ES_TEMPLATES: Record<NotificationTemplateCode, TemplateRenderer> = {
       body: employeeName
         ? `Se registró una alerta (${alertType}) para ${employeeName} en ${siteName}.`
         : `Se registró una alerta (${alertType}) en ${siteName}.`,
+    };
+  },
+  daily_attendance_report: (data) => {
+    const reportDate = str(data, 'reportDate');
+    const absentCount = str(data, 'absentCount', '0');
+    const outOfGeofenceCount = str(data, 'outOfGeofenceCount', '0');
+    return {
+      title: `Informe diario de asistencia (${reportDate})`,
+      body: `Disponible el informe diario del ${reportDate}: ${absentCount} ausencia(s) y ${outOfGeofenceCount} fichaje(s) fuera de geocerca.`,
+    };
+  },
+  monthly_attendance_report: (data) => {
+    const period = str(data, 'period');
+    const totalAttendedShifts = str(data, 'totalAttendedShifts', '0');
+    const totalAbsentShifts = str(data, 'totalAbsentShifts', '0');
+    const totalOutOfGeofence = str(data, 'totalOutOfGeofence', '0');
+    return {
+      title: `Informe mensual de asistencia (${period})`,
+      body: `Se generó el cierre mensual de ${period}: ${totalAttendedShifts} asistencia(s), ${totalAbsentShifts} ausencia(s) y ${totalOutOfGeofence} fichaje(s) fuera de geocerca.`,
+    };
+  },
+  payroll_report_ready: (data) => {
+    const period = str(data, 'period');
+    const totalPay = str(data, 'totalPay', '0.00');
+    return {
+      title: `Liquidación mensual en Excel lista (${period})`,
+      body: `La liquidación del período ${period} (total $${totalPay} ARS) está lista para descargar en Excel.`,
     };
   },
   task_assigned: (data) => {

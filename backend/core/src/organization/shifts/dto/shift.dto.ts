@@ -2,12 +2,17 @@ import {
   IsInt,
   IsISO8601,
   IsOptional,
+  IsString,
   IsUUID,
   Matches,
+  Max,
+  MaxLength,
   Min,
   ValidateIf,
 } from 'class-validator';
 import { PageQueryDto } from '../../sites/dto/site.dto';
+
+export const MAX_AUTHORIZED_OVERTIME_MINUTES = 720;
 
 // An instant must state its offset (`Z` or `+hh:mm`): a bare local time would
 // be ambiguous. The service parses it into a Date.
@@ -72,6 +77,23 @@ export class CancelShiftBodyDto {
   @IsInt()
   @Min(1)
   version!: number;
+}
+
+// HTTP body of `POST /shifts/:shiftId/overtime`.
+export class AssignShiftOvertimeBodyDto {
+  @IsInt()
+  @Min(1)
+  version!: number;
+
+  @IsInt()
+  @Min(0)
+  @Max(MAX_AUTHORIZED_OVERTIME_MINUTES)
+  authorizedOvertimeMinutes!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  reason?: string | null;
 }
 
 export class ShiftIdParamDto {

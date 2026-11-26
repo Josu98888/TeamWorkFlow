@@ -1,6 +1,7 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   ArrayUnique,
   IsArray,
   IsBoolean,
@@ -13,12 +14,18 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 import { PageQueryDto } from '../../sites/dto/site.dto';
 
 export const MAX_ENABLED_SITES = 200;
 export const MAX_WEEKLY_HOURS_LIMIT = 168;
+export const MAX_BULK_IMPORT_EMPLOYEES = 200;
+
+const trimString = ({ value }: { value: unknown }): unknown =>
+  typeof value === 'string' ? value.trim() : value;
 
 // Nullable columns use `@IsOptional()` (it also lets `null` through, which
 // clears the value on update). Required columns on update use
@@ -175,4 +182,42 @@ export class ListEmployeesQueryDto extends PageQueryDto {
   @IsNotEmpty()
   @MaxLength(100)
   search?: string;
+}
+
+export class EmployeeSiteParamDto {
+  @IsUUID()
+  siteId!: string;
+}
+
+export class BulkImportEmployeeItemDto {
+  @Transform(trimString)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(40)
+  nationalId!: string;
+
+  @Transform(trimString)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  fullName!: string;
+
+  @Transform(trimString)
+  @IsEmail()
+  @MaxLength(254)
+  email!: string;
+
+  @IsString()
+  @MinLength(8)
+  @MaxLength(128)
+  password!: string;
+}
+
+export class BulkImportEmployeesBodyDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(MAX_BULK_IMPORT_EMPLOYEES)
+  @ValidateNested({ each: true })
+  @Type(() => BulkImportEmployeeItemDto)
+  items!: BulkImportEmployeeItemDto[];
 }

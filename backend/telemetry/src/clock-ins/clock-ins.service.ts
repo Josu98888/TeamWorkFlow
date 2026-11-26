@@ -1,16 +1,19 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { envs } from '../config';
 import { AttendancePrismaService } from '../prisma/attendance-prisma.service';
 import { JetStreamService } from '../nats/jetstream.service';
 import { GeofenceService } from '../geofence/geofence.service';
 import { EmployeeCacheService } from '../geofence/employee-cache.service';
 import { ShiftSnapshotService } from '../shifts/shift-snapshot.service';
+import { OrgSnapshotsService } from '../snapshots/org-snapshots.service';
 import { TenantStateService } from '../tenants/tenant-state.service';
 import { WorkdaysService } from '../workdays/workdays.service';
 import { AlertsService } from '../alerts/alerts.service';
 import { TowerService } from '../tower/tower.service';
 import {
   ClockEventNotFoundException,
+  ClockInTooEarlyException,
   ClockTooOldException,
   ForbiddenException,
   NoMatchingShiftException,
@@ -59,7 +62,26 @@ export class ClockInsService {
     private readonly workdaysService: WorkdaysService,
     private readonly alertsService: AlertsService,
     private readonly towerService: TowerService,
+    @Optional() private readonly snapshots?: OrgSnapshotsService,
   ) {}
+
+  private formatWallClockTime(instant: Date, timeZone: string): string {
+    try {
+      return new Intl.DateTimeFormat('es-AR', {
+        timeZone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).format(instant);
+    } catch {
+      return new Intl.DateTimeFormat('es-AR', {
+        timeZone: 'America/Argentina/Buenos_Aires',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).format(instant);
+    }
+  }
 
   /**
    * Records a worker clock event (IN, OUT, BREAK) via GPS or QR with geofence validation.
@@ -108,6 +130,25 @@ export class ClockInsService {
         deviceTime,
       );
       if (!shift) {
+        if (typeof this.shifts.findUpcomingTooEarlyShift === 'function') {
+          const upcoming = await this.shifts.findUpcomingTooEarlyShift(
+            actor.tenantId,
+            employee.id,
+            dto.siteId,
+            deviceTime,
+          );
+          if (upcoming) {
+            const tz =
+              (await this.snapshots?.getSiteTimezone(
+                actor.tenantId,
+                dto.siteId,
+              )) ??
+              envs.defaultReportTz ??
+              'America/Argentina/Buenos_Aires';
+            const formatted = this.formatWallClockTime(upcoming.startsAt, tz);
+            throw new ClockInTooEarlyException(formatted);
+          }
+        }
         throw new NoMatchingShiftException();
       }
       matchedShiftId = shift.shiftId;
@@ -439,5 +480,66 @@ export class ClockInsService {
     ]);
 
     return { items, total };
+  }
+
+  /**
+   * Returns whether the authenticated employee currently has an open IN event
+   * (so the UI can keep the shift visible during overtime and preselect OUT).
+   */
+  async getActiveClockStatus(actor: VerifiedActor): Promise<{
+    hasOpenIn: boolean;
+    openShiftId: string | null;
+    siteId: string | null;
+    inDeviceTime: string | null;
+  }> {
+    const employee = await this.employeeCache.getEmployee(
+      actor.tenantId,
+      actor.userId,
+    );
+    if (!employee) {
+      return {
+        hasOpenIn: false,
+        openShiftId: null,
+        siteId: null,
+        inDeviceTime: null,
+      };
+    }
+
+    const inEvents = await this.prisma.clockEvent.findMany({
+      where: {
+        tenantId: actor.tenantId,
+        employeeId: employee.id,
+        type: 'IN',
+      },
+      orderBy: { deviceTime: 'desc' },
+      take: 10,
+    });
+
+    for (const inEvt of inEvents) {
+      const hasOut = await this.prisma.clockEvent.findFirst({
+        where: {
+          tenantId: actor.tenantId,
+          employeeId: employee.id,
+          shiftId: inEvt.shiftId,
+          type: 'OUT',
+          deviceTime: { gte: inEvt.deviceTime },
+        },
+      });
+      if (!hasOut) {
+        return {
+          hasOpenIn: true,
+          openShiftId: inEvt.shiftId,
+          siteId: inEvt.siteId,
+          inDeviceTime: inEvt.deviceTime.toISOString(),
+        };
+      }
+    }
+
+    return {
+      hasOpenIn: false,
+      openShiftId: null,
+      siteId: null,
+      inDeviceTime: null,
+    };
   }
 }

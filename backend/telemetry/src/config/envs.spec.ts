@@ -22,6 +22,10 @@ describe('telemetry envs', () => {
       rateLimitAuthLimit: 100,
       jwtSecret: undefined,
       authCacheTtlMs: 5000,
+      defaultReportTz: 'America/Argentina/Buenos_Aires',
+      mailEnabled: false,
+      mailFrom: 'no-reply@teamworkflow.local',
+      mailProvider: 'fake',
     });
   });
 

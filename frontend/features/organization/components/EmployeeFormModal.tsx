@@ -17,6 +17,7 @@ const orNull = (text: string) => (text.trim() ? text.trim() : null);
 export function EmployeeFormModal({
   employee,
   sites,
+  defaultSiteId,
   onClose,
   onSaved,
   onInvite,
@@ -24,6 +25,8 @@ export function EmployeeFormModal({
 }: {
   employee?: Employee;
   sites: Site[];
+  /** Pre-selects a site when creating a new employee from inside a site folder. */
+  defaultSiteId?: string;
   onClose: () => void;
   onSaved: () => void;
   /** Sends the access invitation after the profile is created. Without it the Acceso select is hidden. */
@@ -38,7 +41,9 @@ export function EmployeeFormModal({
   const [nationalId, setNationalId] = useState(employee?.nationalId ?? '');
   const [skills, setSkills] = useState(employee?.skills.join(', ') ?? '');
   const [weeklyHours, setWeeklyHours] = useState(employee?.weeklyHoursLimit ? String(employee.weeklyHoursLimit) : '');
-  const [siteIds, setSiteIds] = useState<string[]>(employee?.siteIds ?? []);
+  const [siteIds, setSiteIds] = useState<string[]>(
+    employee?.siteIds ?? (defaultSiteId ? [defaultSiteId] : []),
+  );
   const [isActive, setIsActive] = useState(employee?.isActive ?? true);
   const [access, setAccess] = useState<AccessChoice>('');
   // Set when the profile was created but the follow-up invitation failed.

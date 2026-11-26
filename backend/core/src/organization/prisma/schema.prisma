@@ -119,6 +119,10 @@ model Shift {
   startsAt   DateTime    @map("starts_at") @db.Timestamptz(3)
   endsAt     DateTime    @map("ends_at") @db.Timestamptz(3)
   status     ShiftStatus @default(SCHEDULED)
+  authorizedOvertimeMinutes Int       @default(0) @map("authorized_overtime_minutes")
+  overtimeReason            String?   @map("overtime_reason")
+  overtimeAssignedByUserId  String?   @map("overtime_assigned_by_user_id") @db.Uuid
+  overtimeAssignedAt        DateTime? @map("overtime_assigned_at") @db.Timestamptz(3)
   // Optimistic locking: incremented on every successful write.
   version    Int         @default(1)
   // Marker so `shift_starting` is emitted once.

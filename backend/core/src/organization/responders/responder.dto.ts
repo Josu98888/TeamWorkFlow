@@ -1,4 +1,4 @@
-import { IsUUID } from 'class-validator';
+import { IsOptional, IsUUID } from 'class-validator';
 
 // Payloads of the NATS responders `telemetry` calls. They carry an explicit
 // `tenantId` and no actor (background-style call, trusted internal network).
@@ -9,6 +9,15 @@ export class SiteGetRequestDto {
 
   @IsUUID()
   siteId!: string;
+}
+
+export class TenantCatalogRequestDto {
+  @IsUUID()
+  tenantId!: string;
+
+  @IsOptional()
+  @IsUUID()
+  siteId?: string;
 }
 
 // `telemetry` looks the employee up by the actor `userId` only.

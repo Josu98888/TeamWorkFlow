@@ -8,9 +8,18 @@ export type AppErrorCode =
   | 'upstream_timeout'
   | 'upstream_unavailable'
   | 'no_matching_shift'
+  | 'clock_in_too_early'
+  | 'already_clocked_in'
+  | 'invalid_clock_sequence'
   | 'clock_event_not_found'
   | 'workday_not_found'
   | 'alert_not_found'
+  | 'site_not_found'
+  | 'post_not_found'
+  | 'employee_not_found'
+  | 'report_not_found'
+  | 'report_request_daily_limit_reached'
+  | 'mail_delivery_failed'
   | 'clock_too_old'
   | 'invalid_qr'
   | 'alert_invalid_transition'
@@ -112,6 +121,24 @@ export class NoMatchingShiftException extends AppException {
   }
 }
 
+export class ClockInTooEarlyException extends AppException {
+  constructor(formattedTime: string) {
+    super(422, 'clock_in_too_early', `Hora de entrada a las ${formattedTime}`);
+  }
+}
+
+export class AlreadyClockedInException extends AppException {
+  constructor() {
+    super(409, 'already_clocked_in', 'There is already an open clock-in for this shift');
+  }
+}
+
+export class InvalidClockSequenceException extends AppException {
+  constructor(message = 'Invalid chronological sequence for clock event') {
+    super(409, 'invalid_clock_sequence', message);
+  }
+}
+
 export class ClockEventNotFoundException extends AppException {
   constructor() {
     super(404, 'clock_event_not_found', 'Clock event not found');
@@ -127,6 +154,50 @@ export class WorkdayNotFoundException extends AppException {
 export class AlertNotFoundException extends AppException {
   constructor() {
     super(404, 'alert_not_found', 'Alert not found');
+  }
+}
+
+export class SiteNotFoundException extends AppException {
+  constructor() {
+    super(404, 'site_not_found', 'Site not found');
+  }
+}
+
+export class PostNotFoundException extends AppException {
+  constructor() {
+    super(404, 'post_not_found', 'Post not found');
+  }
+}
+
+export class EmployeeNotFoundException extends AppException {
+  constructor() {
+    super(404, 'employee_not_found', 'Employee not found');
+  }
+}
+
+export class ReportNotFoundException extends AppException {
+  constructor() {
+    super(404, 'report_not_found', 'Report not found');
+  }
+}
+
+export class ReportRequestDailyLimitReachedException extends AppException {
+  constructor(nextAvailableDate: string) {
+    super(
+      429,
+      'report_request_daily_limit_reached',
+      `Solo se puede solicitar este informe una vez al día por sede. Próximo pedido disponible el ${nextAvailableDate}.`,
+    );
+  }
+}
+
+export class MailDeliveryFailedException extends AppException {
+  constructor() {
+    super(
+      502,
+      'mail_delivery_failed',
+      'No se pudo enviar el informe por correo en este momento. Intentá nuevamente.',
+    );
   }
 }
 
