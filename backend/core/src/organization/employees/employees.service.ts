@@ -1,7 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import type { AuthService } from '../../auth/auth.service';
 import {
   EmailTakenException,
   EmployeeNotFoundException,
+  ForbiddenException,
+  TenantCancelledException,
+  TenantSuspendedException,
   ValidationException,
 } from '../../common/exceptions/app.exceptions';
 import { normalizeEmail } from '../../common/email';
@@ -16,6 +20,7 @@ import {
   type PageResult,
 } from '../sites/sites.service';
 import type {
+  BulkImportEmployeesBodyDto,
   CreateEmployeeBodyDto,
   ListEmployeesQueryDto,
   UpdateEmployeeBodyDto,
@@ -23,6 +28,7 @@ import type {
 import { canSeeNationalId, requireEmployeeManager } from './employee-policy';
 
 const UNIQUE_VIOLATION = 'P2002';
+export const EMPLOYEE_AUTH_PROVISIONER = 'EMPLOYEE_AUTH_PROVISIONER';
 
 interface EmployeeRow {
   id: string;
@@ -52,6 +58,69 @@ export type EmployeeView = Omit<EmployeeRow, 'sites' | 'nationalId'> & {
 
 export type EmployeeLookup = { employeeId: string } | { userId: string };
 
+export interface BulkImportEmployeeRowResult {
+  rowNumber: number;
+  nationalId: string;
+  fullName: string;
+  email: string;
+  status: 'created' | 'updated' | 'failed';
+  employeeId?: string;
+  code?: string;
+  detail?: string;
+}
+
+export interface BulkImportEmployeesResult {
+  siteId: string;
+  totalRows: number;
+  createdCount: number;
+  updatedCount: number;
+  failedCount: number;
+  results: BulkImportEmployeeRowResult[];
+}
+
+export function splitEmployeeFullName(fullName: string): {
+  firstName: string;
+  lastName: string;
+} {
+  const trimmed = fullName.trim();
+  if (trimmed.includes(',')) {
+    const [rawLast, ...rawFirstParts] = trimmed.split(',');
+    const first = rawFirstParts.join(' ').trim();
+    const last = rawLast.trim();
+    if (first && last) {
+      return {
+        firstName: first.slice(0, 100),
+        lastName: last.slice(0, 100),
+      };
+    }
+  }
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return {
+      firstName: words[0].slice(0, 100),
+      lastName: words.slice(1).join(' ').slice(0, 100),
+    };
+  }
+  const single = words[0] ?? '';
+  const camelMatch =
+    /^([A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+)((?:[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]*)+)$/.exec(
+      single,
+    );
+  if (camelMatch) {
+    const tailWords = camelMatch[2]
+      .replace(/([a-z0-9áéíóúüñ])([A-ZÁÉÍÓÚÜÑ])/g, '$1 $2')
+      .trim();
+    return {
+      firstName: camelMatch[1].slice(0, 100),
+      lastName: tailWords.slice(0, 100),
+    };
+  }
+  return {
+    firstName: (single || '-').slice(0, 100),
+    lastName: '-',
+  };
+}
+
 function isUniqueViolation(error: unknown) {
   return (
     typeof error === 'object' &&
@@ -78,6 +147,9 @@ export class EmployeesService {
     private readonly prisma: OrganizationPrismaService,
     private readonly events: OrganizationEventsService,
     private readonly sites: SitesService,
+    @Optional()
+    @Inject(EMPLOYEE_AUTH_PROVISIONER)
+    private readonly auth?: Pick<AuthService, 'provisionEmployeeAccount'>,
   ) {}
 
   // `organization.employee.create` (owner/admin). Email and legajo are unique
@@ -130,6 +202,244 @@ export class EmployeesService {
       },
     );
     return this.toView(manager, row);
+  }
+
+  // `organization.employee.bulk-import` (owner/admin). Provisions an active
+  // `EMPLOYEE` login account in `auth` (Argon2id password hash) and creates or
+  // links the employee profile enabled for `siteId`. Per-row conflicts (email
+  // taken in another tenant, DNI conflict) are reported in `results` without
+  // aborting valid rows.
+  async bulkImportForSite(
+    actor: OrganizationActor,
+    siteId: string,
+    dto: BulkImportEmployeesBodyDto,
+  ): Promise<BulkImportEmployeesResult> {
+    const manager = requireEmployeeManager(actor);
+    await this.requireTenantSites(manager.tenantId, [siteId]);
+    if (!this.auth) {
+      throw new Error('AuthService is not available');
+    }
+
+    const results: BulkImportEmployeeRowResult[] = [];
+    let createdCount = 0;
+    let updatedCount = 0;
+    let failedCount = 0;
+
+    for (let index = 0; index < dto.items.length; index++) {
+      const item = dto.items[index];
+      const rowNumber = index + 1;
+      const email = normalizeEmail(item.email);
+      const nationalId = item.nationalId.trim();
+      const fullName = item.fullName.trim();
+      const { firstName, lastName } = splitEmployeeFullName(fullName);
+      const displayName =
+        lastName === '-' ? firstName : `${firstName} ${lastName}`;
+
+      const dniMatches = await this.prisma.employee.findMany({
+        where: { tenantId: manager.tenantId, nationalId },
+        include: { sites: { select: { siteId: true } } },
+        skip: 0,
+        take: 5,
+      });
+      if (dniMatches.some((existing) => existing.email !== email)) {
+        failedCount++;
+        results.push({
+          rowNumber,
+          nationalId,
+          fullName,
+          email,
+          status: 'failed',
+          code: 'national_id_taken',
+          detail:
+            'Ya existe otro trabajador en la organización con ese DNI y otro correo.',
+        });
+        continue;
+      }
+
+      let provisioned: { userId: string; email: string; created: boolean };
+      try {
+        provisioned = await this.auth.provisionEmployeeAccount({
+          actor: {
+            userId: manager.userId,
+            tenantId: manager.tenantId,
+            role: manager.role,
+          },
+          email,
+          name: displayName,
+          password: item.password,
+        });
+      } catch (error) {
+        if (
+          error instanceof ForbiddenException ||
+          error instanceof TenantSuspendedException ||
+          error instanceof TenantCancelledException
+        ) {
+          throw error;
+        }
+        if (error instanceof EmailTakenException) {
+          failedCount++;
+          results.push({
+            rowNumber,
+            nationalId,
+            fullName,
+            email,
+            status: 'failed',
+            code: 'email_taken',
+            detail:
+              'El correo electrónico ya está registrado en otra organización.',
+          });
+          continue;
+        }
+        throw error;
+      }
+
+      const existingEmployee = await this.prisma.employee.findFirst({
+        where: { tenantId: manager.tenantId, email },
+        include: { sites: { select: { siteId: true } } },
+      });
+
+      if (!existingEmployee) {
+        try {
+          const row = await this.prisma.employee.create({
+            data: {
+              tenantId: manager.tenantId,
+              userId: provisioned.userId,
+              email,
+              firstName,
+              lastName,
+              nationalId,
+              skills: [],
+              isActive: true,
+              sites: {
+                create: [{ tenantId: manager.tenantId, siteId }],
+              },
+            },
+            include: { sites: { select: { siteId: true } } },
+          });
+
+          await this.events.publish(
+            row.tenantId,
+            ORGANIZATION_EVENTS.employeeCreated,
+            {
+              employeeId: row.id,
+              tenantId: row.tenantId,
+              email: row.email,
+              firstName: row.firstName,
+              lastName: row.lastName,
+            },
+          );
+          await this.events.publish(
+            row.tenantId,
+            ORGANIZATION_EVENTS.employeeUpdated,
+            {
+              employeeId: row.id,
+              tenantId: row.tenantId,
+              userId: row.userId,
+              firstName: row.firstName,
+              lastName: row.lastName,
+              employeeNumber: row.employeeNumber,
+              isActive: row.isActive,
+              siteIds: row.sites.map((site) => site.siteId),
+            },
+          );
+
+          createdCount++;
+          results.push({
+            rowNumber,
+            nationalId,
+            fullName,
+            email,
+            status: 'created',
+            employeeId: row.id,
+          });
+          continue;
+        } catch (error) {
+          if (!isUniqueViolation(error)) {
+            throw error;
+          }
+          // Concurrent creation (e.g. `UserCreatedHandler` consumer): fall through
+          // to the idempotent update + site link path below.
+        }
+      }
+
+      const target =
+        existingEmployee ?? (await this.findOrThrow(manager.tenantId, { email }));
+      const wasAutoStub = provisioned.created && target.nationalId === null;
+      const alreadyInSite = target.sites.some((site) => site.siteId === siteId);
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.employee.updateMany({
+          where: { id: target.id, tenantId: manager.tenantId },
+          data: {
+            firstName,
+            lastName,
+            nationalId,
+            isActive: true,
+            ...(target.userId === null ? { userId: provisioned.userId } : {}),
+          },
+        });
+        if (!alreadyInSite) {
+          await tx.employeeSite.createMany({
+            data: [
+              {
+                tenantId: manager.tenantId,
+                employeeId: target.id,
+                siteId,
+              },
+            ],
+          });
+        }
+      });
+
+      const updatedRow = await this.findOrThrow(manager.tenantId, {
+        id: target.id,
+      });
+      await this.events.publish(
+        updatedRow.tenantId,
+        ORGANIZATION_EVENTS.employeeUpdated,
+        {
+          employeeId: updatedRow.id,
+          tenantId: updatedRow.tenantId,
+          userId: updatedRow.userId,
+          firstName: updatedRow.firstName,
+          lastName: updatedRow.lastName,
+          employeeNumber: updatedRow.employeeNumber,
+          isActive: updatedRow.isActive,
+          siteIds: updatedRow.sites.map((site) => site.siteId),
+        },
+      );
+
+      if (wasAutoStub) {
+        createdCount++;
+        results.push({
+          rowNumber,
+          nationalId,
+          fullName,
+          email,
+          status: 'created',
+          employeeId: updatedRow.id,
+        });
+      } else {
+        updatedCount++;
+        results.push({
+          rowNumber,
+          nationalId,
+          fullName,
+          email,
+          status: 'updated',
+          employeeId: updatedRow.id,
+        });
+      }
+    }
+
+    return {
+      siteId,
+      totalRows: dto.items.length,
+      createdCount,
+      updatedCount,
+      failedCount,
+      results,
+    };
   }
 
   // `organization.employee.update` (owner/admin). Employees are never deleted:
