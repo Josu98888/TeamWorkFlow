@@ -32,7 +32,7 @@ import {
 import type { Employee, Post, Shift, ShiftTemplate, Site } from '../types';
 import { AssignWeeklyWorkerModal } from './AssignWeeklyWorkerModal';
 import { ShiftFolderBreadcrumbs } from './ShiftFolderBreadcrumbs';
-import { ReassignShiftModal, ShiftFormModal } from './ShiftFormModal';
+import { AssignOvertimeModal, ReassignShiftModal, ShiftFormModal } from './ShiftFormModal';
 import { ShiftSearchBar } from './ShiftSearchBar';
 
 type PostScheduleData = {
@@ -136,6 +136,7 @@ export function PostScheduleView({ siteId, postId }: { siteId: string; postId: s
   const [creatingShift, setCreatingShift] = useState(false);
   const [editingShift, setEditingShift] = useState<Shift | null>(null);
   const [reassigningShift, setReassigningShift] = useState<Shift | null>(null);
+  const [overtimeShift, setOvertimeShift] = useState<Shift | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const { run, pending, error: actionError } = useAction();
 
@@ -389,10 +390,19 @@ export function PostScheduleView({ siteId, postId }: { siteId: string; postId: s
               {filteredShifts.map((shift) => {
                 const emp = shift.employeeId ? employeeById.get(shift.employeeId) : undefined;
                 const editable = shift.status === 'SCHEDULED';
+                const canAssignOvertime = shift.status === 'SCHEDULED' || shift.status === 'IN_PROGRESS';
+                const extraMinutes = shift.authorizedOvertimeMinutes ?? 0;
                 return (
                   <tr key={shift.id}>
                     <td className="font-mono text-xs text-body tabular-nums">
-                      {formatDateTime(shift.startsAt)} – {formatDateTime(shift.endsAt)}
+                      <div>{formatDateTime(shift.startsAt)} – {formatDateTime(shift.endsAt)}</div>
+                      {extraMinutes > 0 && (
+                        <div className="mt-1">
+                          <Badge tone="warning">
+                            +{extraMinutes >= 60 ? `${(extraMinutes / 60).toFixed(extraMinutes % 60 === 0 ? 0 : 1)}h` : `${extraMinutes}m`} extra
+                          </Badge>
+                        </div>
+                      )}
                     </td>
                     <td>{emp ? employeeFullName(emp) : 'Sin asignar'}</td>
                     <td className="font-mono text-xs text-muted tabular-nums">{emp?.nationalId ?? '—'}</td>
@@ -401,17 +411,28 @@ export function PostScheduleView({ siteId, postId }: { siteId: string; postId: s
                     </td>
                     <td>
                       <Can capability="shifts.manage">
-                        {editable ? (
+                        {editable || canAssignOvertime ? (
                           <div className="flex flex-wrap gap-1.5">
-                            <Button variant="secondary" disabled={pending} onClick={() => setEditingShift(shift)}>
-                              Editar
-                            </Button>
-                            <Button variant="secondary" disabled={pending} onClick={() => setReassigningShift(shift)}>
-                              Reasignar
-                            </Button>
-                            <Button variant="ghost" disabled={pending} onClick={() => void handleCancelShift(shift)}>
-                              Cancelar
-                            </Button>
+                            {editable && (
+                              <>
+                                <Button variant="secondary" disabled={pending} onClick={() => setEditingShift(shift)}>
+                                  Editar
+                                </Button>
+                                <Button variant="secondary" disabled={pending} onClick={() => setReassigningShift(shift)}>
+                                  Reasignar
+                                </Button>
+                              </>
+                            )}
+                            {canAssignOvertime && (
+                              <Button variant="secondary" disabled={pending} onClick={() => setOvertimeShift(shift)}>
+                                Horas extra
+                              </Button>
+                            )}
+                            {editable && (
+                              <Button variant="ghost" disabled={pending} onClick={() => void handleCancelShift(shift)}>
+                                Cancelar
+                              </Button>
+                            )}
                           </div>
                         ) : (
                           <span className="text-xs text-muted">—</span>
@@ -465,6 +486,18 @@ export function PostScheduleView({ siteId, postId }: { siteId: string; postId: s
           onClose={() => setReassigningShift(null)}
           onSaved={() => {
             setReassigningShift(null);
+            reload();
+          }}
+        />
+      )}
+
+      {overtimeShift && (
+        <AssignOvertimeModal
+          shift={overtimeShift}
+          onClose={() => setOvertimeShift(null)}
+          onSaved={() => {
+            setOvertimeShift(null);
+            setFeedback('Horas extra actualizadas para el turno.');
             reload();
           }}
         />

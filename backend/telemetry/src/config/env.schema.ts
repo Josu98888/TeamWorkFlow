@@ -16,6 +16,7 @@ export interface Envs {
   rateLimitAuthLimit: number;
   jwtSecret?: string;
   authCacheTtlMs: number;
+  defaultReportTz: string;
 }
 
 interface EnvVars {
@@ -32,6 +33,7 @@ interface EnvVars {
   RATE_LIMIT_AUTH_LIMIT: number;
   JWT_SECRET?: string;
   AUTH_CACHE_TTL_MS: number;
+  DEFAULT_REPORT_TZ: string;
 }
 
 const envsSchema = joi
@@ -64,6 +66,7 @@ const envsSchema = joi
     RATE_LIMIT_AUTH_LIMIT: joi.number().positive().default(100),
     JWT_SECRET: joi.string().min(16).optional(),
     AUTH_CACHE_TTL_MS: joi.number().min(0).default(5000),
+    DEFAULT_REPORT_TZ: joi.string().default('America/Argentina/Buenos_Aires'),
   })
   .unknown(true);
 
@@ -115,5 +118,6 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
     rateLimitAuthLimit: envVars.RATE_LIMIT_AUTH_LIMIT,
     jwtSecret: envVars.JWT_SECRET,
     authCacheTtlMs: envVars.AUTH_CACHE_TTL_MS,
+    defaultReportTz: envVars.DEFAULT_REPORT_TZ,
   };
 }

@@ -206,6 +206,15 @@ export const organizationMockApi: OrganizationApi = {
   createShift: mockUnavailable,
   updateShift: mockUnavailable,
   reassignShift: mockUnavailable,
+  assignShiftOvertime: async (targetShiftId, input) => {
+    const found = SHIFTS.find((item) => item.id === targetShiftId);
+    if (!found) throw new Error('El turno no existe.');
+    found.authorizedOvertimeMinutes = input.authorizedOvertimeMinutes;
+    found.overtimeReason = input.reason ?? null;
+    found.version += 1;
+    found.updatedAt = new Date().toISOString();
+    return mockResponse({ ...found });
+  },
   cancelShift: mockUnavailable,
   createShiftTemplate: async (input) => {
     const created: ShiftTemplate = {

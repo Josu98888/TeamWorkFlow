@@ -11,8 +11,11 @@ import { TenantsModule } from './tenants/tenants.module';
 import { WorkdaysModule } from './workdays/workdays.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { ClockInsModule } from './clock-ins/clock-ins.module';
+import { CompensationModule } from './compensation/compensation.module';
 import { TowerModule } from './tower/tower.module';
 import { ConsumersModule } from './consumers/consumers.module';
+import { ReportsModule } from './reports/reports.module';
+import { SnapshotsModule } from './snapshots/snapshots.module';
 import { AuthGuard } from './http/guards/auth.guard';
 import { AppThrottlerGuard } from './http/guards/throttler.guard';
 import { HealthController } from './http/health/health.controller';
@@ -36,6 +39,9 @@ import { HealthController } from './http/health/health.controller';
     AlertsModule,
     TowerModule,
     ClockInsModule,
+    SnapshotsModule,
+    CompensationModule,
+    ReportsModule,
     ConsumersModule,
   ],
   controllers: [HealthController],

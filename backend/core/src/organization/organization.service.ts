@@ -15,6 +15,7 @@ import type {
 } from './sites/dto/site.dto';
 import { PostsService } from './sites/posts.service';
 import type {
+  AssignShiftOvertimeBodyDto,
   CancelShiftBodyDto,
   CreateShiftBodyDto,
   ListShiftsQueryDto,
@@ -69,6 +70,11 @@ export class OrganizationService {
     return this.sites.list(actor, query);
   }
 
+  // organization.site.list with an explicit tenant (telemetry catalog responder).
+  listSitesForTenant(tenantId: string): Promise<SiteView[]> {
+    return this.sites.listForTenant(tenantId);
+  }
+
   // organization.site.rotate-qr
   rotateSiteQr(actor: OrganizationActor, siteId: string) {
     return this.sites.rotateQr(actor, siteId);
@@ -87,6 +93,11 @@ export class OrganizationService {
   // organization.post.list
   listPosts(actor: OrganizationActor, siteId: string, query: PageQueryDto) {
     return this.posts.list(actor, siteId, query);
+  }
+
+  // organization.post.list with an explicit tenant (telemetry catalog responder).
+  listPostsForTenant(tenantId: string, siteId?: string) {
+    return this.posts.listForTenant(tenantId, siteId);
   }
 
   // organization.employee.create
@@ -127,6 +138,11 @@ export class OrganizationService {
     return this.employees.list(actor, query);
   }
 
+  // organization.employee.list with an explicit tenant (telemetry catalog responder).
+  listEmployeesForTenant(tenantId: string) {
+    return this.employees.listForTenant(tenantId);
+  }
+
   // organization.shift.create
   createShift(actor: OrganizationActor, dto: CreateShiftBodyDto) {
     return this.shifts.create(actor, dto);
@@ -148,6 +164,15 @@ export class OrganizationService {
     dto: ReassignShiftBodyDto,
   ) {
     return this.shifts.reassign(actor, shiftId, dto);
+  }
+
+  // organization.shift.assign-overtime
+  assignShiftOvertime(
+    actor: OrganizationActor,
+    shiftId: string,
+    dto: AssignShiftOvertimeBodyDto,
+  ) {
+    return this.shifts.assignOvertime(actor, shiftId, dto);
   }
 
   // organization.shift.cancel

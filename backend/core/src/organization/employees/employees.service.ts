@@ -173,6 +173,19 @@ export class EmployeesService {
     }
 
     const row = await this.findOrThrow(manager.tenantId, { id: employeeId });
+    await this.events.publish(
+      row.tenantId,
+      ORGANIZATION_EVENTS.employeeUpdated,
+      {
+        employeeId: row.id,
+        tenantId: row.tenantId,
+        userId: row.userId,
+        firstName: row.firstName,
+        lastName: row.lastName,
+        employeeNumber: row.employeeNumber,
+        isActive: row.isActive,
+      },
+    );
     return this.toView(manager, row);
   }
 
@@ -196,6 +209,16 @@ export class EmployeesService {
   ): Promise<EmployeeView> {
     const row = await this.findOrThrow(tenantId, lookupWhere(lookup));
     return this.toView(null, row);
+  }
+
+  // For the telemetry NATS catalog responder: all employees of `tenantId`.
+  async listForTenant(tenantId: string): Promise<EmployeeView[]> {
+    const rows = await this.prisma.employee.findMany({
+      where: { tenantId },
+      include: { sites: { select: { siteId: true } } },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }, { id: 'asc' }],
+    });
+    return rows.map((row) => this.toView(null, row));
   }
 
   // `organization.employee.list`. Owner/admin: the tenant; supervisor: only

@@ -46,6 +46,33 @@ export class ConsumedEventsProcessor implements OnModuleInit {
     this.events.registerHandler(CONSUMED_SUBJECTS.attendanceAlertOpened, (msg) =>
       this.handleAlertOpened(msg),
     );
+    this.events.registerHandler(
+      CONSUMED_SUBJECTS.attendanceDailyReportReady,
+      (msg) =>
+        this.handleAttendanceReportReady(
+          msg,
+          NOTIFICATION_TEMPLATES.dailyAttendanceReport,
+          false,
+        ),
+    );
+    this.events.registerHandler(
+      CONSUMED_SUBJECTS.attendanceMonthlyReportReady,
+      (msg) =>
+        this.handleAttendanceReportReady(
+          msg,
+          NOTIFICATION_TEMPLATES.monthlyAttendanceReport,
+          false,
+        ),
+    );
+    this.events.registerHandler(
+      CONSUMED_SUBJECTS.attendancePayrollReportReady,
+      (msg) =>
+        this.handleAttendanceReportReady(
+          msg,
+          NOTIFICATION_TEMPLATES.payrollReportReady,
+          true,
+        ),
+    );
     this.events.registerHandler(CONSUMED_SUBJECTS.tasksTaskAssigned, (msg) =>
       this.handleTaskAssigned(msg),
     );
@@ -265,6 +292,72 @@ export class ConsumedEventsProcessor implements OnModuleInit {
         tenantId,
         recipientUserIds: userIds,
         templateCode: NOTIFICATION_TEMPLATES.alertOpened,
+        data,
+        sourceEventId,
+      });
+    });
+
+    await this.delivery.dispatchPushes(dispatches);
+  }
+
+  async handleAttendanceReportReady(
+    message: ConsumedMessage,
+    templateCode: string,
+    requirePayrollFeature: boolean,
+  ): Promise<void> {
+    const validated = this.validateTenantPayload(message);
+    if (!validated) return;
+    const { tenantId, payload, eventId } = validated;
+
+    if (await this.alreadyProcessed(eventId)) {
+      return;
+    }
+
+    const [state, featuresRow] = await Promise.all([
+      this.prisma.tenantState.findUnique({ where: { tenantId } }),
+      this.prisma.tenantFeatures.findUnique({ where: { tenantId } }),
+    ]);
+
+    if (state?.isSuspended) {
+      await this.markSkippedEvent(eventId, tenantId);
+      return;
+    }
+
+    if (requirePayrollFeature) {
+      const hasPayroll =
+        featuresRow !== null &&
+        isRecord(featuresRow.features) &&
+        featuresRow.features.payroll_reports === true;
+      if (!hasPayroll) {
+        await this.markSkippedEvent(eventId, tenantId);
+        return;
+      }
+    }
+
+    const owners = await this.authService.listRecipients({
+      tenantId,
+      roles: ['owner'],
+    });
+    const assignedIds = asStringArray(payload.recipientUserIds);
+    const recipientUserIds = [...new Set([...owners.userIds, ...assignedIds])];
+
+    if (recipientUserIds.length === 0) {
+      await this.markSkippedEvent(eventId, tenantId);
+      return;
+    }
+
+    const sourceEventId = eventId || randomUUID();
+    const { eventId: _e, occurredAt: _o, recipientUserIds: _r, ...data } = payload;
+
+    const dispatches = await this.prisma.$transaction(async (tx) => {
+      const shouldProcess = await this.claimEvent(tx, eventId, tenantId);
+      if (!shouldProcess) {
+        return [] as PendingPushDispatch[];
+      }
+      return this.delivery.stageDeliveries(tx, {
+        tenantId,
+        recipientUserIds,
+        templateCode,
         data,
         sourceEventId,
       });

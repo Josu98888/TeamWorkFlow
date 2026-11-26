@@ -45,6 +45,12 @@ export class ClockInsController {
     return this.clockInsService.createManualClockEvent(actor, dto);
   }
 
+  @Get('active')
+  @Roles('employee')
+  getActiveClockStatus(@CurrentActor() actor: VerifiedActor) {
+    return this.clockInsService.getActiveClockStatus(actor);
+  }
+
   @Patch(':clockEventId')
   @Roles('supervisor', 'admin', 'owner')
   correctClockEvent(

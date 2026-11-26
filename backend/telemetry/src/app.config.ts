@@ -24,6 +24,7 @@ export function configureApp(app: INestApplication): void {
       'X-CSRF-Token',
       'X-Client',
     ],
+    exposedHeaders: ['Content-Disposition'],
   });
   app.setGlobalPrefix('api/v1/telemetry');
   app.useGlobalPipes(createValidationPipe());

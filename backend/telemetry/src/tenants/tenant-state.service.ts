@@ -36,7 +36,7 @@ export class TenantStateService {
    */
   async hasFeature(
     tenantId: string,
-    feature: 'alerts' | 'tower',
+    feature: 'alerts' | 'tower' | 'payroll_reports',
   ): Promise<boolean> {
     const record = await this.prisma.tenantFeatures.findFirst({
       where: { tenantId },
