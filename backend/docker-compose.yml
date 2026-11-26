@@ -91,6 +91,15 @@ services:
       - NATS_SERVER=nats://nats-server:4222
       - ATTENDANCE_DATABASE_URL=postgresql://attendance_svc:${ATTENDANCE_DB_PASSWORD}@postgres:5432/teamworkflow?schema=attendance
       - WEB_ORIGIN=${WEB_ORIGIN:-http://localhost:3000}
+      - MAIL_ENABLED=${MAIL_ENABLED:-false}
+      - MAIL_FROM=${MAIL_FROM:-no-reply@teamworkflow.local}
+      - MAIL_PROVIDER=${MAIL_PROVIDER:-fake}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-465}
+      - SMTP_SECURE=${SMTP_SECURE:-true}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
       - CHOKIDAR_USEPOLLING=true
     command: ["pnpm", "run", "start:dev"]
     depends_on:
