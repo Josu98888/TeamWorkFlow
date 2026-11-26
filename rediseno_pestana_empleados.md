@@ -1,8 +1,8 @@
-# Plan de Implementación — Pestaña de Empleados por Carpetas de Sedes y Carga Masiva de Usuarios (`steps.md`)
+# Plan de Implementación — Rediseño de Pestaña de Empleados por Carpetas de Sedes y Carga Masiva (`rediseno_pestana_empleados.md`)
 
-> **Ubicación:** `steps.md` (raíz del repositorio, porque coordina cambios en `backend/core` —módulos `auth` y `organization`— y en `frontend`).
+> **Ubicación:** `rediseno_pestana_empleados.md` (raíz del repositorio, porque coordina cambios en `backend/core` —módulos `auth` y `organization`— y en `frontend`).
 >
-> **Estado:** `last verified: — · next: EMP-1.1 · in progress: EMP-1.1 · blocked: —`
+> **Estado:** `last verified: EMP-5.1 · next: — · in progress: — · blocked: —`
 >
 > **Normativa aplicable:** Cumple estrictamente [`AGENTS.md`](./AGENTS.md), [`STEPS.rules.md`](./STEPS.rules.md), [`docs/architecture.md`](./docs/architecture.md), [`docs/database.md`](./docs/database.md), [`backend/core/AGENTS.md`](./backend/core/AGENTS.md), [`backend/core/src/auth/AGENTS.md`](./backend/core/src/auth/AGENTS.md), [`backend/core/src/organization/AGENTS.md`](./backend/core/src/organization/AGENTS.md) y las skills `teamworkflow-nest`, `teamworkflow-frontend`, `teamworkflow-nextjs`, `teamworkflow-react`, `teamworkflow-tailwind`, `teamworkflow-typescript` y `teamworkflow-commits`.
 
@@ -80,9 +80,9 @@ sequenceDiagram
 
 ## 4. Fases y Pasos Detallados
 
-### Fase 1 — Backend `auth`: Fachada de Provisionamiento de Cuentas de Empleados
+### Fase 1 — Backend `auth`: Fachada de Provisionamiento de Cuentas de Empleados (`e8eead4`)
 
-- [ ] **EMP-1.1** Agregar método interno de fachada `provisionEmployeeAccount` en `AuthService` (`backend/core/src/auth/auth.service.ts`) y documentarlo en `backend/core/src/auth/AGENTS.md`:
+- [x] **EMP-1.1** Agregar método interno de fachada `provisionEmployeeAccount` en `AuthService` (`backend/core/src/auth/auth.service.ts`) y documentarlo en `backend/core/src/auth/AGENTS.md`:
   - Recibe `{ actor, email, name, password }`.
   - Valida que `actor.tenantId` exista y `actor.role === 'owner' || actor.role === 'admin'` (de lo contrario lanza `ForbiddenException`).
   - Normaliza `email` (`normalizeEmail`), verifica si ya existe un `User` con ese correo:
@@ -93,9 +93,9 @@ sequenceDiagram
 
 ---
 
-### Fase 2 — Backend `organization`: Endpoint y Servicio de Carga Masiva por Sede
+### Fase 2 — Backend `organization`: Endpoint y Servicio de Carga Masiva por Sede (`f420ec4`, `aeaa058`, `97e02b0`, `1024b8a`, `c12ed0c`)
 
-- [ ] **EMP-2.1** Definir DTOs de importación masiva en `backend/core/src/organization/employees/dto/employee.dto.ts` y conectar `AuthModule` en `OrganizationModule`:
+- [x] **EMP-2.1** Definir DTOs de importación masiva en `backend/core/src/organization/employees/dto/employee.dto.ts` y conectar `AuthModule` en `OrganizationModule`:
   - `EmployeeSiteParamDto`: `@IsUUID() siteId!: string`.
   - `BulkImportEmployeeItemDto`:
     - `nationalId`: `@Transform(trim) @IsString() @IsNotEmpty() @MaxLength(40)`
@@ -106,7 +106,7 @@ sequenceDiagram
   - Importar `AuthModule` en `backend/core/src/organization/organization.module.ts` (inyectando únicamente la fachada `AuthService`).
   - **Check:** `cd backend/core && pnpm lint` pasa sin dependencias circulares.
 
-- [ ] **EMP-2.2** Implementar `EmployeesService.bulkImportForSite`, exponerlo en `OrganizationService` y en `EmployeesController` (`POST /api/v1/employees/sites/:siteId/bulk-import`), y documentar la ruta en `backend/core/AGENTS.md` y `backend/core/src/organization/AGENTS.md`:
+- [x] **EMP-2.2** Implementar `EmployeesService.bulkImportForSite`, exponerlo en `OrganizationService` y en `EmployeesController` (`POST /api/v1/employees/sites/:siteId/bulk-import`), y documentar la ruta en `backend/core/AGENTS.md` y `backend/core/src/organization/AGENTS.md`:
   - Verifica `requireEmployeeManager(actor)` (`owner` / `admin`) y que `siteId` exista en el tenant (`requireTenantSites(manager.tenantId, [siteId])`).
   - Separa `NombreApellido` de forma inteligente (`splitFullName`):
     - Si tiene espacios (`"Juan Carlos Perez"` -> `firstName: "Juan"`, `lastName: "Carlos Perez"`).
@@ -121,14 +121,14 @@ sequenceDiagram
 
 ---
 
-### Fase 3 — Frontend: Contrato HTTP, Mocks y Parser Cliente de Archivos Excel / Pipe
+### Fase 3 — Frontend: Contrato HTTP, Mocks y Parser Cliente de Archivos Excel / Pipe (`b75e682`, `a4224ab`, `e833fbd`)
 
-- [ ] **EMP-3.1** Extender `types.ts`, `api.ts`, `http.ts` y `mock.ts` en `frontend/features/organization/`:
+- [x] **EMP-3.1** Extender `types.ts`, `api.ts`, `http.ts` y `mock.ts` en `frontend/features/organization/`:
   - Agregar tipos `BulkImportEmployeeItem`, `BulkImportEmployeesInput`, `BulkImportEmployeeRowResult` y `BulkImportEmployeesResponse`.
   - Implementar `bulkImportEmployees(siteId, input)` en `organizationHttpApi` (`POST /employees/sites/${siteId}/bulk-import`) y en `organizationMockApi` (además de habilitar `createEmployee` y `updateEmployee` en memoria en `mock.ts` para soporte completo en modo demo).
   - **Check:** `cd frontend && pnpm exec tsc --noEmit` pasa sin errores.
 
-- [ ] **EMP-3.2** Crear parser `frontend/features/organization/employees-import-parser.ts` (con utilidades de filtrado de empleados por Sede, Nombre/Apellido y DNI):
+- [x] **EMP-3.2** Crear parser `frontend/features/organization/employees-import-parser.ts` (con utilidades de filtrado de empleados por Sede, Nombre/Apellido y DNI):
   - Soporta archivos **`.xlsx`** (extrayendo `xl/sharedStrings.xml` y `xl/worksheets/sheet1.xml` mediante `DecompressionStream('deflate-raw')` nativo sin librerías externas) y archivos de texto **`.csv` / `.txt`**.
   - Acepta tanto filas con una celda pipe-delimited (`DNI|NombreApellido|email|contrasena`) como hojas Excel de 4 columnas (`DNI`, `NombreApellido`, `email`, `contrasena`), ignorando filas vacías y encabezados opcionales (`DNI|NombreApellido|email|contrasena`).
   - Valida cada fila en cliente (DNI presente, nombre presente, formato de email válido, contraseña de 8 a 128 caracteres, detección de emails duplicados dentro del mismo archivo) antes de enviarla al backend.
@@ -136,20 +136,20 @@ sequenceDiagram
 
 ---
 
-### Fase 4 — Frontend: Carpetas de Sedes en `/empleados`, Vista Interior `/empleados/[siteId]` y Modales
+### Fase 4 — Frontend: Carpetas de Sedes en `/empleados`, Vista Interior `/empleados/[siteId]` y Modales (`4b13b61`, `4adf2e3`, `198985d`, `10b3674`)
 
-- [ ] **EMP-4.1** Actualizar `EmployeeFormModal.tsx` y crear `BulkImportEmployeesModal.tsx`:
+- [x] **EMP-4.1** Actualizar `EmployeeFormModal.tsx` y crear `BulkImportEmployeesModal.tsx`:
   - `EmployeeFormModal`: acepta `defaultSiteId?: string` para que al abrir `"Nuevo empleado"` dentro de `/empleados/[siteId]` esa sede aparezca marcada por defecto.
   - `BulkImportEmployeesModal`: modal para `"Cargar Excel de usuarios"` en la sede actual; muestra instrucciones claras del formato `DNI|NombreApellido|email|contrasena`, botón de descarga de plantilla de ejemplo, previsualización de filas detectadas (contraseña enmascarada `••••••••`), errores de validación por fila y resumen final tras importar (`creados`, `actualizados`, `fallidos`).
   - **Check:** `cd frontend && pnpm exec tsc --noEmit && pnpm lint` pasan sin errores.
 
-- [ ] **EMP-4.2** Crear buscador progresivo y migas de pan de empleados (`EmployeeSearchBar.tsx` y `EmployeeFolderBreadcrumbs.tsx`) + vista raíz de carpetas de sedes (`EmployeesRootView.tsx`):
+- [x] **EMP-4.2** Crear buscador progresivo y migas de pan de empleados (`EmployeeSearchBar.tsx` y `EmployeeFolderBreadcrumbs.tsx`) + vista raíz de carpetas de sedes (`EmployeesRootView.tsx`):
   - En `/empleados`:
     - Buscador superior con los **3 filtros requeridos**: **Sede**, **Nombre y apellido** y **DNI**.
     - Grilla exclusiva de **Carpetas de Sedes** (sin subcarpetas de puestos), mostrando cantidad de trabajadores en la sede, cantidad de puestos activos, coincidencias rápidas al buscar por trabajador/DNI y botón `"Abrir carpeta"` hacia `/empleados/[siteId]`.
   - **Check:** `cd frontend && pnpm exec tsc --noEmit && pnpm lint` pasan sin errores.
 
-- [ ] **EMP-4.3** Crear vista interior de carpeta de sede (`SiteEmployeesFolderView.tsx`) y conectar rutas App Router (`/empleados/page.tsx`, `/empleados/[siteId]/page.tsx` e `index.ts`):
+- [x] **EMP-4.3** Crear vista interior de carpeta de sede (`SiteEmployeesFolderView.tsx`) y conectar rutas App Router (`/empleados/page.tsx`, `/empleados/[siteId]/page.tsx` e `index.ts`):
   - En `/empleados/[siteId]`:
     - Migas de pan `Empleados (Sedes) / <Nombre de la Sede>` y botón de retorno a `/empleados`.
     - Botones de acción en cabecera (protegidos con `<Can capability="employees.manage">`): **`Cargar Excel de usuarios`** y **`Nuevo empleado`**.
@@ -161,7 +161,7 @@ sequenceDiagram
 
 ### Fase 5 — Verificación Integral y Cierre Documental
 
-- [ ] **EMP-5.1** Ejecutar validaciones completas en `backend/core` y `frontend`, verificar historial de commits (`≤ 3` archivos por commit, sin archivos sin trackear ni `Co-Authored-By`) y marcar todos los pasos verificados en `steps.md`:
+- [x] **EMP-5.1** Ejecutar validaciones completas en `backend/core` y `frontend`, verificar historial de commits (`≤ 3` archivos por commit, sin archivos sin trackear ni `Co-Authored-By`) y marcar todos los pasos verificados en `rediseno_pestana_empleados.md`:
   - `cd backend/core && pnpm lint && pnpm test && pnpm build`
   - `cd frontend && pnpm exec tsc --noEmit && pnpm lint && pnpm build`
   - **Check:** Todos los comandos finalizan con código `0` y `git status --short` queda limpio.
@@ -172,7 +172,7 @@ sequenceDiagram
 
 | Capa | Archivo | Propósito |
 |---|---|---|
-| **Documentación** | `steps.md`, `backend/core/AGENTS.md`, `backend/core/src/auth/AGENTS.md`, `backend/core/src/organization/AGENTS.md` | Plan paso a paso y actualización de contratos y mapa de rutas |
+| **Documentación** | `rediseno_pestana_empleados.md`, `backend/core/AGENTS.md`, `backend/core/src/auth/AGENTS.md`, `backend/core/src/organization/AGENTS.md` | Plan paso a paso y actualización de contratos y mapa de rutas |
 | **Backend (`auth`)** | `backend/core/src/auth/auth.service.ts`, `backend/core/src/auth/auth.service.provision.spec.ts` | Fachada `provisionEmployeeAccount` con Argon2id y emisión de `user_created` |
 | **Backend (`organization`)** | `backend/core/src/organization/organization.module.ts`, `organization.service.ts`, `employees/dto/employee.dto.ts`, `employees/employees.service.ts`, `employees/employees.controller.ts`, `employees/employees.service.spec.ts` | Endpoint `POST /api/v1/employees/sites/:siteId/bulk-import`, partición de `NombreApellido`, vinculación a sede y tests |
 | **Frontend (Datos & Parser)** | `frontend/features/organization/types.ts`, `api.ts`, `http.ts`, `mock.ts`, `employees-import-parser.ts` | Cliente HTTP/Mock de carga masiva y lector `.xlsx`/`.csv`/`.txt` para `DNI\|NombreApellido\|email\|contrasena` |
