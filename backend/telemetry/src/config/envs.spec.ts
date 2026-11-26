@@ -26,7 +26,38 @@ describe('telemetry envs', () => {
       mailEnabled: false,
       mailFrom: 'no-reply@teamworkflow.local',
       mailProvider: 'fake',
+      smtpHost: 'smtp.gmail.com',
+      smtpPort: 465,
+      smtpSecure: true,
     });
+  });
+
+  it('accepts SMTP settings, strips spaces from Gmail app passwords, and derives SMTP_SECURE from port', () => {
+    const gmailEnvs = validateEnvs({
+      ...validEnv,
+      MAIL_ENABLED: 'true',
+      MAIL_PROVIDER: 'smtp',
+      SMTP_HOST: 'smtp.gmail.com',
+      SMTP_PORT: '465',
+      SMTP_USER: 'alertas@gmail.com',
+      SMTP_PASS: 'abcd efgh ijkl mnop',
+    });
+
+    expect(gmailEnvs.mailEnabled).toBe(true);
+    expect(gmailEnvs.mailProvider).toBe('smtp');
+    expect(gmailEnvs.smtpHost).toBe('smtp.gmail.com');
+    expect(gmailEnvs.smtpPort).toBe(465);
+    expect(gmailEnvs.smtpSecure).toBe(true);
+    expect(gmailEnvs.smtpUser).toBe('alertas@gmail.com');
+    expect(gmailEnvs.smtpPass).toBe('abcdefghijklmnop');
+
+    const startTlsEnvs = validateEnvs({
+      ...validEnv,
+      MAIL_PROVIDER: 'smtp',
+      SMTP_PORT: '587',
+    });
+    expect(startTlsEnvs.smtpPort).toBe(587);
+    expect(startTlsEnvs.smtpSecure).toBe(false);
   });
 
   it('accepts custom port and custom timeout values', () => {

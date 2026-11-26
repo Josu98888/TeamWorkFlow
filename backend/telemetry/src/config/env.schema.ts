@@ -19,8 +19,13 @@ export interface Envs {
   defaultReportTz: string;
   mailEnabled: boolean;
   mailFrom: string;
-  mailProvider: 'fake' | 'resend';
+  mailProvider: 'fake' | 'resend' | 'smtp';
   resendApiKey?: string;
+  smtpHost: string;
+  smtpPort: number;
+  smtpSecure: boolean;
+  smtpUser?: string;
+  smtpPass?: string;
 }
 
 interface EnvVars {
@@ -40,8 +45,13 @@ interface EnvVars {
   DEFAULT_REPORT_TZ: string;
   MAIL_ENABLED: boolean;
   MAIL_FROM: string;
-  MAIL_PROVIDER: 'fake' | 'resend';
+  MAIL_PROVIDER: 'fake' | 'resend' | 'smtp';
   RESEND_API_KEY?: string;
+  SMTP_HOST: string;
+  SMTP_PORT: number;
+  SMTP_SECURE?: boolean;
+  SMTP_USER?: string;
+  SMTP_PASS?: string;
 }
 
 const envsSchema = joi
@@ -77,8 +87,13 @@ const envsSchema = joi
     DEFAULT_REPORT_TZ: joi.string().default('America/Argentina/Buenos_Aires'),
     MAIL_ENABLED: joi.boolean().default(false),
     MAIL_FROM: joi.string().email().default('no-reply@teamworkflow.local'),
-    MAIL_PROVIDER: joi.string().valid('fake', 'resend').default('fake'),
+    MAIL_PROVIDER: joi.string().valid('fake', 'resend', 'smtp').default('fake'),
     RESEND_API_KEY: joi.string().allow('').optional(),
+    SMTP_HOST: joi.string().hostname().default('smtp.gmail.com'),
+    SMTP_PORT: joi.number().port().default(465),
+    SMTP_SECURE: joi.boolean().optional(),
+    SMTP_USER: joi.string().allow('').optional(),
+    SMTP_PASS: joi.string().allow('').optional(),
   })
   .unknown(true);
 
@@ -103,6 +118,8 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
         raw.AUTH_CACHE_TTL_MS !== undefined
           ? Number(raw.AUTH_CACHE_TTL_MS)
           : 5000,
+      SMTP_PORT: raw.SMTP_PORT ? Number(raw.SMTP_PORT) : 465,
+      ...(raw.SMTP_SECURE === '' ? { SMTP_SECURE: undefined } : {}),
     },
     { abortEarly: false },
   );
@@ -115,6 +132,14 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
   }
 
   const envVars = value as EnvVars;
+  const smtpPort = envVars.SMTP_PORT;
+  const smtpSecure = envVars.SMTP_SECURE ?? smtpPort === 465;
+  const smtpUser = envVars.SMTP_USER?.trim() || undefined;
+  const rawSmtpPass = envVars.SMTP_PASS?.trim() || undefined;
+  const smtpPass =
+    rawSmtpPass && envVars.SMTP_HOST.toLowerCase() === 'smtp.gmail.com'
+      ? rawSmtpPass.replace(/\s+/g, '')
+      : rawSmtpPass;
 
   return {
     port: envVars.PORT,
@@ -135,5 +160,10 @@ export function validateEnvs(raw: NodeJS.ProcessEnv): Envs {
     mailFrom: envVars.MAIL_FROM,
     mailProvider: envVars.MAIL_PROVIDER,
     ...(envVars.RESEND_API_KEY ? { resendApiKey: envVars.RESEND_API_KEY } : {}),
+    smtpHost: envVars.SMTP_HOST,
+    smtpPort,
+    smtpSecure,
+    ...(smtpUser ? { smtpUser } : {}),
+    ...(smtpPass ? { smtpPass } : {}),
   };
 }
