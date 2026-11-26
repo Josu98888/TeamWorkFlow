@@ -95,13 +95,15 @@ sequenceDiagram
 
 ### Fase 0 — Contratos, Excepciones y Variables de Entorno
 
-- [ ] **INF-0.1** Actualizar contratos de arquitectura y módulos:
+Commits: `b8845e6`, `5dab627`, `338a93f`
+
+- [x] **INF-0.1** Actualizar contratos de arquitectura y módulos:
   - En `backend/core/src/auth/AGENTS.md` y `backend/core/AGENTS.md`: documentar que `auth.token.verify` incluye `email` del usuario activo en su respuesta (`{ userId, tenantId, role, email, siteIds, tenantStatus, plan, features }`).
   - En `backend/core/src/organization/AGENTS.md`: documentar que `TelemetryEmployeeCatalogDto` y los eventos `employee_created` / `employee_updated` incluyen `siteIds: string[]` (sin incluir jamás PII sensible como `nationalId` o `phone`).
   - En `backend/telemetry/AGENTS.md`: documentar las nuevas rutas bajo `/api/v1/telemetry/reports/sites/:siteId/...`, el modelo `ReportEmailRequestLog`, el código de error `429 report_request_daily_limit_reached` y las variables `MAIL_*`.
   - **Check:** Los archivos `AGENTS.md` y `docs/architecture.md` reflejan el contrato actualizado sin contradicciones.
 
-- [ ] **INF-0.2** Agregar código de excepción de límite diario en `backend/telemetry/src/common/exceptions/app.exceptions.ts`:
+- [x] **INF-0.2** Agregar código de excepción de límite diario en `backend/telemetry/src/common/exceptions/app.exceptions.ts`:
   - Extender `AppErrorCode` con `'report_request_daily_limit_reached'` y `'mail_delivery_failed'`.
   - Crear `ReportRequestDailyLimitReachedException extends AppException`:
     ```typescript
@@ -118,7 +120,7 @@ sequenceDiagram
   - Crear `MailDeliveryFailedException extends AppException` (`502`, `'mail_delivery_failed'`, `'No se pudo enviar el informe por correo en este momento. Intentá nuevamente.'`).
   - **Check:** `pnpm test src/common/exceptions/app.exceptions.spec.ts` en `backend/telemetry/` pasa al 100%.
 
-- [ ] **INF-0.3** Validar variables de entorno de correo en `backend/telemetry/src/config/env.schema.ts`, `envs.ts` y `backend/telemetry/.env.example`:
+- [x] **INF-0.3** Validar variables de entorno de correo en `backend/telemetry/src/config/env.schema.ts`, `envs.ts` y `backend/telemetry/.env.example`:
   - `MAIL_ENABLED`: `joi.boolean().default(false)`
   - `MAIL_FROM`: `joi.string().email().default('no-reply@teamworkflow.local')`
   - `MAIL_PROVIDER`: `joi.string().valid('fake', 'smtp', 'resend').default('fake')`
@@ -134,13 +136,15 @@ sequenceDiagram
 
 ### Fase 1 — Backend `core`: Email en `VerifiedActor` y `siteIds` en `organization`
 
-- [ ] **INF-1.1** Incluir `email` en `auth.token.verify` (`backend/core/src/auth/`):
+Commits: `af46f08`, `871a197`
+
+- [x] **INF-1.1** Incluir `email` en `auth.token.verify` (`backend/core/src/auth/`):
   - En `backend/core/src/auth/verified-actor.ts`: agregar `email: string;` a `VerifiedActor`.
   - En `backend/core/src/auth/auth.service.ts` (método `verify`): agregar `email: true` en el `select` de `this.prisma.user.findUnique` y devolver `email: user.email` en el objeto `VerifiedActor`.
   - Actualizar `backend/core/src/auth/auth.service.verify.spec.ts` y `auth-token.responder.spec.ts`.
   - **Check:** `pnpm test src/auth/` en `backend/core/` pasa todas las suites sin errores.
 
-- [ ] **INF-1.2** Incluir `siteIds` del empleado en eventos y responder de `organization` (`backend/core/src/organization/`):
+- [x] **INF-1.2** Incluir `siteIds` del empleado en eventos y responder de `organization` (`backend/core/src/organization/`):
   - En `backend/core/src/organization/responders/telemetry-wire.ts`:
     - Agregar `siteIds: string[];` a `TelemetryEmployeeCatalogDto` y `TelemetryEmployeeDto`.
     - En `toTelemetryEmployeeCatalog(employee)` y `toTelemetryEmployee(employee, userId)`: mapear `siteIds: employee.siteIds ?? []`.
@@ -153,7 +157,9 @@ sequenceDiagram
 
 ### Fase 2 — Backend `telemetry`: Modelo Prisma (`ReportEmailRequestLog` + `siteIds`) y Migración
 
-- [ ] **INF-2.1** Actualizar `backend/telemetry/src/prisma/schema.prisma` (`teamworkflow-prisma-migrations` y `teamworkflow-postgres`):
+Commits: `51e9d13`, `f62e9ab`, `5d705d0`
+
+- [x] **INF-2.1** Actualizar `backend/telemetry/src/prisma/schema.prisma` (`teamworkflow-prisma-migrations` y `teamworkflow-postgres`):
   - En `EmployeeSnapshot`: agregar `siteIds String[] @default([]) @map("site_ids")`.
   - En `ReportRecipient`: agregar `siteIds String[] @default([]) @map("site_ids")` (lista opcional de sedes donde el `owner` le habilita permiso de administrador de informes; si está vacía `[]`, aplica a las sedes en las que el trabajador esté incluido en `EmployeeSnapshot.siteIds`).
   - Agregar enum `ReportEmailKind` y modelo `ReportEmailRequestLog`:
@@ -198,7 +204,7 @@ sequenceDiagram
   - Actualizar `BillingConsumer.handleDataRetentionExpired` (`backend/telemetry/src/consumers/handlers/billing.handler.ts`) para purgar `reportEmailRequestLog.deleteMany({ where: { tenantId } })`.
   - **Check:** `pnpm exec prisma validate --config prisma.attendance.config.ts` y `pnpm prisma:attendance:generate` pasan sin errores.
 
-- [ ] **INF-2.2** Sincronizar `siteIds` en `OrgSnapshotsService` y `OrganizationConsumer` (`backend/telemetry/`):
+- [x] **INF-2.2** Sincronizar `siteIds` en `OrgSnapshotsService` y `OrganizationConsumer` (`backend/telemetry/`):
   - En `backend/telemetry/src/nats/dto/nats-contracts.ts`: agregar `email?: string;` a `VerifiedActor` y `siteIds?: string[];` a `EmployeeDto` y `EmployeeCatalogDto`.
   - En `backend/telemetry/src/snapshots/org-snapshots.service.ts` y `backend/telemetry/src/consumers/handlers/organization.handler.ts`: persistir `siteIds` al hacer upsert de `EmployeeSnapshot`.
   - **Check:** `pnpm test src/consumers/handlers/organization.handler.spec.ts` pasa.
@@ -207,7 +213,9 @@ sequenceDiagram
 
 ### Fase 3 — Backend `telemetry`: Reglas de Autorización por Sede, Límite Diario y Envío de Email
 
-- [ ] **INF-3.1** Ampliar `ReportRecipientsService` (`backend/telemetry/src/reports/report-recipients.service.ts`) para validar permisos por Sede (`siteId`):
+Commits: `5d705d0`, `444aa72`, `7da069b`, `6693835`, `a85941b`
+
+- [x] **INF-3.1** Ampliar `ReportRecipientsService` (`backend/telemetry/src/reports/report-recipients.service.ts`) para validar permisos por Sede (`siteId`):
   - Implementar método `authorizeSiteReportEmailRequest(actor: VerifiedActor, siteId: string, kind: 'daily' | 'monthly' | 'payroll_excel'): Promise<{ recipientEmail: string }>`:
     1. Si `actor.role === 'platform_admin' || !actor.tenantId` -> lanzar `ForbiddenException`.
     2. Verificar que la sede `siteId` exista en `SiteSnapshot` para `actor.tenantId` (previo `ensureTenantCatalogSynced`); si no existe -> lanzar `SiteNotFoundException` (`404 site_not_found`).
@@ -231,7 +239,7 @@ sequenceDiagram
     - Usuario incluido en la sede A pero sin permiso de administrador otorgado por el `owner` -> rechazado con `403`.
     - Usuario desactivado (`isActive: false`) -> rechazado con `403`.
 
-- [ ] **INF-3.2** Crear abstracción `MailProvider` en `backend/telemetry/src/reports/mail/`:
+- [x] **INF-3.2** Crear abstracción `MailProvider` en `backend/telemetry/src/reports/mail/`:
   - `mail-provider.interface.ts`:
     ```typescript
     export interface SendReportEmailInput {
@@ -254,7 +262,7 @@ sequenceDiagram
   - `smtp-mail-provider.service.ts`: implementación real cuando `MAIL_ENABLED=true` (usando transporte SMTP o API HTTP según configuración; **recordatorio:** si se opta por `nodemailer`, pedir confirmación al usuario antes de ejecutar `pnpm add nodemailer`).
   - **Check:** `mail-provider.service.spec.ts` verifica envío con adjunto PDF y Excel `.xlsx` sin filtrar direcciones de correo en logs.
 
-- [ ] **INF-3.3** Implementar `SiteReportEmailService` (`backend/telemetry/src/reports/site-report-email.service.ts`):
+- [x] **INF-3.3** Implementar `SiteReportEmailService` (`backend/telemetry/src/reports/site-report-email.service.ts`):
   - **Método 1: `getSiteEmailRequestStatus(actor: VerifiedActor, siteId: string)`**
     - Verifica que la sede pertenezca al tenant (`404 site_not_found` si no).
     - Calcula `todayInSiteTz = formatDateInTz(now, site.timezone)` y `nextAvailableAt` (inicio del día siguiente `00:00:00` en `site.timezone`).
@@ -311,7 +319,7 @@ sequenceDiagram
     7. Intento por un usuario no incluido en la sede o sin permiso del `owner` -> `403 forbidden`.
     8. Si el envío SMTP falla, el cupo diario se libera para que pueda reintentar.
 
-- [ ] **INF-3.4** Exponer endpoints en `ReportsController` (`backend/telemetry/src/reports/reports.controller.ts`):
+- [x] **INF-3.4** Exponer endpoints en `ReportsController` (`backend/telemetry/src/reports/reports.controller.ts`):
   - `GET /api/v1/telemetry/reports/sites/:siteId/email-status` -> estado de permisos, plan `PRO` y si ya pidió hoy cada informe en esa sede.
   - `POST /api/v1/telemetry/reports/sites/:siteId/request-email` -> solicita el envío por mail del informe (`daily_absences_pdf`, `monthly_attendance_pdf` o `monthly_payroll_excel`).
   - DTOs en `backend/telemetry/src/reports/dto/reports.dto.ts`:
@@ -327,7 +335,9 @@ sequenceDiagram
 
 ### Fase 4 — Frontend: Panel de Solicitud de Informes en cada Sede (`/sedes/[siteId]`)
 
-- [ ] **INF-4.1** Actualizar tipos, cliente HTTP y Mocks en `frontend/features/telemetry/`:
+Commits: `96349bf`, `ff35e7a`, `934f896`, `f676b0c`
+
+- [x] **INF-4.1** Actualizar tipos, cliente HTTP y Mocks en `frontend/features/telemetry/`:
   - En `frontend/features/telemetry/types.ts`:
     - Agregar `SiteReportEmailKind = 'daily_absences_pdf' | 'monthly_attendance_pdf' | 'monthly_payroll_excel'`.
     - Agregar `SiteReportEmailStatusResponse` y `RequestSiteReportEmailResponse`.
@@ -338,7 +348,7 @@ sequenceDiagram
     - En `mock.ts`: simular en memoria el límite de 1 pedido por día por `(siteId, kind)` para que al hacer click en modo demo (`NEXT_PUBLIC_USE_MOCKS=true`) el botón pase inmediatamente a estado `"Enviado hoy a tu correo · Disponible mañana"`.
   - **Check:** `npx tsc --noEmit` en `frontend/` pasa con 0 errores.
 
-- [ ] **INF-4.2** Crear componente `SiteReportEmailCard.tsx` e integrarlo en el panel de control de cada sede (`frontend/features/organization/components/SiteDetailView.tsx`):
+- [x] **INF-4.2** Crear componente `SiteReportEmailCard.tsx` e integrarlo en el panel de control de cada sede (`frontend/features/organization/components/SiteDetailView.tsx`):
   - **Visibilidad del panel:**
     - Consume `useResource(telemetryApi.getSiteReportEmailStatus, siteId)`.
     - Si `status.data?.permissions.canAccessPanel` es `false` (por ejemplo, un supervisor o empleado al que el `owner` no le dio permiso de administrador de informes en esa sede), el panel **no se renderiza**.
@@ -360,7 +370,7 @@ sequenceDiagram
     - Usar exclusivamente `Card`, `SectionLabel`, `Button`, `Badge` y `TextField` de `@/shared/components/` y tokens semánticos de `app/globals.css` (cero colores hexadecimales hardcoded).
   - **Check:** `pnpm lint` y `npx tsc --noEmit` en `frontend/` pasan sin errores.
 
-- [ ] **INF-4.3** Actualizar panel de Destinatarios del `owner` (`frontend/features/telemetry/components/PayrollAndRecipientsPanel.tsx`):
+- [x] **INF-4.3** Actualizar panel de Destinatarios del `owner` (`frontend/features/telemetry/components/PayrollAndRecipientsPanel.tsx`):
   - En `ReportRecipientsTab` (exclusivo del `owner`), mostrar a qué sede(s) pertenece cada trabajador asignado (p. ej. RRHH de la sede) y permitir filtrar/confirmar las sedes en las que tiene permiso de administrador para pedir los informes diarios, mensuales y el Excel (en plan `PRO`).
   - **Check:** `pnpm build` en `frontend/` compila todas las rutas sin errores.
 
@@ -368,7 +378,7 @@ sequenceDiagram
 
 ### Fase 5 — Verificación Integral, Tests y Calidad (QA)
 
-- [ ] **INF-5.1** Suite de pruebas unitarias e integración en `backend/core` y `backend/telemetry`:
+- [x] **INF-5.1** Suite de pruebas unitarias e integración en `backend/core` y `backend/telemetry`:
   - `cd backend/core && pnpm lint && pnpm test && pnpm build`
   - `cd backend/telemetry && pnpm lint && pnpm test && pnpm build`
   - Verificar explícitamente con tests:
@@ -379,7 +389,7 @@ sequenceDiagram
     - [x] Aislamiento multi-tenant: pedir informe de un `siteId` de otro tenant devuelve `404 site_not_found`.
     - [x] Cero PII en logs: ninguna llamada a `Logger` imprime el email completo del destinatario ni tokens.
 
-- [ ] **INF-5.2** Verificación de Frontend:
+- [x] **INF-5.2** Verificación de Frontend:
   - `cd frontend && pnpm lint && npx tsc --noEmit && pnpm build`
   - Verificar en `/sedes/[siteId]` (tanto en modo mock como conectado al backend):
     - Visualización del panel de solicitud de informes por correo en el panel de control de cada sede.
