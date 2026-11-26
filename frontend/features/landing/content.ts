@@ -7,9 +7,12 @@ export const LANDING_PATHS = {
   privacy: '/privacidad',
 } as const;
 
-/** Self-hosted video (nginx CSP allows media from 'self' only). Unset → the poster shows "próximamente". */
-export const LANDING_VIDEO_SRC = process.env.NEXT_PUBLIC_LANDING_VIDEO_SRC ?? '';
-export const LANDING_VIDEO_POSTER = process.env.NEXT_PUBLIC_LANDING_VIDEO_POSTER ?? '';
+/** Self-hosted video in `public/landing/` (nginx CSP allows media from 'self' only). */
+export const LANDING_VIDEO_SRC: string = '/landing/teamworkflow-parodia.mp4';
+export const LANDING_VIDEO_POSTER: string = '/landing/teamworkflow-parodia-poster.jpg';
+
+/** Logo of the foundation behind the IntegrarTEC scholarship. */
+export const FOUNDATION_LOGO = '/landing/fundacion-integrartec.png';
 
 // TODO(landing): real contact data.
 export const LANDING_CONTACT = {
@@ -49,19 +52,18 @@ export const STEPS: { title: string; text: string }[] = [
   { title: 'Armás los turnos', text: 'Y desde ahí, ellos fichan y vos lo ves todo.' },
 ];
 
-// TODO(landing): real ARS prices (billing seeds them in `seed-plans.ts`).
 export const PLANS: { name: string; tagline: string; price: string; features: string[]; featured: boolean }[] = [
   {
     name: 'Basic',
     tagline: 'Para ordenar la asistencia.',
-    price: '$[PRECIO]',
+    price: '$50.000',
     features: ['Sedes y puestos', 'Empleados con invitación', 'Turnos', 'Fichadas con GPS o QR y asistencia'],
     featured: false,
   },
   {
     name: 'Pro',
     tagline: 'Para supervisar todo en vivo.',
-    price: '$[PRECIO]',
+    price: '$100.000',
     features: [
       'Todo lo de Basic',
       'Tareas con formularios, fotos y checklists',
@@ -72,16 +74,15 @@ export const PLANS: { name: string; tagline: string; price: string; features: st
   },
 ];
 
-// TODO(landing): names, roles and photos of the team.
-export const TEAM: { name: string; role: string }[] = [
-  { name: '[Nombre]', role: '[Rol]' },
-  { name: '[Nombre]', role: '[Rol]' },
-  { name: '[Nombre]', role: '[Rol]' },
+// TODO(landing): photo of Angela in `public/landing/team/`.
+export const TEAM: { name: string; photo?: string }[] = [
+  { name: 'Josué Aquino', photo: '/landing/team/josue-aquino.jpg' },
+  { name: 'Angela' },
+  { name: 'Matías Robles', photo: '/landing/team/matias-robles.jpg' },
 ];
 
-// TODO(landing): 2–3 lines on how the project started in the IntegrarTEC scholarship.
 export const ABOUT_TEXT =
-  '[2–3 líneas: cómo nació TeamWorkFlow dentro de la beca, qué problema vieron y por qué decidieron resolverlo.]';
+  'TeamWorkFlow nació con la idea de solucionar problemas cotidianos a las empresas, pensando en convertirse en la mejor de la industria.';
 
 export const FAQ: { q: string; a: string }[] = [
   { q: '¿Qué pasa si un empleado ficha fuera de la sede?', a: 'La fichada se acepta igual, pero queda marcada para que la revises.' },

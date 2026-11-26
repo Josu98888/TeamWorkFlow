@@ -195,6 +195,10 @@ html:has(.lp) { scroll-behavior: smooth; scroll-padding-top: 80px; }
 .lp-team { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .lp-member { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 20px 14px; }
 .lp-avatar { display: flex; align-items: center; justify-content: center; width: 76px; height: 76px; border-radius: 999px; background: linear-gradient(135deg, var(--lp-lavender), var(--lp-medium)); color: var(--lp-dark); font-size: 13px; font-weight: 800; }
+.lp-avatar { object-fit: cover; letter-spacing: 0.04em; font-size: 22px; }
+img.lp-avatar { border: 2px solid var(--lp-mint); }
+.lp-foundation { display: flex; align-items: center; gap: 14px; margin-top: 6px; font-size: 14px; font-weight: 600; color: var(--lp-ink-soft); }
+.lp-foundation img { flex: none; width: 64px; height: 64px; border-radius: 999px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); }
 .lp-member:nth-child(2) .lp-avatar { background: linear-gradient(135deg, var(--lp-mint), var(--lp-teal)); }
 .lp-member small { font-size: 13px; color: var(--lp-ink-muted); }
 
