@@ -1,6 +1,11 @@
 import { Module } from '@nestjs/common';
+import { AuthModule } from '../auth/auth.module';
+import { AuthService } from '../auth/auth.service';
 import { EmployeesController } from './employees/employees.controller';
-import { EmployeesService } from './employees/employees.service';
+import {
+  EMPLOYEE_AUTH_PROVISIONER,
+  EmployeesService,
+} from './employees/employees.service';
 import { UserCreatedHandler } from './employees/user-created.handler';
 import { ConsumedEventProcessor } from './events/consumed-event.processor';
 import { OrganizationEventsModule } from './events/organization-events.module';
@@ -20,7 +25,7 @@ import { ShiftsService } from './shifts/shifts.service';
 // Only the facade (OrganizationService) is exported; Prisma, the events
 // service and the sub-module services stay private.
 @Module({
-  imports: [OrganizationEventsModule],
+  imports: [OrganizationEventsModule, AuthModule],
   controllers: [
     SitesController,
     EmployeesController,
@@ -33,6 +38,10 @@ import { ShiftsService } from './shifts/shifts.service';
     SitesService,
     PostsService,
     EmployeesService,
+    {
+      provide: EMPLOYEE_AUTH_PROVISIONER,
+      useExisting: AuthService,
+    },
     ShiftsService,
     ShiftTemplatesService,
     ShiftLifecycleService,

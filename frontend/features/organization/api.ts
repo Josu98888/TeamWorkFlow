@@ -2,6 +2,9 @@ import { USE_MOCKS } from '@/shared/lib/config';
 import { organizationHttpApi } from './http';
 import { organizationMockApi } from './mock';
 import type {
+  AssignShiftOvertimeInput,
+  BulkImportEmployeesInput,
+  BulkImportEmployeesResponse,
   CreateEmployeeInput,
   CreatePostInput,
   CreateShiftInput,
@@ -41,10 +44,12 @@ export type OrganizationApi = {
   createPost: (siteId: string, input: CreatePostInput) => Promise<Post>;
   updatePost: (postId: string, input: UpdatePostInput) => Promise<Post>;
   createEmployee: (input: CreateEmployeeInput) => Promise<Employee>;
+  bulkImportEmployees: (siteId: string, input: BulkImportEmployeesInput) => Promise<BulkImportEmployeesResponse>;
   updateEmployee: (employeeId: string, input: UpdateEmployeeInput) => Promise<Employee>;
   createShift: (input: CreateShiftInput) => Promise<ShiftWithWarnings>;
   updateShift: (shiftId: string, input: UpdateShiftInput) => Promise<ShiftWithWarnings>;
   reassignShift: (shiftId: string, input: { version: number; employeeId: string | null }) => Promise<ShiftWithWarnings>;
+  assignShiftOvertime: (shiftId: string, input: AssignShiftOvertimeInput) => Promise<Shift>;
   cancelShift: (shiftId: string, input: { version: number }) => Promise<Shift>;
   createShiftTemplate: (input: CreateShiftTemplateInput) => Promise<ShiftTemplateWithGeneration>;
   updateShiftTemplate: (templateId: string, input: UpdateShiftTemplateInput) => Promise<ShiftTemplateWithGeneration>;

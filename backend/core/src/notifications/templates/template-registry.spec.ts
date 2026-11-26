@@ -19,6 +19,21 @@ describe('TemplateRegistry', () => {
         alertType: 'Ausencia',
         employeeName: 'Juan Pérez',
       },
+      [NOTIFICATION_TEMPLATES.dailyAttendanceReport]: {
+        reportDate: '2026-11-22',
+        absentCount: 2,
+        outOfGeofenceCount: 1,
+      },
+      [NOTIFICATION_TEMPLATES.monthlyAttendanceReport]: {
+        period: '2026-11',
+        totalAttendedShifts: 40,
+        totalAbsentShifts: 3,
+        totalOutOfGeofence: 2,
+      },
+      [NOTIFICATION_TEMPLATES.payrollReportReady]: {
+        period: '2026-11',
+        totalPay: '1450000.00',
+      },
       [NOTIFICATION_TEMPLATES.taskAssigned]: {
         title: 'Control de extintores',
         deadline: '2026-11-15T18:00:00Z',

@@ -224,6 +224,7 @@ In `core` the operations below are **in-process calls** to the module's facade s
 | `auth.user.assign-sites` | HTTP controller (owner/admin) | actor, `userId`, `siteIds` | `{ ok: true }` |
 | `auth.user.deactivate` | HTTP controller (owner/admin) | actor, `userId` | `{ ok: true }` |
 | `auth.user.list-recipients` | internal to `core` modules only (e.g. `notifications`, facade call); never exposed as an HTTP route or a NATS responder | `tenantId`, `roles[]`, optional `siteId` | `{ userIds: string[] }`: ACTIVE users of that tenant with one of the roles; with `siteId`, supervisors only if assigned to that site (owner/admin always included when their role is requested) |
+| `auth.user.provision-employee` | internal to `core` modules only (`organization` bulk site onboarding, facade call); never exposed as an HTTP route or a NATS responder | actor (`owner` \| `admin`), `email`, `name`, `password` | `{ userId, email, created }`: provisions an active `EMPLOYEE` user (Argon2id hash, revoking pending invitations and emitting `user_created`) or returns the existing `userId` if already in the same tenant |
 | `auth.password-reset.create` | HTTP controller (owner/admin) | actor, `userId` | `{ token, expiresAt }` |
 | `auth.password-reset.confirm` | HTTP controller (public) | `token`, `password` | `{ ok: true }` |
 

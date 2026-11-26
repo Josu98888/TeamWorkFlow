@@ -15,9 +15,9 @@ import { formatDateTime, fullName } from '@/shared/lib/format';
 import { organizationApi } from '../api';
 import { SHIFT_STATUS_LABELS, SHIFT_STATUS_TONES } from '../labels';
 import type { ListShiftsQuery, Shift, ShiftWarning } from '../types';
-import { ReassignShiftModal, ShiftFormModal } from './ShiftFormModal';
+import { AssignOvertimeModal, ReassignShiftModal, ShiftFormModal } from './ShiftFormModal';
 
-type Dialog = { kind: 'create' } | { kind: 'edit' | 'reassign'; shift: Shift } | null;
+type Dialog = { kind: 'create' } | { kind: 'edit' | 'reassign' | 'overtime'; shift: Shift } | null;
 
 export function ShiftsView() {
   const [siteId, setSiteId] = useState('');
@@ -82,6 +82,9 @@ export function ShiftsView() {
       {siteItems && employeeItems && dialog?.kind === 'reassign' && (
         <ReassignShiftModal shift={dialog.shift} employees={employeeItems} onClose={() => setDialog(null)} onSaved={saved} />
       )}
+      {dialog?.kind === 'overtime' && (
+        <AssignOvertimeModal shift={dialog.shift} onClose={() => setDialog(null)} onSaved={() => saved([])} />
+      )}
 
       {warnings.length > 0 && (
         <div role="status" className="mb-4 rounded-lg border border-line bg-alt px-4 py-3 text-xs text-body">
@@ -140,7 +143,12 @@ export function ShiftsView() {
                   return (
                     <tr key={shift.id}>
                       <td className="whitespace-nowrap font-semibold text-title">
-                        {formatDateTime(shift.startsAt)} – {formatDateTime(shift.endsAt)}
+                        <span>{formatDateTime(shift.startsAt)} – {formatDateTime(shift.endsAt)}</span>
+                        {(shift.authorizedOvertimeMinutes ?? 0) > 0 && (
+                          <span className="ml-2 inline-block">
+                            <Badge tone="warning">+{shift.authorizedOvertimeMinutes} min extra</Badge>
+                          </span>
+                        )}
                       </td>
                       <td className="text-body">{siteById.get(shift.siteId)?.name ?? 'Sede'}</td>
                       <td className="text-body">{person ? fullName(person) : <span className="text-muted">Sin asignar</span>}</td>
@@ -152,6 +160,7 @@ export function ShiftsView() {
                           <Can capability="shifts.manage">
                             <Button variant="ghost" onClick={() => setDialog({ kind: 'edit', shift })}>Editar</Button>
                             <Button variant="ghost" onClick={() => setDialog({ kind: 'reassign', shift })}>Reasignar</Button>
+                            <Button variant="ghost" onClick={() => setDialog({ kind: 'overtime', shift })}>Horas extra</Button>
                             <Button variant="ghost" onClick={() => void cancel(shift)} disabled={cancelAction.pending}>Cancelar</Button>
                           </Can>
                         )}

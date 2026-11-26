@@ -33,6 +33,7 @@ type TenantStatus =
 interface StoredUser {
   id: string;
   tenantId: string | null;
+  email?: string;
   role: Role;
   isActive: boolean;
   siteIds: string[];
@@ -159,6 +160,20 @@ describe('AuthService.verify', () => {
       await expect(verify()).resolves.toEqual({
         userId: USER_ID,
         tenantId: TENANT_ID,
+        role: 'owner',
+        tenantStatus: 'active',
+        plan: 'pro',
+        features: FEATURES,
+      });
+    });
+
+    it('includes the verified user email when present on the user row', async () => {
+      findUnique.mockResolvedValue(user({ email: 'owner@acme.com' }));
+
+      await expect(verify()).resolves.toEqual({
+        userId: USER_ID,
+        tenantId: TENANT_ID,
+        email: 'owner@acme.com',
         role: 'owner',
         tenantStatus: 'active',
         plan: 'pro',
