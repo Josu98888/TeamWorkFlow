@@ -67,11 +67,11 @@ export function HelpAssistantWidget() {
   const [messages, setMessages] = useState<ChatMessage[]>([INITIAL_MESSAGE]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const launcherRef = useRef<HTMLButtonElement | null>(null);
 
-  // Reload the per-role history when the role changes (adjusting state during render, not in an effect).
   const [historyRole, setHistoryRole] = useState<string | undefined>(undefined);
   if (session?.role !== historyRole) {
     setHistoryRole(session?.role);
@@ -97,6 +97,18 @@ export function HelpAssistantWidget() {
     }
   }, [messages, open]);
 
+  // Global shortcut Ctrl+J / Cmd+J to toggle the operational guide
+  useEffect(() => {
+    const handleGlobalShortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'j') {
+        event.preventDefault();
+        setOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalShortcut);
+    return () => window.removeEventListener('keydown', handleGlobalShortcut);
+  }, []);
+
   useEffect(() => {
     if (!open) return;
 
@@ -111,10 +123,18 @@ export function HelpAssistantWidget() {
       }
     };
 
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('mousedown', handleClickOutside);
     return () => {
       window.clearTimeout(focusTimer);
       window.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [open]);
 
@@ -210,23 +230,68 @@ export function HelpAssistantWidget() {
   };
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end">
+    <div ref={containerRef} className="relative">
+      <button
+        ref={launcherRef}
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-expanded={open}
+        aria-label={open ? 'Cerrar guía operativa' : 'Abrir guía operativa (Ctrl+J)'}
+        title="Guía operativa (Ctrl+J)"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide uppercase transition-colors cursor-pointer border"
+        style={
+          open
+            ? {
+                borderColor: 'var(--brand-medium)',
+                backgroundColor: 'var(--bg-alt)',
+                color: 'var(--text-title)',
+              }
+            : {
+                borderColor: 'var(--border-main)',
+                backgroundColor: 'var(--bg-main)',
+                color: 'var(--text-body)',
+              }
+        }
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="8" cy="8" r="6.5" />
+          <path d="M6.2 6.2a1.9 1.9 0 0 1 3.6.6c0 1.3-1.8 1.8-1.8 2.9" />
+          <circle cx="8" cy="12" r="0.6" fill="currentColor" stroke="none" />
+        </svg>
+        <span>Guía</span>
+      </button>
+
       {open && (
         <section
           role="dialog"
           aria-label="Asistente de ayuda de TeamWorkFlow"
-          className="mb-3 flex h-[480px] w-[360px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-line bg-card shadow-xl dark:shadow-2xl"
+          className="fixed right-4 top-16 z-50 mt-1 flex h-[480px] w-[370px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-line bg-card shadow-lg sm:absolute sm:right-0 sm:top-full sm:mt-2"
         >
           {/* Header */}
           <header className="flex items-center justify-between border-b border-line bg-alt/80 px-4 py-3">
             <div className="flex items-center gap-2.5">
-              <span className="grid h-8 w-8 place-items-center rounded-xl bg-brand-medium text-xs font-bold text-white">
+              <span className="grid h-7 w-7 place-items-center rounded-lg bg-brand-medium text-xs font-bold text-white">
                 ?
               </span>
               <div>
-                <h2 className="text-xs font-bold uppercase tracking-wider text-title">
-                  Guía Operativa
-                </h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-title">
+                    Guía Operativa
+                  </h2>
+                  <kbd className="hidden rounded border border-line bg-card px-1.5 py-0.5 font-mono text-[10px] text-muted sm:inline">
+                    Ctrl+J
+                  </kbd>
+                </div>
                 <p className="text-[11px] text-muted">Consultas y paso a paso</p>
               </div>
             </div>
@@ -349,21 +414,6 @@ export function HelpAssistantWidget() {
           </form>
         </section>
       )}
-
-      {/* Floating launcher button */}
-      <button
-        ref={launcherRef}
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        aria-expanded={open}
-        aria-label={open ? 'Cerrar guía de ayuda' : 'Abrir guía de ayuda'}
-        className="inline-flex items-center gap-2 rounded-full border border-line bg-card px-4 py-2.5 text-xs font-semibold text-title shadow-md transition-all hover:border-brand-medium hover:shadow-lg focus-visible:outline-2 focus-visible:outline-brand-medium"
-      >
-        <span className="grid h-5 w-5 place-items-center rounded-full bg-brand-medium text-[11px] font-bold text-white">
-          ?
-        </span>
-        <span>Ayuda</span>
-      </button>
     </div>
   );
 }
