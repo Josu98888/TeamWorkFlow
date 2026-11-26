@@ -18,6 +18,8 @@ export type AppErrorCode =
   | 'post_not_found'
   | 'employee_not_found'
   | 'report_not_found'
+  | 'report_request_daily_limit_reached'
+  | 'mail_delivery_failed'
   | 'clock_too_old'
   | 'invalid_qr'
   | 'alert_invalid_transition'
@@ -176,6 +178,26 @@ export class EmployeeNotFoundException extends AppException {
 export class ReportNotFoundException extends AppException {
   constructor() {
     super(404, 'report_not_found', 'Report not found');
+  }
+}
+
+export class ReportRequestDailyLimitReachedException extends AppException {
+  constructor(nextAvailableDate: string) {
+    super(
+      429,
+      'report_request_daily_limit_reached',
+      `Solo se puede solicitar este informe una vez al día por sede. Próximo pedido disponible el ${nextAvailableDate}.`,
+    );
+  }
+}
+
+export class MailDeliveryFailedException extends AppException {
+  constructor() {
+    super(
+      502,
+      'mail_delivery_failed',
+      'No se pudo enviar el informe por correo en este momento. Intentá nuevamente.',
+    );
   }
 }
 
