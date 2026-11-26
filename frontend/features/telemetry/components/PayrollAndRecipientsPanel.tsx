@@ -381,9 +381,11 @@ export function ReportRecipientsTab() {
   return (
     <div className="space-y-4">
       <Card>
-        <h3 className="text-sm font-bold text-title">Asignar destinatario de informes (Exclusivo Owner)</h3>
+        <h3 className="text-sm font-bold text-title">
+          Asignar permiso de administrador de informes por sede (Exclusivo Owner)
+        </h3>
         <p className="mt-0.5 text-xs text-muted">
-          Los informes PDF y Excel llegan siempre al Owner y a los trabajadores que habilites acá.
+          Los informes PDF y Excel (y los botones de envío por correo 1 vez al día en el panel de cada sede) están disponibles para el Owner y para los trabajadores incluidos en la sede que habilites acá (por ejemplo, RRHH de la sede).
         </p>
         <form onSubmit={handleAssign} className="mt-3 space-y-3">
           <SelectField
