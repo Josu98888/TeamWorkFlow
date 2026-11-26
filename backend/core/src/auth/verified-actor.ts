@@ -6,6 +6,7 @@ export interface VerifiedActor {
   userId: string;
   // Null only for platform_admin, together with tenantStatus, plan, features.
   tenantId: string | null;
+  email?: string;
   role: WireRole;
   // Present only for supervisor.
   siteIds?: string[];
