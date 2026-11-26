@@ -47,6 +47,7 @@ describe('envs', () => {
       dueDays: 10,
       graceDays: 7,
       dataRetentionDays: 90,
+      shiftHorizonDays: 14,
       appUrl: 'http://localhost:3002',
       webOrigin: 'http://localhost:3002',
       cookieSecure: true,
