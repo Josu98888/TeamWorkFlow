@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type {
+  BulkImportEmployeesBodyDto,
   CreateEmployeeBodyDto,
   ListEmployeesQueryDto,
   UpdateEmployeeBodyDto,
@@ -103,6 +104,15 @@ export class OrganizationService {
   // organization.employee.create
   createEmployee(actor: OrganizationActor, dto: CreateEmployeeBodyDto) {
     return this.employees.create(actor, dto);
+  }
+
+  // organization.employee.bulk-import
+  bulkImportEmployees(
+    actor: OrganizationActor,
+    siteId: string,
+    dto: BulkImportEmployeesBodyDto,
+  ) {
+    return this.employees.bulkImportForSite(actor, siteId, dto);
   }
 
   // organization.employee.update
